@@ -49,5 +49,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+backend/google-android_api.json
 # Git submodules (if silencexx should not be nested)
 # Remove this line if silencexx is intentionally a submodule

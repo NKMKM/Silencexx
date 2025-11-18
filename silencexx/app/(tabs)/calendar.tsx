@@ -153,19 +153,7 @@ export default function CalendarScreen() {
 
         {/* Calendar */}
         <View style={styles.calendarSection}>
-          <View
-            style={[
-              styles.calendarCard,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(30, 41, 59, 0.6)'
-                  : 'rgba(255, 255, 255, 0.7)',
-                borderColor: isDark
-                  ? 'rgba(71, 85, 105, 0.3)'
-                  : 'rgba(226, 232, 240, 0.5)',
-              },
-            ]}
-          >
+          <View style={styles.calendarCard}>
             <Calendar
               markedDates={markedDates}
               onDayPress={handleDayPress}
@@ -388,13 +376,7 @@ const styles = StyleSheet.create({
   },
   calendarCard: {
     borderRadius: 28,
-    borderWidth: 1,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
   },
   calendar: {
     borderRadius: 20,

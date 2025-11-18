@@ -33,8 +33,8 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
   const insets = useSafeAreaInsets();
   
   const [name, setName] = useState('Иван Иванов');
-  const [email, setEmail] = useState('ivan@cloudmind.app');
-  const [phone, setPhone] = useState('+7 (999) 123-45-67');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
     gap: 12,
@@ -693,17 +693,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   connectedAccountDark: {
     backgroundColor: 'rgba(31, 41, 55, 0.5)',
     borderColor: 'rgba(55, 65, 81, 0.5)',
   },
   disconnectedAccount: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   disconnectedAccountDark: {
     backgroundColor: 'rgba(31, 41, 55, 0.3)',

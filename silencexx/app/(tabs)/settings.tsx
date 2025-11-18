@@ -160,8 +160,8 @@ export default function SettingsScreen() {
             style={[
               styles.userCard,
               {
-                backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-                borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(226, 232, 240, 0.5)',
+                backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
+                borderColor: isDark ? 'rgba(71, 85, 105, 0)' : 'rgba(226, 232, 240, 0)',
               },
             ]}
           >
@@ -218,8 +218,8 @@ export default function SettingsScreen() {
               style={[
                 styles.sectionCard,
                 {
-                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-                  borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(226, 232, 240, 0.5)',
+                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
+                  borderColor: isDark ? 'rgba(71, 85, 105, 0)' : 'rgba(226, 232, 240, 0)',
                 },
               ]}
             >

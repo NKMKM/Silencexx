@@ -85,7 +85,7 @@ export const Input = forwardRef<TextInput, InputProps>(
       borderRadius: 16,
       paddingHorizontal: 16,
       gap: 12,
-      backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)',
+      backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.7)',
     });
 
     const getInputTextStyle = (): TextStyle => ({
@@ -147,6 +147,9 @@ export const Input = forwardRef<TextInput, InputProps>(
             editable={editable}
             onFocus={handleFocus}
             onBlur={handleBlur}
+            textContentType="none"
+            importantForAutofill="no"
+            autoComplete="off"
             {...props}
           />
           {rightIcon && onRightIconPress ? (

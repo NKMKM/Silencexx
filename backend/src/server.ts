@@ -2,6 +2,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { config } from './config';
 import { generateAIResponse, detectCrisisKeywords, analyzeMood } from './ai';
+import { register, login, verifyOTP, resendOTP, resetPassword } from './auth';
+import { googleAuth, appleAuth } from './oauth';
+import './db'; // Initialize database connection
 
 const app = express();
 
@@ -23,6 +26,17 @@ app.get('/health', (req: Request, res: Response) => {
     version: '1.0.0',
   });
 });
+
+// Authentication Routes
+app.post('/api/auth/register', register);
+app.post('/api/auth/login', login);
+app.post('/api/auth/verify-otp', verifyOTP);
+app.post('/api/auth/resend-otp', resendOTP);
+app.post('/api/auth/reset-password', resetPassword);
+
+// OAuth Routes
+app.post('/api/auth/oauth/google', googleAuth);
+app.post('/api/auth/oauth/apple', appleAuth);
 
 // API Routes
 
@@ -228,6 +242,19 @@ app.listen(PORT, () => {
 ╠══════════════════════════════════════════════════════╣
 ║  Endpoints:                                          ║
 ║  ✓ GET  /health                                      ║
+║                                                      ║
+║  Auth:                                               ║
+║  ✓ POST /api/auth/register                           ║
+║  ✓ POST /api/auth/login                              ║
+║  ✓ POST /api/auth/verify-otp                         ║
+║  ✓ POST /api/auth/resend-otp                         ║
+║  ✓ POST /api/auth/reset-password                     ║
+║                                                      ║
+║  OAuth:                                              ║
+║  ✓ POST /api/auth/oauth/google                       ║
+║  ✓ POST /api/auth/oauth/apple                        ║
+║                                                      ║
+║  AI:                                                 ║
 ║  ✓ POST /api/chat                                    ║
 ║  ✓ POST /api/detect-crisis                           ║
 ║  ✓ POST /api/analyze-mood                            ║

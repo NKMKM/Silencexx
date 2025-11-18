@@ -248,9 +248,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   textInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.5)',
+    borderColor: 'rgba(226, 232, 240, 0.3)',
     borderRadius: 16,
     padding: 16,
     fontSize: 15,

@@ -1,13 +1,13 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Получаем API URL
 const getApiUrl = () => {
   if (__DEV__) {
-    // В разработке используйте свой ngrok URL или localhost
-    // Пример: return 'https://your-ngrok-url.ngrok-free.app/api';
-    // Для локальной сети: return 'http://192.168.x.x:3000/api';
-    return 'http://localhost:3000/api';
+    // Используем локальный IP адрес компьютера
+    // ВАЖНО: Устройство и компьютер должны быть в одной Wi-Fi сети
+    return 'http://192.168.100.120:3000/api';
   }
   
   // Для продакшена замените на ваш реальный API URL
@@ -26,7 +26,50 @@ const api = axios.create({
   },
 });
 
-// Типы
+// Interceptor для добавления токена
+api.interceptors.request.use(
+  async (config) => {
+    const token = await AsyncStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor для обработки ошибок авторизации
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Типы для Auth
+export interface User {
+  id: number;
+  name: string;
+  contact: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  token?: string;
+  user?: User;
+  requiresOTP?: boolean;
+  contact?: string;
+  message?: string;
+  error?: string;
+}
+
+// Типы для Chat
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
@@ -126,4 +169,162 @@ export const chatApi = {
   },
 };
 
+// Authentication API
+export const authApi = {
+  /**
+   * Регистрация нового пользователя
+   */
+  register: async (
+    method: 'email' | 'phone',
+    contact: string,
+    name: string,
+    password: string
+  ): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/register', {
+        method,
+        contact,
+        name,
+        password,
+      });
+      
+      if (response.data.token) {
+        await AsyncStorage.setItem('auth_token', response.data.token);
+        await AsyncStorage.setItem('user_data', JSON.stringify(response.data.user));
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Ошибка регистрации',
+      };
+    }
+  },
+
+  /**
+   * Вход в систему
+   */
+  login: async (
+    method: 'email' | 'phone',
+    contact: string,
+    password?: string
+  ): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/login', {
+        method,
+        contact,
+        password,
+      });
+      
+      if (response.data.token) {
+        await AsyncStorage.setItem('auth_token', response.data.token);
+        await AsyncStorage.setItem('user_data', JSON.stringify(response.data.user));
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Ошибка входа',
+      };
+    }
+  },
+
+  /**
+   * Проверка OTP кода
+   */
+  verifyOTP: async (contact: string, code: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/verify-otp', {
+        contact,
+        code,
+      });
+      
+      if (response.data.token) {
+        await AsyncStorage.setItem('auth_token', response.data.token);
+        await AsyncStorage.setItem('user_data', JSON.stringify(response.data.user));
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Неверный код',
+      };
+    }
+  },
+
+  /**
+   * Повторная отправка OTP
+   */
+  resendOTP: async (contact: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/resend-otp', {
+        contact,
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Ошибка отправки кода',
+      };
+    }
+  },
+
+  /**
+   * Восстановление пароля
+   */
+  resetPassword: async (
+    contact: string,
+    newPassword: string,
+    otpCode?: string
+  ): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/reset-password', {
+        contact,
+        newPassword,
+        otpCode,
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Ошибка сброса пароля',
+      };
+    }
+  },
+
+  /**
+   * Выход из системы
+   */
+  logout: async (): Promise<void> => {
+    await AsyncStorage.removeItem('auth_token');
+    await AsyncStorage.removeItem('user_data');
+  },
+
+  /**
+   * Получить текущего пользователя
+   */
+  getCurrentUser: async (): Promise<User | null> => {
+    try {
+      const userData = await AsyncStorage.getItem('user_data');
+      return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  /**
+   * Проверить авторизацию
+   */
+  isAuthenticated: async (): Promise<boolean> => {
+    const token = await AsyncStorage.getItem('auth_token');
+    return !!token;
+  },
+};
+
 export default chatApi;
+
+// Экспорт axios инстанса для прямого доступа (OAuth, Auth endpoints)
+export { api as axiosInstance };
