@@ -154,12 +154,21 @@ export function RegisterPage({ onRegister, onNavigateToLogin, onNavigateToOTP }:
     setIsLoading(true);
 
     try {
+      console.log('📝 Starting registration:', {
+        method,
+        contact,
+        name,
+        passwordLength: password.length
+      });
+
       const response = await authApi.register(
         method as 'email' | 'phone',
         contact,
         name,
         password
       );
+      
+      console.log('📡 Server response:', response);
       
       if (response.success) {
         console.log('✅ Registration successful');
@@ -188,7 +197,12 @@ export function RegisterPage({ onRegister, onNavigateToLogin, onNavigateToOTP }:
       }
     } catch (error: any) {
       console.error('❌ Registration error:', error);
-      setErrors({ ...errors, contact: 'Ошибка подключения к серверу' });
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      setErrors({ ...errors, contact: error.response?.data?.error || 'Ошибка подключения к серверу' });
     } finally {
       setIsLoading(false);
     }

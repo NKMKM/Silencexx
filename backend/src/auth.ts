@@ -64,8 +64,8 @@ export const comparePassword = async (password: string, hash: string): Promise<b
 };
 
 // Генерация JWT токена
-export const generateToken = (userId: number): string => {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+export const generateToken = (userId: number, sessionId: number): string => {
+  return jwt.sign({ userId, sessionId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 };
 
 // Проверка JWT токена
@@ -164,12 +164,12 @@ export const register = async (req: Request, res: Response) => {
     
     const roleId = roleResult.rows[0].id;
 
-    // 3. Создать сессию
+    // 3. Создать сессию с паролем
     const sessionResult = await query(
-      `INSERT INTO session (session_ip, session_key, device_type)
-       VALUES ($1, $2, $3)
+      `INSERT INTO session (session_ip, session_key, device_type, password)
+       VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [req.ip || 'unknown', hashedPassword, req.headers['user-agent'] || 'unknown']
+      [req.ip || 'unknown', hashedPassword, req.headers['user-agent'] || 'unknown', hashedPassword]
     );
     
     const sessionId = sessionResult.rows[0].id;
@@ -198,8 +198,8 @@ export const register = async (req: Request, res: Response) => {
       [userId]
     );
 
-    // Генерация токена
-    const token = generateToken(userId);
+    // Генерация токена с sessionId
+    const token = generateToken(userId, sessionId);
 
     // Если регистрация через телефон - отправить OTP
     if (method === 'phone') {
@@ -252,6 +252,8 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { method, contact, password } = req.body;
 
+    console.log('🔐 Login attempt:', { method, contact });
+
     // Валидация
     if (!method || !contact) {
       return res.status(400).json({
@@ -284,17 +286,23 @@ export const login = async (req: Request, res: Response) => {
 
     // Поиск пользователя
     const userQuery = method === 'email'
-      ? `SELECT u.id, ud.name, ud.email as contact, s.session_key as password
+      ? `SELECT u.id, u.session_id, ud.name, ud.email as contact, s.password
          FROM users u
          JOIN user_description ud ON u.user_desc_id = ud.id
          JOIN session s ON u.session_id = s.id
          WHERE ud.email = $1`
-      : `SELECT u.id, ud.name, ud.phone as contact
+      : `SELECT u.id, u.session_id, ud.name, ud.phone as contact
          FROM users u
          JOIN user_description ud ON u.user_desc_id = ud.id
          WHERE ud.phone = $1`;
     
     const result = await query(userQuery, [contact]);
+
+    console.log('🔍 User search result:', { 
+      found: result.rows.length > 0,
+      count: result.rows.length,
+      email: result.rows[0]?.contact || 'N/A'
+    });
 
     if (result.rows.length === 0) {
       return res.status(401).json({
@@ -316,8 +324,8 @@ export const login = async (req: Request, res: Response) => {
         });
       }
 
-      // Генерация токена
-      const token = generateToken(user.id);
+      // Генерация токена с sessionId
+      const token = generateToken(user.id, user.session_id);
 
       return res.json({
         success: true,
@@ -403,9 +411,9 @@ export const verifyOTP = async (req: Request, res: Response) => {
     // Код верный - удалить из хранилища
     otpStore.delete(contact);
 
-    // Найти пользователя
+    // Найти пользователя с session_id
     const userQuery = `
-      SELECT u.id, ud.name, ud.phone as contact
+      SELECT u.id, u.session_id, ud.name, ud.phone as contact
       FROM users u
       JOIN user_description ud ON u.user_desc_id = ud.id
       WHERE ud.phone = $1
@@ -422,8 +430,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
 
     const user = result.rows[0];
 
-    // Генерация токена
-    const token = generateToken(user.id);
+    // Генерация токена с sessionId
+    const token = generateToken(user.id, user.session_id);
 
     res.json({
       success: true,
@@ -579,6 +587,229 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Ошибка при сбросе пароля',
+    });
+  }
+};
+
+/**
+ * GET /api/auth/profile
+ * Получить данные профиля текущего пользователя
+ * 
+ * Headers:
+ * - Authorization: Bearer <token>
+ */
+export const getProfile = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Токен не предоставлен',
+      });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const profileQuery = `
+      SELECT 
+        u.id,
+        ud.name,
+        ud.email,
+        ud.phone,
+        u.created_at as "createdAt"
+      FROM users u
+      JOIN user_description ud ON u.user_desc_id = ud.id
+      WHERE u.id = $1
+    `;
+
+    const result = await query(profileQuery, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь не найден',
+      });
+    }
+
+    res.json({
+      success: true,
+      user: result.rows[0],
+    });
+
+  } catch (error) {
+    console.error('❌ Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при получении профиля',
+    });
+  }
+};
+
+/**
+ * GET /api/auth/sessions
+ * Получить список всех активных сессий пользователя
+ * 
+ * Headers:
+ * - Authorization: Bearer <token>
+ */
+export const getSessions = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Токен не предоставлен',
+      });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const sessionsQuery = `
+      SELECT 
+        s.id,
+        s.device_type,
+        s.session_ip,
+        s.created_at,
+        s.user_id
+      FROM session s
+      WHERE s.user_id = $1
+      ORDER BY s.created_at DESC
+    `;
+
+    const result = await query(sessionsQuery, [userId]);
+
+    // Отмечаем текущую сессию
+    const sessions = result.rows.map(session => ({
+      ...session,
+      is_current: session.id === decoded.sessionId
+    }));
+
+    res.json({
+      success: true,
+      sessions: sessions,
+    });
+
+  } catch (error) {
+    console.error('❌ Get sessions error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при получении списка сессий',
+    });
+  }
+};
+
+/**
+ * DELETE /api/auth/sessions/:sessionId
+ * Удалить сессию (выйти с устройства)
+ * 
+ * Headers:
+ * - Authorization: Bearer <token>
+ */
+export const deleteSession = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Токен не предоставлен',
+      });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+    const sessionId = parseInt(req.params.sessionId);
+
+    // Проверяем, что сессия принадлежит пользователю
+    const checkQuery = `
+      SELECT id
+      FROM session
+      WHERE id = $1 AND user_id = $2
+    `;
+
+    const checkResult = await query(checkQuery, [sessionId, userId]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Сессия не найдена',
+      });
+    }
+
+    // Удаляем сессию
+    const deleteQuery = `
+      DELETE FROM session
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    await query(deleteQuery, [sessionId]);
+
+    res.json({
+      success: true,
+      message: 'Сессия удалена',
+    });
+
+  } catch (error) {
+    console.error('❌ Delete session error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при удалении сессии',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/logout
+ * Выход из системы (удаление текущей сессии)
+ * 
+ * Headers:
+ * - Authorization: Bearer <token>
+ */
+export const logout = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Токен не предоставлен',
+      });
+    }
+
+    const decoded = verifyToken(token);
+    const sessionId = decoded.sessionId;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Session ID не найден в токене',
+      });
+    }
+
+    // Удаляем текущую сессию
+    const deleteQuery = `
+      DELETE FROM session
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    await query(deleteQuery, [sessionId]);
+
+    res.json({
+      success: true,
+      message: 'Выход выполнен успешно',
+    });
+
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при выходе',
     });
   }
 };

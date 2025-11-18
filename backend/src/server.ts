@@ -2,7 +2,17 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { config } from './config';
 import { generateAIResponse, detectCrisisKeywords, analyzeMood } from './ai';
-import { register, login, verifyOTP, resendOTP, resetPassword } from './auth';
+import { 
+  register, 
+  login, 
+  verifyOTP, 
+  resendOTP, 
+  resetPassword,
+  getProfile,
+  getSessions,
+  deleteSession,
+  logout
+} from './auth';
 import { googleAuth, appleAuth } from './oauth';
 import './db'; // Initialize database connection
 
@@ -33,6 +43,12 @@ app.post('/api/auth/login', login);
 app.post('/api/auth/verify-otp', verifyOTP);
 app.post('/api/auth/resend-otp', resendOTP);
 app.post('/api/auth/reset-password', resetPassword);
+
+// Profile & Sessions
+app.get('/api/auth/profile', getProfile);
+app.get('/api/auth/sessions', getSessions);
+app.delete('/api/auth/sessions/:sessionId', deleteSession);
+app.post('/api/auth/logout', logout);
 
 // OAuth Routes
 app.post('/api/auth/oauth/google', googleAuth);

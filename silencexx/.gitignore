@@ -36,6 +36,9 @@ yarn-error.*
 .env.development
 .env.production
 
+# ngrok config (generated dynamically)
+ngrok-url.json
+
 # typescript
 *.tsbuildinfo
 

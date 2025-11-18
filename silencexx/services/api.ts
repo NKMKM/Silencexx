@@ -2,11 +2,25 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Пытаемся загрузить ngrok URL из файла
+let ngrokConfig = { apiUrl: '' };
+try {
+  ngrokConfig = require('../ngrok-url.json');
+} catch (error) {
+  console.log('⚠️  ngrok-url.json not found, using fallback URL');
+}
+
 // Получаем API URL
 const getApiUrl = () => {
   if (__DEV__) {
-    // Используем локальный IP адрес компьютера
-    // ВАЖНО: Устройство и компьютер должны быть в одной Wi-Fi сети
+    // Приоритет 1: Ngrok URL из файла (если backend запущен с ngrok)
+    if (ngrokConfig.apiUrl && ngrokConfig.apiUrl !== 'http://localhost:3000/api') {
+      console.log('🌐 Using ngrok URL from config');
+      return ngrokConfig.apiUrl;
+    }
+    
+    // Приоритет 2: Локальный IP адрес (если в одной сети)
+    console.log('📡 Using local network IP');
     return 'http://192.168.100.120:3000/api';
   }
   
@@ -167,6 +181,63 @@ export const chatApi = {
       throw error;
     }
   },
+
+  /**
+   * Получить данные профиля пользователя
+   */
+  getProfile: async (): Promise<any> => {
+    try {
+      const response = await api.get('/auth/profile');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting profile:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить список активных сессий
+   */
+  getSessions: async (): Promise<any> => {
+    try {
+      const response = await api.get('/auth/sessions');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting sessions:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Удалить сессию (выйти с устройства)
+   */
+  deleteSession: async (sessionId: number): Promise<any> => {
+    try {
+      const response = await api.delete(`/auth/sessions/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error deleting session:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Выход из системы (удаление текущей сессии)
+   */
+  logout: async (): Promise<any> => {
+    try {
+      const response = await api.post('/auth/logout');
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error logging out:', error);
+      // Даже при ошибке удаляем локальные данные
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
+      throw error;
+    }
+  },
 };
 
 // Authentication API
@@ -181,12 +252,17 @@ export const authApi = {
     password: string
   ): Promise<AuthResponse> => {
     try {
+      console.log('📤 Sending registration request to:', api.defaults.baseURL);
+      console.log('📦 Request data:', { method, contact, name, passwordLength: password.length });
+      
       const response = await api.post<AuthResponse>('/auth/register', {
         method,
         contact,
         name,
         password,
       });
+      
+      console.log('✅ Registration response:', response.data);
       
       if (response.data.token) {
         await AsyncStorage.setItem('auth_token', response.data.token);
@@ -195,9 +271,16 @@ export const authApi = {
       
       return response.data;
     } catch (error: any) {
+      console.error('❌ Registration API error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url
+      });
+      
       return {
         success: false,
-        error: error.response?.data?.error || 'Ошибка регистрации',
+        error: error.response?.data?.error || error.message || 'Ошибка регистрации',
       };
     }
   },

@@ -118,10 +118,10 @@ export function ChatPage() {
     setMessage('');
     setIsLoading(true);
 
-    // Прокрутка к последнему сообщению
+    // Прокрутка к последнему сообщению (уменьшенная задержка)
     setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }, 50);
 
     try {
       // Подготовка истории разговора для контекста
@@ -146,10 +146,10 @@ export function ChatPage() {
 
       setMessages((prev) => [...prev, aiResponse]);
       
-      // Прокрутка к ответу AI
+      // Прокрутка к ответу AI (без анимации для стабильности)
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 50);
 
       // Если обнаружен кризис, можно показать дополнительное уведомление
       if (response.isCrisis) {
@@ -174,8 +174,8 @@ export function ChatPage() {
       setMessages((prev) => [...prev, errorMessage]);
       
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 50);
     } finally {
       setIsLoading(false);
     }
@@ -265,20 +265,15 @@ export function ChatPage() {
   }, [isDark, messages.length]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
-    >
-      <View style={styles.container}>
-        <LinearGradient
-          colors={
-            isDark
-              ? ['#0f172a', '#1e1b4b', '#312e81', '#1e293b']
-              : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
-          }
-          style={StyleSheet.absoluteFillObject}
-        />
+    <View style={styles.container}>
+      <LinearGradient
+        colors={
+          isDark
+            ? ['#0f172a', '#1e1b4b', '#312e81', '#1e293b']
+            : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
+        }
+        style={StyleSheet.absoluteFillObject}
+      />
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={{ flex: 1 }}>
@@ -426,33 +421,42 @@ export function ChatPage() {
               styles.messagesList,
               { paddingBottom: insets.bottom + 90 }
             ]}
-            removeClippedSubviews={true}
+            removeClippedSubviews={Platform.OS === 'android'}
             maxToRenderPerBatch={10}
             windowSize={10}
             initialNumToRender={10}
             updateCellsBatchingPeriod={50}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            maintainVisibleContentPosition={
+              Platform.OS === 'android' ? {
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: 10,
+              } : undefined
+            }
           />
         )}
 
         {/* Input Area */}
-        <View
-          style={[
-            styles.inputContainer,
-            {
-              backgroundColor: isDark
-                ? 'rgba(15, 23, 42, 0.6)'
-                : 'rgba(255, 255, 255, 0.6)',
-              borderTopColor: isDark
-                ? 'rgba(71, 85, 105, 0.3)'
-                : 'rgba(226, 232, 240, 0.5)',
-              paddingBottom: isKeyboardVisible 
-                ? 8
-                : 70,
-              marginBottom: isKeyboardVisible ? 0 : insets.bottom,
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
+          <View
+            style={[
+              styles.inputContainer,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(15, 23, 42, 0.6)'
+                  : 'rgba(255, 255, 255, 0.6)',
+                borderTopColor: isDark
+                  ? 'rgba(71, 85, 105, 0.3)'
+                  : 'rgba(226, 232, 240, 0.5)',
+                paddingBottom: 8,
+                marginBottom: isKeyboardVisible ? 0 : insets.bottom + 60,
+              },
+            ]}
+          >
           <View style={styles.inputWrapper}>
             <TextInput
               value={message}
@@ -501,10 +505,10 @@ export function ChatPage() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
       </View>
-    </KeyboardAvoidingView>
   );
 }
 

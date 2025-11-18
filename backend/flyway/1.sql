@@ -35,13 +35,14 @@ CREATE TABLE users (
 
 CREATE TABLE language (
     id SERIAL PRIMARY KEY,
-    language_id INT UNIQUE
+    language_id INT UNIQUE,
+    language_name VARCHAR(64)
 );
 
 CREATE TABLE user_default_settings (
     id SERIAL PRIMARY KEY,
-    langauge_id INT,
-    FOREIGN KEY (langauge_id) REFERENCES language(language_id)
+    language_id INT,
+    FOREIGN KEY (language_id) REFERENCES language(language_id)
 );
 
 CREATE TABLE settings (
@@ -50,7 +51,7 @@ CREATE TABLE settings (
     theme INT,
     language_id INT,
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (language_id) REFERENCES user_default_settings(langauge_id)
+    FOREIGN KEY (language_id) REFERENCES language(language_id)
 );
 
 CREATE TABLE chat_id (
@@ -82,3 +83,11 @@ CREATE TABLE diary (
     diary_content VARCHAR,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- Insert default language
+INSERT INTO language (language_id, language_name) VALUES (1, 'English');
+INSERT INTO language (language_id, language_name) VALUES (2, 'Russian');
+
+-- Insert default settings template
+INSERT INTO user_default_settings (language_id) VALUES (1);
+

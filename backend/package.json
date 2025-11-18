@@ -5,6 +5,10 @@
   "main": "src/server.ts",
   "scripts": {
     "dev": "ts-node src/server.ts",
+    "dev:ngrok": "node start-with-ngrok.js",
+    "update-ngrok": "node update-ngrok-url.js",
+    "migrate": "node run-migration.js",
+    "setup-db": "node setup-database.js",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"

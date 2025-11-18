@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
-import React, { useRef, useEffect, memo } from 'react';
-import { Platform, Animated, View, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, memo, useState } from 'react';
+import { Platform, Animated, View, StyleSheet, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,6 +60,23 @@ export default function TabLayout() {
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
   const insets = useSafeAreaInsets();
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   return (
     <Tabs
@@ -67,7 +84,7 @@ export default function TabLayout() {
         headerShown: false,
         animation: 'shift',
         lazy: true, // Ленивая загрузка для производительности
-        tabBarStyle: {
+        tabBarStyle: isKeyboardVisible ? { display: 'none' } : {
           backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
           borderTopColor: isDark ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)',
           borderTopWidth: 1,
