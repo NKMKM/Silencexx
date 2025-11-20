@@ -36,14 +36,15 @@ export const googleAuth = async (req: Request, res: Response) => {
 
     // Проверка существования пользователя
     const existingUser = await query(
-      'SELECT u.id FROM users u JOIN user_description ud ON u.user_desc_id = ud.id WHERE ud.email = $1',
+      'SELECT u.id, u.session_id FROM users u JOIN user_description ud ON u.user_desc_id = ud.id WHERE ud.email = $1',
       [email]
     );
 
     if (existingUser.rows.length > 0) {
       // Пользователь существует - логин
       const userId = existingUser.rows[0].id;
-      const token = generateToken(userId);
+      const sessionId = existingUser.rows[0].session_id;
+      const token = generateToken(userId, sessionId);
 
       console.log('✅ Existing user logged in:', userId);
 
@@ -112,7 +113,7 @@ export const googleAuth = async (req: Request, res: Response) => {
     );
 
     // Генерация JWT токена
-    const token = generateToken(userId);
+    const token = generateToken(userId, sessionId);
 
     console.log(`✅ Новый пользователь через Google: ${email}`);
 
@@ -162,7 +163,7 @@ export const appleAuth = async (req: Request, res: Response) => {
 
     // Поиск по appleId в session.device
     const existingByAppleId = await query(
-      `SELECT u.id, ud.email, ud.name 
+      `SELECT u.id, u.session_id, ud.email, ud.name 
        FROM users u 
        JOIN session s ON u.session_id = s.id
        JOIN user_description ud ON u.user_desc_id = ud.id
@@ -173,7 +174,7 @@ export const appleAuth = async (req: Request, res: Response) => {
     if (existingByAppleId.rows.length > 0) {
       // Пользователь существует
       const user = existingByAppleId.rows[0];
-      const token = generateToken(user.id);
+      const token = generateToken(user.id, user.session_id);
 
       return res.json({
         success: true,
@@ -246,7 +247,7 @@ export const appleAuth = async (req: Request, res: Response) => {
       [userId]
     );
 
-    const token = generateToken(userId);
+    const token = generateToken(userId, sessionId);
 
     console.log(`🍎 Новый пользователь через Apple: ${email}`);
 

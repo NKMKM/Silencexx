@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Switch,
   Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +18,16 @@ import { useRouter } from 'expo-router';
 import { ReminderModal } from '@/components/ReminderModal';
 import { useLanguage } from '@/utils/i18n';
 import { AnimatedGradient } from '@/components/AnimatedGradient';
+import { authApi } from '@/services/api';
+
+interface Session {
+  id: number;
+  device_type: string;
+  session_ip: string;
+  created_at: string;
+  last_active: string | null;
+  is_current: boolean;
+}
 
 // Вынесем константы за пределы компонента
 const BACKGROUND_OPTIONS: { id: ChatBackground; name: string; icon: any }[] = [
@@ -36,6 +48,22 @@ export default function SettingsScreen() {
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [sessions, setSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = async () => {
+    try {
+      const response = await authApi.getSessions();
+      if (response.success) {
+        setSessions(response.sessions);
+      }
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    }
+  };
 
   const getBackgroundName = useCallback(() => {
     return BACKGROUND_OPTIONS.find(b => b.id === chatBackground)?.name || 'Градиент';
@@ -93,6 +121,17 @@ export default function SettingsScreen() {
           label: 'Напоминания',
           value: 'Настроить',
           onPress: () => setShowReminderModal(true),
+        },
+      ],
+    },
+    {
+      title: 'Безопасность',
+      items: [
+        {
+          icon: 'phone-portrait-outline',
+          label: 'Активные устройства',
+          value: sessions.length > 0 ? `${sessions.length}` : '',
+          onPress: () => router.push('/sessions' as any),
         },
       ],
     },

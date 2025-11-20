@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleSessionTerminated, handleUnauthorized } from './sessionHandler';
 
 // Пытаемся загрузить ngrok URL из файла
 let ngrokConfig = { apiUrl: '' };
@@ -59,8 +60,14 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      await AsyncStorage.removeItem('auth_token');
-      await AsyncStorage.removeItem('user_data');
+      // Проверяем если это завершенная сессия
+      if (error.response?.data?.session_terminated) {
+        console.log('🚪 Session terminated, handling redirect...');
+        handleSessionTerminated();
+      } else {
+        console.log('🔒 Unauthorized, handling redirect...');
+        handleUnauthorized();
+      }
     }
     return Promise.reject(error);
   }
@@ -93,6 +100,7 @@ export interface ChatRequest {
   message: string;
   mood?: string;
   conversationHistory?: ChatMessage[];
+  chatId?: number;
 }
 
 export interface ChatResponse {
@@ -101,6 +109,19 @@ export interface ChatResponse {
   isCrisis?: boolean;
   mood?: string;
   requestId?: string;
+}
+
+export interface ChatHistoryItem {
+  id: number;
+  user_id: number;
+  last_message: string;
+  last_message_date: string;
+}
+
+export interface ChatHistoryMessage {
+  sender: 'user' | 'ai';
+  message: string;
+  senddate: string;
 }
 
 export interface CrisisDetectionRequest {
@@ -235,6 +256,58 @@ export const chatApi = {
       // Даже при ошибке удаляем локальные данные
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
+      throw error;
+    }
+  },
+
+  /**
+   * Создать новый чат
+   */
+  createChat: async (isTemporary: boolean = false): Promise<{ success: boolean; chatId: number }> => {
+    try {
+      const response = await api.post('/chats/create', { isTemporary });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error creating chat:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить список всех чатов
+   */
+  getChatList: async (): Promise<{ success: boolean; chats: ChatHistoryItem[] }> => {
+    try {
+      const response = await api.get('/chats/list');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting chat list:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить сообщения из чата
+   */
+  getChatMessages: async (chatId: number): Promise<{ success: boolean; messages: ChatHistoryMessage[] }> => {
+    try {
+      const response = await api.get(`/chats/${chatId}/messages`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting chat messages:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Удалить чат
+   */
+  deleteChatHistory: async (chatId: number): Promise<{ success: boolean }> => {
+    try {
+      const response = await api.delete(`/chats/${chatId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error deleting chat:', error);
       throw error;
     }
   },
@@ -404,6 +477,45 @@ export const authApi = {
   isAuthenticated: async (): Promise<boolean> => {
     const token = await AsyncStorage.getItem('auth_token');
     return !!token;
+  },
+
+  /**
+   * Получить данные профиля пользователя
+   */
+  getProfile: async (): Promise<any> => {
+    try {
+      const response = await api.get('/auth/profile');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting profile:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить список активных сессий
+   */
+  getSessions: async (): Promise<any> => {
+    try {
+      const response = await api.get('/auth/sessions');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting sessions:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Удалить сессию (выйти с устройства)
+   */
+  deleteSession: async (sessionId: number): Promise<any> => {
+    try {
+      const response = await api.delete(`/auth/sessions/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error deleting session:', error);
+      throw error;
+    }
   },
 };
 

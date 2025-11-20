@@ -10,9 +10,14 @@ export const pool = new Pool({
   database: process.env.DB_NAME || 'cloudmind',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: 10, // Уменьшаем количество соединений для Aiven
+  min: 2, // Минимум активных соединений
+  idleTimeoutMillis: 60000, // 60 секунд
+  connectionTimeoutMillis: 10000, // 10 секунд вместо 2
+  statement_timeout: 30000, // 30 секунд на выполнение запроса
+  query_timeout: 30000, // 30 секунд на запрос
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
   ssl: process.env.DB_HOST?.includes('aivencloud.com') ? {
     rejectUnauthorized: false
   } : false
@@ -25,7 +30,7 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
   console.error('❌ Unexpected error on idle client', err);
-  process.exit(-1);
+  // Не завершаем процесс, пул переподключится автоматически
 });
 
 // Helper function to execute queries

@@ -9,6 +9,10 @@ const JWT_EXPIRES_IN = '7d';
 // OTP storage (в продакшене использовать Redis)
 const otpStore = new Map<string, { code: string; expiresAt: number }>();
 
+// Кэш для активных сессий (проверяем не чаще 1 раза в 30 секунд)
+const sessionCache = new Map<number, { isActive: boolean; cachedAt: number }>();
+const SESSION_CACHE_TTL = 30000; // 30 секунд
+
 // Генерация 6-значного OTP кода
 export const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -74,6 +78,87 @@ export const verifyToken = (token: string): any => {
     return jwt.verify(token, JWT_SECRET);
   } catch (error) {
     throw new Error('Invalid token');
+  }
+};
+
+// Middleware для проверки активности сессии
+export const checkSessionActive = async (req: Request, res: Response, next: any) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return next(); // Если нет токена, пропускаем (другие middleware проверят)
+    }
+
+    let decoded;
+    try {
+      decoded = verifyToken(token);
+    } catch (error) {
+      console.log('⚠️  Invalid token format');
+      return next(); // Невалидный токен - пусть обработает основной обработчик
+    }
+
+    const sessionId = decoded.sessionId;
+
+    if (!sessionId) {
+      console.log('⚠️  No sessionId in token');
+      return next();
+    }
+
+    // Проверяем кэш
+    const cached = sessionCache.get(sessionId);
+    const now = Date.now();
+    
+    if (cached && (now - cached.cachedAt) < SESSION_CACHE_TTL) {
+      // Используем кэшированное значение
+      if (!cached.isActive) {
+        return res.status(401).json({
+          success: false,
+          error: 'Сессия неактивна. Пожалуйста, войдите снова.',
+          session_terminated: true,
+        });
+      }
+      return next(); // Сессия активна
+    }
+
+    // Проверяем активна ли сессия в БД
+    const sessionCheck = await query(
+      'SELECT is_active FROM session WHERE id = $1',
+      [sessionId]
+    );
+
+    if (sessionCheck.rows.length === 0) {
+      sessionCache.delete(sessionId); // Удаляем из кэша
+      console.log(`⚠️  Session ${sessionId} not found in database`);
+      return res.status(401).json({
+        success: false,
+        error: 'Сессия не найдена. Пожалуйста, войдите снова.',
+        session_terminated: true,
+      });
+    }
+
+    const isActive = sessionCheck.rows[0].is_active;
+    
+    // Обновляем кэш
+    sessionCache.set(sessionId, { isActive, cachedAt: now });
+
+    if (isActive === false) {
+      console.log(`🚪 Session ${sessionId} is inactive`);
+      return res.status(401).json({
+        success: false,
+        error: 'Сессия была завершена. Пожалуйста, войдите снова.',
+        session_terminated: true,
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error('❌ checkSessionActive error:', error);
+    // При ошибке базы данных возвращаем 500
+    return res.status(500).json({
+      success: false,
+      error: 'Ошибка проверки сессии',
+    });
   }
 };
 
@@ -166,8 +251,8 @@ export const register = async (req: Request, res: Response) => {
 
     // 3. Создать сессию с паролем
     const sessionResult = await query(
-      `INSERT INTO session (session_ip, session_key, device_type, password)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO session (session_ip, session_key, device_type, password, created_at, last_active, is_active)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
        RETURNING id`,
       [req.ip || 'unknown', hashedPassword, req.headers['user-agent'] || 'unknown', hashedPassword]
     );
@@ -183,6 +268,12 @@ export const register = async (req: Request, res: Response) => {
     );
     
     const userId = userResult.rows[0].id;
+
+    // 4.1. Обновить сессию с user_id
+    await query(
+      `UPDATE session SET user_id = $1 WHERE id = $2`,
+      [userId, sessionId]
+    );
 
     // 5. Создать настройки по умолчанию
     await query(
@@ -286,12 +377,12 @@ export const login = async (req: Request, res: Response) => {
 
     // Поиск пользователя
     const userQuery = method === 'email'
-      ? `SELECT u.id, u.session_id, ud.name, ud.email as contact, s.password
+      ? `SELECT u.id, ud.name, ud.email as contact, s.password
          FROM users u
          JOIN user_description ud ON u.user_desc_id = ud.id
          JOIN session s ON u.session_id = s.id
          WHERE ud.email = $1`
-      : `SELECT u.id, u.session_id, ud.name, ud.phone as contact
+      : `SELECT u.id, ud.name, ud.phone as contact
          FROM users u
          JOIN user_description ud ON u.user_desc_id = ud.id
          WHERE ud.phone = $1`;
@@ -324,8 +415,18 @@ export const login = async (req: Request, res: Response) => {
         });
       }
 
-      // Генерация токена с sessionId
-      const token = generateToken(user.id, user.session_id);
+      // Создать новую сессию для этого входа
+      const newSessionResult = await query(
+        `INSERT INTO session (session_ip, session_key, device_type, password, user_id, created_at, last_active, is_active)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
+         RETURNING id`,
+        [req.ip || 'unknown', user.password, req.headers['user-agent'] || 'unknown', user.password, user.id]
+      );
+      
+      const newSessionId = newSessionResult.rows[0].id;
+
+      // Генерация токена с новым sessionId
+      const token = generateToken(user.id, newSessionId);
 
       return res.json({
         success: true,
@@ -609,8 +710,25 @@ export const getProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const decoded = verifyToken(token);
+    let decoded;
+    try {
+      decoded = verifyToken(token);
+    } catch (error) {
+      console.error('❌ Token verification failed:', error);
+      return res.status(401).json({
+        success: false,
+        error: 'Невалидный токен',
+      });
+    }
+
     const userId = decoded.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Невалидный токен',
+      });
+    }
 
     const profileQuery = `
       SELECT 
@@ -618,7 +736,7 @@ export const getProfile = async (req: Request, res: Response) => {
         ud.name,
         ud.email,
         ud.phone,
-        u.created_at as "createdAt"
+        ud.registration as "createdAt"
       FROM users u
       JOIN user_description ud ON u.user_desc_id = ud.id
       WHERE u.id = $1
@@ -667,30 +785,38 @@ export const getSessions = async (req: Request, res: Response) => {
 
     const decoded = verifyToken(token);
     const userId = decoded.userId;
+    const currentSessionId = decoded.sessionId;
 
+    // Обновляем last_active для текущей сессии
+    await query(
+      'UPDATE session SET last_active = CURRENT_TIMESTAMP WHERE id = $1',
+      [currentSessionId]
+    );
+
+    // Получаем все сессии пользователя
     const sessionsQuery = `
       SELECT 
         s.id,
         s.device_type,
         s.session_ip,
-        s.created_at,
-        s.user_id
+        s.created_at AT TIME ZONE 'UTC' as created_at,
+        s.last_active AT TIME ZONE 'UTC' as last_active,
+        CASE WHEN s.id = $2 THEN true ELSE false END as is_current
       FROM session s
-      WHERE s.user_id = $1
-      ORDER BY s.created_at DESC
+      WHERE s.user_id = $1 AND s.is_active = true
+      ORDER BY s.last_active DESC NULLS LAST, s.created_at DESC
     `;
 
-    const result = await query(sessionsQuery, [userId]);
+    const result = await query(sessionsQuery, [userId, currentSessionId]);
 
-    // Отмечаем текущую сессию
-    const sessions = result.rows.map(session => ({
-      ...session,
-      is_current: session.id === decoded.sessionId
-    }));
+    console.log('📊 Sessions found:', result.rows.length);
+    result.rows.forEach(s => {
+      console.log(`  - Session ${s.id}: ${s.device_type}, created: ${s.created_at}, last_active: ${s.last_active}, current: ${s.is_current}`);
+    });
 
     res.json({
       success: true,
-      sessions: sessions,
+      sessions: result.rows,
     });
 
   } catch (error) {
@@ -724,34 +850,30 @@ export const deleteSession = async (req: Request, res: Response) => {
     const userId = decoded.userId;
     const sessionId = parseInt(req.params.sessionId);
 
-    // Проверяем, что сессия принадлежит пользователю
-    const checkQuery = `
-      SELECT id
-      FROM session
+    console.log(`🗑️ Deactivating session ${sessionId} for user ${userId}`);
+
+    // Помечаем сессию как неактивную вместо удаления
+    const deactivateQuery = `
+      UPDATE session
+      SET is_active = false
       WHERE id = $1 AND user_id = $2
+      RETURNING id
     `;
 
-    const checkResult = await query(checkQuery, [sessionId, userId]);
+    const result = await query(deactivateQuery, [sessionId, userId]);
 
-    if (checkResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Сессия не найдена',
       });
     }
 
-    // Удаляем сессию
-    const deleteQuery = `
-      DELETE FROM session
-      WHERE id = $1
-      RETURNING id
-    `;
-
-    await query(deleteQuery, [sessionId]);
+    console.log(`✅ Session ${sessionId} deactivated`);
 
     res.json({
       success: true,
-      message: 'Сессия удалена',
+      message: 'Сессия успешно завершена',
     });
 
   } catch (error) {

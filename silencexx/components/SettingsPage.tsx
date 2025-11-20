@@ -27,6 +27,7 @@ interface Session {
   device_type: string;
   session_ip: string;
   created_at: string;
+  last_active: string | null;
   is_current: boolean;
 }
 
@@ -43,24 +44,34 @@ export default function SettingsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      console.log('📊 [SettingsPage] Начало загрузки данных...');
+      
       const [profileData, sessionsData] = await Promise.all([
         authApi.getProfile(),
         authApi.getSessions(),
       ]);
 
+      console.log('📊 [SettingsPage] Profile data:', profileData);
+      console.log('📊 [SettingsPage] Sessions data:', sessionsData);
+
       if (profileData.success) {
         setProfile(profileData.user);
+        console.log('✅ [SettingsPage] Профиль установлен');
       }
 
       if (sessionsData.success) {
+        console.log('📊 [SettingsPage] Sessions array:', sessionsData.sessions);
+        console.log('📊 [SettingsPage] Sessions count:', sessionsData.sessions?.length || 0);
         setSessions(sessionsData.sessions);
+        console.log('✅ [SettingsPage] Сессии установлены');
       }
     } catch (error) {
-      console.error('Error loading settings data:', error);
+      console.error('❌ [SettingsPage] Error loading settings data:', error);
       Alert.alert('Ошибка', 'Не удалось загрузить данные профиля');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      console.log('🏁 [SettingsPage] Загрузка завершена');
     }
   };
 
@@ -151,6 +162,23 @@ export default function SettingsPage() {
     });
   };
 
+  const getTimeAgo = (dateString: string | null) => {
+    if (!dateString) return 'Неизвестно';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Только что';
+    if (diffMins < 60) return `${diffMins} мин назад`;
+    if (diffHours < 24) return `${diffHours} ч назад`;
+    if (diffDays < 7) return `${diffDays} дн назад`;
+    return formatDate(dateString);
+  };
+
   const getDeviceIcon = (deviceType: string) => {
     const type = deviceType.toLowerCase();
     if (type.includes('ios') || type.includes('iphone')) return 'phone-portrait-outline';
@@ -177,6 +205,16 @@ export default function SettingsPage() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
+      {/* DEBUG INFO */}
+      <View style={{ backgroundColor: '#FF0000', padding: 20, marginBottom: 10 }}>
+        <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold' }}>
+          DEBUG: Sessions count = {sessions.length}
+        </Text>
+        <Text style={{ color: '#FFF', fontSize: 14 }}>
+          Profile: {profile ? 'loaded' : 'null'}
+        </Text>
+      </View>
+
       {/* Profile Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -232,6 +270,12 @@ export default function SettingsPage() {
           <Text style={styles.sectionTitle}>Активные устройства</Text>
         </View>
 
+        {(() => {
+          console.log('🔍 [SettingsPage] Рендер секции сессий. Sessions.length:', sessions.length);
+          console.log('🔍 [SettingsPage] Sessions:', sessions);
+          return null;
+        })()}
+
         {sessions.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="phone-portrait-outline" size={48} color="#9CA3AF" />
@@ -265,8 +309,13 @@ export default function SettingsPage() {
                     IP: {session.session_ip}
                   </Text>
                   <Text style={styles.sessionMeta}>
-                    {formatDate(session.created_at)}
+                    Создано: {formatDate(session.created_at)}
                   </Text>
+                  {session.last_active && (
+                    <Text style={styles.sessionMeta}>
+                      Активность: {getTimeAgo(session.last_active)}
+                    </Text>
+                  )}
                 </View>
               </View>
 

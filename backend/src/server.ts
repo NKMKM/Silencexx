@@ -11,9 +11,19 @@ import {
   getProfile,
   getSessions,
   deleteSession,
-  logout
+  logout,
+  checkSessionActive,
+  verifyToken
 } from './auth';
 import { googleAuth, appleAuth } from './oauth';
+import { 
+  createChat, 
+  getChatList, 
+  getChatMessages, 
+  saveChatMessage,
+  deleteChat as deleteChatHistory
+} from './chat';
+import { query } from './db'; // Добавляем импорт query
 import './db'; // Initialize database connection
 
 const app = express();
@@ -44,11 +54,18 @@ app.post('/api/auth/verify-otp', verifyOTP);
 app.post('/api/auth/resend-otp', resendOTP);
 app.post('/api/auth/reset-password', resetPassword);
 
-// Profile & Sessions
-app.get('/api/auth/profile', getProfile);
-app.get('/api/auth/sessions', getSessions);
-app.delete('/api/auth/sessions/:sessionId', deleteSession);
-app.post('/api/auth/logout', logout);
+// Profile & Sessions (защищенные роуты - проверяем активность сессии)
+app.get('/api/auth/profile', checkSessionActive, getProfile);
+app.get('/api/auth/sessions', checkSessionActive, getSessions);
+app.delete('/api/auth/sessions/:sessionId', checkSessionActive, deleteSession);
+app.post('/api/auth/logout', checkSessionActive, logout);
+
+// Chat History Routes
+app.post('/api/chats/create', checkSessionActive, createChat);
+app.get('/api/chats/list', checkSessionActive, getChatList);
+app.get('/api/chats/:chatId/messages', checkSessionActive, getChatMessages);
+app.post('/api/chats/:chatId/message', checkSessionActive, saveChatMessage);
+app.delete('/api/chats/:chatId', checkSessionActive, deleteChatHistory);
 
 // OAuth Routes
 app.post('/api/auth/oauth/google', googleAuth);
@@ -64,11 +81,12 @@ app.post('/api/auth/oauth/apple', appleAuth);
  * - message: string (обязательно) - Сообщение пользователя
  * - mood?: string - Текущее настроение
  * - conversationHistory?: Array<{role: 'user'|'model', text: string}> - История чата
+ * - chatId?: number - ID чата для сохранения истории
  */
-app.post('/api/chat', async (req: Request, res: Response) => {
+app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) => {
   const requestId = Math.random().toString(36).substring(7);
   try {
-    const { message, mood, conversationHistory } = req.body;
+    const { message, mood, conversationHistory, chatId } = req.body;
 
     console.log(`\n🔹 [${requestId}] POST /api/chat - NEW REQUEST`);
 
@@ -77,6 +95,41 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Требуется поле "message" (строка)',
       });
+    }
+
+    // Получаем имя пользователя и userId из БД
+    let userName: string | undefined;
+    let userId: number | undefined;
+    
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      console.log(`🔑 [${requestId}] Token exists:`, !!token);
+      
+      if (token) {
+        const decoded = verifyToken(token);
+        userId = decoded.userId;
+        console.log(`👤 [${requestId}] User ID from token: ${userId}`);
+        
+        const userQuery = `
+          SELECT ud.name 
+          FROM users u
+          JOIN user_description ud ON u.user_desc_id = ud.id
+          WHERE u.id = $1
+        `;
+        const userResult = await query(userQuery, [userId]);
+        
+        console.log(`📊 [${requestId}] Query result rows:`, userResult.rows.length);
+        console.log(`📊 [${requestId}] Query result:`, userResult.rows);
+        
+        if (userResult.rows.length > 0 && userResult.rows[0].name) {
+          userName = userResult.rows[0].name;
+          console.log(`✅👤 [${requestId}] User name from DB: "${userName}"`);
+        } else {
+          console.log(`⚠️ [${requestId}] No name found in DB`);
+        }
+      }
+    } catch (error) {
+      console.warn(`⚠️ [${requestId}] Could not get user name:`, error);
     }
 
     console.log(`📨 [${requestId}] User message: "${message.substring(0, 50)}..."`);
@@ -88,11 +141,46 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const response = await generateAIResponse(message, {
       mood,
       conversationHistory,
+      userName,
     });
 
     console.log(`✅ [${requestId}] Response received`);
     console.log(`🤖 [${requestId}] AI response length: ${response.response.length}`);
     console.log(`🤖 [${requestId}] AI preview: "${response.response.substring(0, 80)}..."`);
+
+    // Сохраняем сообщения в БД если указан chatId
+    if (chatId && userId) {
+      try {
+        console.log(`💾 [${requestId}] Saving messages to chat ${chatId}`);
+        
+        // Проверяем что чат принадлежит пользователю
+        const chatCheck = await query(
+          'SELECT id FROM chat_id WHERE id = $1 AND user_id = $2',
+          [chatId, userId]
+        );
+
+        if (chatCheck.rows.length > 0) {
+          // Сохраняем сообщение пользователя
+          await query(
+            'INSERT INTO user_chat (chat_id, message, senddate) VALUES ($1, $2, NOW())',
+            [chatId, message]
+          );
+          
+          // Сохраняем ответ AI
+          await query(
+            'INSERT INTO ai_response (chat_id, message, senddate) VALUES ($1, $2, NOW())',
+            [chatId, response.response]
+          );
+          
+          console.log(`✅ [${requestId}] Messages saved to database`);
+        } else {
+          console.warn(`⚠️ [${requestId}] Chat ${chatId} not found or access denied`);
+        }
+      } catch (saveError) {
+        console.error(`❌ [${requestId}] Error saving messages:`, saveError);
+        // Не прерываем выполнение, если не удалось сохранить
+      }
+    }
 
     res.json({
       success: true,

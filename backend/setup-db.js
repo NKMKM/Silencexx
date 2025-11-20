@@ -57,6 +57,24 @@ async function setupDatabase() {
     await client.query(sql3);
     console.log('✅ 3.sql completed\n');
     
+    // Выполняем 4.sql
+    const sql4 = fs.readFileSync(path.join(__dirname, 'flyway', '4.sql'), 'utf8');
+    console.log('📄 Running 4.sql...');
+    await client.query(sql4);
+    console.log('✅ 4.sql completed\n');
+    
+    // Выполняем 5.sql
+    const sql5 = fs.readFileSync(path.join(__dirname, 'flyway', '5.sql'), 'utf8');
+    console.log('📄 Running 5.sql...');
+    await client.query(sql5);
+    console.log('✅ 5.sql completed\n');
+    
+    // Выполняем 6.sql
+    const sql6 = fs.readFileSync(path.join(__dirname, 'flyway', '6.sql'), 'utf8');
+    console.log('📄 Running 6.sql...');
+    await client.query(sql6);
+    console.log('✅ 6.sql completed\n');
+    
     // Проверяем результат
     const tables = await client.query(`
       SELECT table_name 

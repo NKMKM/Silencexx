@@ -50,6 +50,7 @@ interface MessageContent {
 interface ConversationContext {
   mood?: string;
   conversationHistory?: MessageContent[];
+  userName?: string;
 }
 
 export async function generateAIResponse(
@@ -70,9 +71,16 @@ export async function generateAIResponse(
 
     console.log('✅ Creating Gemini model...');
     
+    // Добавляем имя пользователя в системный промпт если есть
+    let systemPrompt = SYSTEM_PROMPT;
+    if (context?.userName) {
+      systemPrompt = `${SYSTEM_PROMPT}\n\nИМЯ ПОЛЬЗОВАТЕЛЯ: ${context.userName}\nОбращайся к пользователю по имени естественно и тепло, когда это уместно.`;
+      console.log('👤 User name:', context.userName);
+    }
+    
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
       generationConfig: {
         maxOutputTokens: 500,
         temperature: 0.7,

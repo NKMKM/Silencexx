@@ -16,37 +16,34 @@ async function runMigration() {
   const client = await pool.connect();
   
   try {
-    console.log('🔄 Running migration 2.sql...\n');
+    console.log('🔄 Running migrations...\n');
     
-    // Читаем файл миграции
     const fs = require('fs');
     const path = require('path');
-    const migrationSQL = fs.readFileSync(
-      path.join(__dirname, 'flyway', '2.sql'),
+    
+    // 1. Индексы
+    console.log('1️⃣ Adding indexes...');
+    const indexesSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_indexes.sql'),
       'utf8'
     );
+    await client.query(indexesSQL);
+    console.log('✅ Indexes added\n');
     
-    // Выполняем миграцию
-    await client.query(migrationSQL);
+    // 2. Временные чаты
+    console.log('2️⃣ Adding temporary chats support...');
+    const tempChatsSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_temporary_chats.sql'),
+      'utf8'
+    );
+    await client.query(tempChatsSQL);
+    console.log('✅ Temporary chats support added\n');
     
-    console.log('✅ Migration completed successfully!\n');
-    
-    // Проверяем результат
-    const result = await client.query(`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'session' 
-      ORDER BY ordinal_position;
-    `);
-    
-    console.log('📋 Session table columns:');
-    result.rows.forEach(col => {
-      console.log(`  - ${col.column_name}: ${col.data_type}`);
-    });
+    console.log('✅ All migrations completed successfully!\n');
     
   } catch (error) {
     if (error.message.includes('already exists')) {
-      console.log('ℹ️  Column "password" already exists. Migration already applied.');
+      console.log('ℹ️  Indexes already exist. Migration already applied.');
     } else {
       console.error('❌ Migration failed:', error.message);
       throw error;
