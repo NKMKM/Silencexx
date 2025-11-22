@@ -23,6 +23,12 @@ import {
   saveChatMessage,
   deleteChat as deleteChatHistory
 } from './chat';
+import {
+  sendAnonymousMessage,
+  getReceivedMessages,
+  canSendMessage,
+  markMessageAsRead
+} from './inbox';
 import { query } from './db'; // Добавляем импорт query
 import './db'; // Initialize database connection
 
@@ -70,6 +76,12 @@ app.delete('/api/chats/:chatId', checkSessionActive, deleteChatHistory);
 // OAuth Routes
 app.post('/api/auth/oauth/google', googleAuth);
 app.post('/api/auth/oauth/apple', appleAuth);
+
+// Inbox Routes
+app.post('/api/inbox/send', checkSessionActive, sendAnonymousMessage);
+app.get('/api/inbox/received', checkSessionActive, getReceivedMessages);
+app.get('/api/inbox/can-send', checkSessionActive, canSendMessage);
+app.post('/api/inbox/:id/mark-read', checkSessionActive, markMessageAsRead);
 
 // API Routes
 

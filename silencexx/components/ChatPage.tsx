@@ -406,6 +406,14 @@ export function ChatPage() {
 
   const handleNewTemporaryChat = async () => {
     try {
+      // Переключаем режим временного чата
+      if (isTemporaryChat) {
+        // Выключаем временный режим
+        setIsTemporaryChat(false);
+        console.log('⚠️ Temporary chat mode disabled');
+        return;
+      }
+      
       setIsTemporaryChat(true);
       
       // Мгновенно создаём локальное состояние
@@ -579,9 +587,9 @@ export function ChatPage() {
               onPress={handleNewTemporaryChat}
             >
               <Ionicons
-                name="flash-outline"
+                name={isTemporaryChat ? "time" : "time-outline"}
                 size={22}
-                color={isDark ? '#f59e0b' : '#f97316'}
+                color={isTemporaryChat ? '#f59e0b' : (isDark ? '#f59e0b' : '#f97316')}
               />
             </TouchableOpacity>
             <TouchableOpacity 

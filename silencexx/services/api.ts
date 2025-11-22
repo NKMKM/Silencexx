@@ -142,6 +142,33 @@ export interface MoodAnalysisResponse {
   score: number;
 }
 
+// Типы для Inbox
+export interface AnonymousMessage {
+  id: number;
+  message: string;
+  sent_at: string;
+  is_read: boolean;
+}
+
+export interface SendWishResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface ReceivedMessagesResponse {
+  success: boolean;
+  messages: AnonymousMessage[];
+}
+
+export interface CanSendResponse {
+  success: boolean;
+  canSend: boolean;
+  hoursLeft?: number;
+  minutesLeft?: number;
+  nextAvailable?: string;
+}
+
 // API методы
 export const chatApi = {
   /**
@@ -514,6 +541,63 @@ export const authApi = {
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting session:', error);
+      throw error;
+    }
+  },
+};
+
+// Inbox API
+export const inboxApi = {
+  /**
+   * Отправить анонимное пожелание
+   */
+  sendWish: async (message: string): Promise<SendWishResponse> => {
+    try {
+      const response = await api.post('/inbox/send', { message });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Получить полученные сообщения
+   */
+  getReceived: async (): Promise<ReceivedMessagesResponse> => {
+    try {
+      const response = await api.get('/inbox/received');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error getting received messages:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Проверить можно ли отправить сообщение
+   */
+  canSend: async (): Promise<CanSendResponse> => {
+    try {
+      const response = await api.get('/inbox/can-send');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error checking send availability:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Пометить сообщение как прочитанное
+   */
+  markAsRead: async (messageId: number): Promise<{ success: boolean }> => {
+    try {
+      const response = await api.post(`/inbox/${messageId}/mark-read`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error marking message as read:', error);
       throw error;
     }
   },

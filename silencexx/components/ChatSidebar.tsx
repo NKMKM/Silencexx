@@ -127,7 +127,7 @@ export function ChatSidebar({
           style={styles.sidebar}
         >
           <BlurView
-            intensity={95}
+            intensity={85}
             tint={isDark ? 'dark' : 'light'}
             style={styles.blurContainer}
           >

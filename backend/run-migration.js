@@ -39,6 +39,24 @@ async function runMigration() {
     await client.query(tempChatsSQL);
     console.log('✅ Temporary chats support added\n');
     
+    // 3. Inbox
+    console.log('3️⃣ Adding inbox support...');
+    const inboxSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_inbox.sql'),
+      'utf8'
+    );
+    await client.query(inboxSQL);
+    console.log('✅ Inbox support added\n');
+    
+    // 4. Receive cooldown
+    console.log('4️⃣ Adding receive cooldown...');
+    const receiveCooldownSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_receive_cooldown.sql'),
+      'utf8'
+    );
+    await client.query(receiveCooldownSQL);
+    console.log('✅ Receive cooldown added\n');
+    
     console.log('✅ All migrations completed successfully!\n');
     
   } catch (error) {
