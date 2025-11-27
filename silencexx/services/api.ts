@@ -603,6 +603,48 @@ export const inboxApi = {
   },
 };
 
+// Journal API (diary)
+export const journalApi = {
+  /**
+   * Получить запись за дату YYYY-MM-DD
+   */
+  getEntry: async (date: string) => {
+    try {
+      const response = await api.get('/journal/entry', { params: { date } });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting journal entry:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить список дат с записями
+   */
+  listEntries: async () => {
+    try {
+      const response = await api.get('/journal/list');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting journal list:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Создать запись (date YYYY-MM-DD)
+   */
+  createEntry: async (date: string, content: string) => {
+    try {
+      const response = await api.post('/journal/entry', { date, content });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error creating journal entry:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+};
+
 export default chatApi;
 
 // Экспорт axios инстанса для прямого доступа (OAuth, Auth endpoints)

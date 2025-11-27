@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   Modal,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Dimensions,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -17,9 +18,11 @@ import Animated, {
   withTiming,
   Easing,
   withSpring,
+  interpolate,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useTheme } from '@/utils/ThemeContext';
 
 interface Message {
   id: number;
@@ -36,18 +39,12 @@ interface VoiceAssistantProps {
 const { width, height } = Dimensions.get('window');
 
 export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
+  const { activeTheme } = useTheme();
+  const isDark = activeTheme === 'dark';
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: 'Привет. Я твой голосовой помощник. Нажми на облачко, чтобы начать говорить.',
-      sender: 'ai',
-      timestamp: new Date(),
-    },
-  ]);
-
-  // Анимации
+  const [transcript, setTranscript] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
   const scale = useSharedValue(1);
   const rotate = useSharedValue(0);
   const pulseScale = useSharedValue(1);
@@ -186,43 +183,62 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
       onRequestClose={onClose}
     >
       <LinearGradient
-        colors={['#eff6ff', '#f3e8ff', '#fce7f3']}
+        colors={isDark ? ['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e'] : ['#eff6ff', '#f3e8ff', '#fce7f3']}
         style={styles.container}
       >
         {/* Header */}
-        <BlurView intensity={80} tint="light" style={styles.header}>
+        <View style={[styles.header, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
-              <Ionicons name="volume-high" size={24} color="#8b5cf6" />
-              <Text style={styles.headerTitle}>Голосовой помощник</Text>
+              <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(139, 92, 246, 0.2)' }]}>
+                <Ionicons name="sparkles" size={20} color={isDark ? '#818cf8' : '#8b5cf6'} />
+              </View>
+              <Text style={[styles.headerTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Голосовой AI</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#64748b" />
+              <Ionicons name="close" size={24} color={isDark ? '#94a3b8' : '#64748b'} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.headerSubtitle}>Говорите с вашим AI-помощником</Text>
-        </BlurView>
+        </View>
 
         {/* Main Area */}
         <View style={styles.mainArea}>
-          {/* Animated Cloud */}
-          <View style={styles.cloudContainer}>
-            {/* Glow Effect */}
+          {/* Status Text at Top */}
+          <Text style={[styles.statusText, { color: isDark ? '#cbd5e1' : '#475569' }]}>
+            {isListening
+              ? 'Слушаю вас...'
+              : isSpeaking
+              ? 'Отвечаю...'
+              : 'Нажмите на кнопку для начала'}
+          </Text>
+
+          {/* Animated Mic Visualization */}
+          <View style={styles.micContainer}>
+            {/* Outer Glow Rings */}
+            {isListening && (
+              <View style={styles.pulseContainer}>
+                {[0, 1, 2].map((i) => (
+                  <PulseRing key={i} delay={i * 600} isDark={isDark} />
+                ))}
+              </View>
+            )}
+
+            {/* Animated Glow Background */}
             <Animated.View
               style={[
                 styles.glow,
                 glowAnimatedStyle,
                 {
                   backgroundColor: isListening
-                    ? 'rgba(96, 165, 250, 0.4)'
+                    ? 'rgba(99, 102, 241, 0.3)'
                     : isSpeaking
-                    ? 'rgba(167, 139, 250, 0.4)'
-                    : 'rgba(192, 132, 252, 0.3)',
+                    ? 'rgba(168, 85, 247, 0.3)'
+                    : 'rgba(129, 140, 248, 0.2)',
                 },
               ]}
             />
 
-            {/* Main Cloud Button */}
+            {/* Main Mic Button */}
             <Animated.View style={cloudAnimatedStyle}>
               <TouchableOpacity
                 onPress={handleToggleListening}
@@ -231,64 +247,61 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
                 <LinearGradient
                   colors={
                     isListening
-                      ? ['#60a5fa', '#3b82f6']
+                      ? ['#6366f1', '#a855f7']
                       : isSpeaking
-                      ? ['#a78bfa', '#8b5cf6']
-                      : ['#c084fc', '#f9a8d4']
+                      ? ['#a855f7', '#ec4899']
+                      : ['#818cf8', '#6366f1']
                   }
-                  style={styles.cloudButton}
+                  style={[styles.micButton, {
+                    shadowColor: isListening ? '#6366f1' : isSpeaking ? '#a855f7' : '#818cf8',
+                  }]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                  <Ionicons name="cloud" size={96} color="rgba(255,255,255,0.8)" />
-                  
-                  {/* Mic Icon */}
-                  <View style={styles.micIconContainer}>
-                    <Ionicons
-                      name={isListening ? 'mic' : isSpeaking ? 'volume-high' : 'mic-off'}
-                      size={48}
-                      color="#fff"
-                    />
-                  </View>
+                  <Ionicons
+                    name={isListening ? 'mic' : isSpeaking ? 'volume-high' : 'mic-outline'}
+                    size={64}
+                    color="#ffffff"
+                  />
                 </LinearGradient>
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Pulse Rings */}
-            {isListening && (
-              <View style={styles.pulseContainer}>
-                {[0, 1, 2].map((i) => (
-                  <PulseRing key={i} delay={i * 600} />
+            {/* Waveform Visualization for Speaking */}
+            {isSpeaking && (
+              <View style={styles.waveformContainer}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <WaveformBar key={i} delay={i * 100} isDark={isDark} />
                 ))}
               </View>
             )}
           </View>
 
-          {/* Status Text */}
-          <Text style={styles.statusText}>
-            {isListening
-              ? 'Слушаю вас...'
-              : isSpeaking
-              ? 'Отвечаю...'
-              : 'Нажмите на облачко для начала'}
-          </Text>
-
           {/* Control Button */}
-          <TouchableOpacity onPress={handleToggleListening}>
+          <TouchableOpacity onPress={handleToggleListening} style={styles.controlButtonWrapper}>
             <LinearGradient
               colors={
                 isListening
                   ? ['#ef4444', '#dc2626']
-                  : ['#3b82f6', '#8b5cf6']
+                  : isDark
+                  ? ['rgba(30, 41, 59, 0.8)', 'rgba(30, 41, 59, 0.6)']
+                  : ['#e0e7ff', '#ddd6fe']
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.controlButton}
+              style={[styles.controlButton, {
+                borderWidth: isListening ? 0 : 1.5,
+                borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(139, 92, 246, 0.3)',
+              }]}
             >
               <Ionicons
-                name={isListening ? 'mic-off' : 'mic'}
+                name={isListening ? 'stop-circle' : 'mic'}
                 size={20}
-                color="#fff"
+                color={isListening ? '#fff' : isDark ? '#818cf8' : '#6366f1'}
               />
-              <Text style={styles.controlButtonText}>
+              <Text style={[styles.controlButtonText, {
+                color: isListening ? '#fff' : isDark ? '#818cf8' : '#6366f1',
+              }]}>
                 {isListening ? 'Остановить' : 'Начать разговор'}
               </Text>
             </LinearGradient>
@@ -296,8 +309,13 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
         </View>
 
         {/* Messages History */}
-        <BlurView intensity={80} tint="light" style={styles.messagesContainer}>
-          <Text style={styles.messagesTitle}>История разговора</Text>
+        <View style={[styles.messagesContainer, {
+          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+          borderTopColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+        }]}>
+          <Text style={[styles.messagesTitle, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+            История разговора
+          </Text>
           <ScrollView style={styles.messagesList} showsVerticalScrollIndicator={false}>
             {messages.slice(-5).map((msg) => (
               <View
@@ -309,7 +327,7 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
               >
                 {msg.sender === 'user' ? (
                   <LinearGradient
-                    colors={['#3b82f6', '#8b5cf6']}
+                    colors={['#6366f1', '#a855f7']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.messageUser}
@@ -317,27 +335,32 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
                     <Text style={styles.messageUserText}>{msg.text}</Text>
                   </LinearGradient>
                 ) : (
-                  <View style={styles.messageAI}>
-                    <Text style={styles.messageAIText}>{msg.text}</Text>
+                  <View style={[styles.messageAI, {
+                    backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.4)',
+                    borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255, 255, 255, 0.2)',
+                  }]}>
+                    <Text style={[styles.messageAIText, { color: isDark ? '#cbd5e1' : '#475569' }]}>
+                      {msg.text}
+                    </Text>
                   </View>
                 )}
               </View>
             ))}
           </ScrollView>
-        </BlurView>
+        </View>
       </LinearGradient>
     </Modal>
   );
 }
 
 // Pulse Ring Component
-function PulseRing({ delay }: { delay: number }) {
+function PulseRing({ delay, isDark }: { delay: number; isDark: boolean }) {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
   useEffect(() => {
     scale.value = withRepeat(
-      withTiming(1.5, { duration: 2000, easing: Easing.out(Easing.ease) }),
+      withTiming(2, { duration: 2000, easing: Easing.out(Easing.ease) }),
       -1,
       false
     );
@@ -358,7 +381,41 @@ function PulseRing({ delay }: { delay: number }) {
 
   return (
     <Animated.View
-      style={[styles.pulseRing, animatedStyle, { animationDelay: `${delay}ms` }]}
+      style={[
+        styles.pulseRing,
+        animatedStyle,
+        { borderColor: isDark ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255, 255, 255, 0.5)' }
+      ]}
+    />
+  );
+}
+
+// Waveform Bar Component
+function WaveformBar({ delay, isDark }: { delay: number; isDark: boolean }) {
+  const height = useSharedValue(20);
+
+  useEffect(() => {
+    height.value = withRepeat(
+      withSequence(
+        withTiming(Math.random() * 60 + 20, { duration: 300 }),
+        withTiming(Math.random() * 60 + 20, { duration: 300 })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: height.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.waveformBar,
+        animatedStyle,
+        { backgroundColor: isDark ? '#818cf8' : '#a855f7' }
+      ]}
     />
   );
 }
@@ -372,31 +429,31 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  headerIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   closeButton: {
     padding: 8,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
   },
   mainArea: {
     flex: 1,
@@ -404,89 +461,105 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
-  cloudContainer: {
+  statusText: {
+    fontSize: 18,
+    marginBottom: 40,
+    textAlign: 'center',
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  micContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+    marginBottom: 48,
+    width: 240,
+    height: 240,
   },
   glow: {
     position: 'absolute',
     width: 240,
     height: 240,
     borderRadius: 120,
-    opacity: 0.3,
   },
-  cloudButton: {
-    width: 192,
-    height: 192,
-    borderRadius: 96,
+  micButton: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  micIconContainer: {
-    position: 'absolute',
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
   },
   pulseContainer: {
     position: 'absolute',
-    width: 192,
-    height: 192,
+    width: 160,
+    height: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pulseRing: {
     position: 'absolute',
-    width: 192,
-    height: 192,
-    borderRadius: 96,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 3,
   },
-  statusText: {
-    fontSize: 16,
-    color: '#475569',
-    marginBottom: 24,
-    textAlign: 'center',
+  waveformContainer: {
+    position: 'absolute',
+    bottom: -60,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    height: 80,
+  },
+  waveformBar: {
+    width: 6,
+    borderRadius: 3,
+  },
+  controlButtonWrapper: {
+    width: '100%',
+    maxWidth: 280,
   },
   controlButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 32,
     paddingVertical: 16,
-    borderRadius: 24,
+    borderRadius: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     elevation: 6,
   },
   controlButtonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   messagesContainer: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+    borderTopWidth: 1.5,
     paddingTop: 16,
     paddingHorizontal: 20,
     paddingBottom: 40,
-    maxHeight: 200,
+    maxHeight: 220,
   },
   messagesTitle: {
     fontSize: 14,
-    color: '#64748b',
+    fontWeight: '600',
     marginBottom: 12,
+    letterSpacing: 0.3,
   },
   messagesList: {
     flex: 1,
   },
   messageWrapper: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   messageWrapperUser: {
     alignItems: 'flex-end',
@@ -496,25 +569,29 @@ const styles = StyleSheet.create({
   },
   messageUser: {
     maxWidth: '80%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   messageUserText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '500',
   },
   messageAI: {
     maxWidth: '80%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1.5,
   },
   messageAIText: {
-    color: '#475569',
     fontSize: 14,
+    fontWeight: '500',
   },
 });

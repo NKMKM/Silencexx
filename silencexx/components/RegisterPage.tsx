@@ -484,10 +484,14 @@ export function RegisterPage({ onRegister, onNavigateToLogin, onNavigateToOTP }:
           <ScrollView 
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 120, 120) }
+              { 
+                paddingTop: Math.max(insets.top + 20, 40), 
+                paddingBottom: Math.max(insets.bottom + 200, 200) 
+              }
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            bounces={false}
           >
           {step !== 'method' && (
             <TouchableOpacity 

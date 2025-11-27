@@ -215,7 +215,7 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
                   <Ionicons
                     name={method.icon}
                     size={24}
-                    color={paymentMethod === method.id ? (isDark ? '#a78bfa' : '#8b5cf6') : isDark ? '#9ca3af' : '#64748b'}
+                    color={paymentMethod === method.id ? (isDark ? '#818cf8' : '#6366f1') : isDark ? '#9ca3af' : '#64748b'}
                   />
                   <Text
                     style={[
@@ -516,12 +516,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 41, 55, 0.5)',
   },
   paymentMethodActive: {
-    borderColor: '#a78bfa',
-    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    borderColor: '#818cf8',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
   paymentMethodActiveDark: {
-    borderColor: '#a78bfa',
-    backgroundColor: 'rgba(167, 139, 250, 0.2)',
+    borderColor: '#818cf8',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
   },
   paymentMethodText: {
     fontSize: 12,
@@ -532,11 +532,11 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   paymentMethodTextActive: {
-    color: '#7c3aed',
+    color: '#6366f1',
     fontWeight: '600',
   },
   paymentMethodTextActiveDark: {
-    color: '#a78bfa',
+    color: '#818cf8',
   },
   formContainer: {
     gap: 16,
@@ -601,12 +601,12 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#6366f1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   alternativeIconDark: {
-    backgroundColor: '#a78bfa',
+    backgroundColor: '#818cf8',
   },
   alternativeTitle: {
     fontSize: 18,

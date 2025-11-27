@@ -45,7 +45,7 @@ export const AnimatedGradient = React.memo(({
         style={finalStyle}
       />
       {/* Темный градиент (поверх с анимированной opacity) */}
-      <Animated.View style={[StyleSheet.absoluteFill, darkGradientStyle]}>
+      <Animated.View style={[StyleSheet.absoluteFill, darkGradientStyle, { backgroundColor: isDark ? '#1a1a2e' : '#e0e7ff' }]}>
         <LinearGradient
           colors={darkColors}
           style={StyleSheet.absoluteFill}

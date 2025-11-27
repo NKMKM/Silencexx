@@ -90,9 +90,9 @@ export function ReminderModal({ visible, onClose }: ReminderModalProps) {
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <View style={[styles.iconContainer, isDark && styles.iconContainerDark]}>
-                  <Ionicons name="time" size={24} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+                  <Ionicons name="time" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
                 </View>
-                <Text style={[styles.title, isDark && styles.titleDark]}>
+                <Text style={[styles.title, isDark && styles.titleDark, { fontWeight: '700', letterSpacing: -0.5 }]}>
                   Напоминания
                 </Text>
               </View>

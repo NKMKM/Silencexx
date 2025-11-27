@@ -170,7 +170,7 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <AnimatedGradient
         lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-        darkColors={['#0f172a', '#1e1b4b', '#312e81', '#1e293b']}
+        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
         isDark={isDark}
       />
       
@@ -205,9 +205,8 @@ export default function SettingsScreen() {
             ]}
           >
           <LinearGradient
-            colors={['#3b82f6', '#8b5cf6']}
-            style={styles.avatar}
-          >
+            colors={['#6366f1', '#a855f7']}
+            style={styles.avatar}>
             <Ionicons name="person" size={32} color="#fff" />
           </LinearGradient>
           <View style={styles.userInfo}>
@@ -394,12 +393,12 @@ export default function SettingsScreen() {
                       borderColor:
                         chatBackground === option.id
                           ? isDark
-                            ? '#a78bfa'
-                            : '#8b5cf6'
+                            ? '#818cf8'
+                            : '#6366f1'
                           : isDark
-                          ? 'rgba(71, 85, 105, 0.3)'
+                          ? 'rgba(99, 102, 241, 0.3)'
                           : 'rgba(226, 232, 240, 0.5)',
-                      borderWidth: chatBackground === option.id ? 2 : 1,
+                      borderWidth: chatBackground === option.id ? 2 : 1.5,
                     },
                   ]}
                   onPress={() => {
@@ -414,14 +413,13 @@ export default function SettingsScreen() {
                         backgroundColor:
                           chatBackground === option.id
                             ? isDark
-                              ? '#8b5cf6'
-                              : '#a78bfa'
+                              ? '#6366f1'
+                              : '#818cf8'
                             : isDark
-                            ? 'rgba(71, 85, 105, 0.5)'
+                            ? 'rgba(30, 41, 59, 0.5)'
                             : 'rgba(226, 232, 240, 0.8)',
                       },
-                    ]}
-                  >
+                    ]}>
                     <Ionicons
                       name={option.icon}
                       size={24}
@@ -441,8 +439,8 @@ export default function SettingsScreen() {
                         color:
                           chatBackground === option.id
                             ? isDark
-                              ? '#a78bfa'
-                              : '#8b5cf6'
+                              ? '#818cf8'
+                              : '#6366f1'
                             : isDark
                             ? '#cbd5e1'
                             : '#475569',
@@ -453,7 +451,7 @@ export default function SettingsScreen() {
                     {option.name}
                   </Text>
                   {chatBackground === option.id && (
-                    <Ionicons name="checkmark-circle" size={24} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+                    <Ionicons name="checkmark-circle" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -510,15 +508,16 @@ export default function SettingsScreen() {
                   styles.languageOption,
                   {
                     backgroundColor: language === 'ru'
-                      ? 'rgba(139, 92, 246, 0.15)'
+                      ? 'rgba(99, 102, 241, 0.15)'
                       : isDark
                       ? 'rgba(30, 41, 59, 0.6)'
                       : 'rgba(241, 245, 249, 0.8)',
                     borderColor: language === 'ru'
-                      ? '#8b5cf6'
+                      ? '#818cf8'
                       : isDark
-                      ? 'rgba(51, 65, 85, 0.6)'
+                      ? 'rgba(99, 102, 241, 0.3)'
                       : 'rgba(203, 213, 225, 0.6)',
+                    borderWidth: 1.5,
                   },
                 ]}
                 onPress={() => {

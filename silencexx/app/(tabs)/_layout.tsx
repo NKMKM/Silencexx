@@ -83,27 +83,28 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'shift',
-        lazy: true, // Ленивая загрузка для производительности
-        tabBarStyle: isKeyboardVisible ? { display: 'none' } : {
-          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-          borderTopColor: isDark ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)',
-          borderTopWidth: 1,
+        lazy: true,
+        tabBarStyle: {
+          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : '#ffffff',
+          borderTopColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#e2e8f0',
+          borderTopWidth: 1.5,
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom,
           paddingTop: 8,
           position: 'absolute',
           elevation: 0,
-          shadowColor: isDark ? '#a78bfa' : '#8b5cf6',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: isDark ? 0.2 : 0.1,
+          shadowColor: isDark ? '#000' : '#8b5cf6',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: isDark ? 0.3 : 0.08,
           shadowRadius: 12,
         },
-        tabBarActiveTintColor: isDark ? '#a78bfa' : '#8b5cf6',
+        tabBarActiveTintColor: isDark ? '#818cf8' : '#8b5cf6',
         tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
+          fontSize: 11,
+          fontWeight: '700',
           marginTop: 4,
+          letterSpacing: 0.2,
         },
       }}>
       <Tabs.Screen

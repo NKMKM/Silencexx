@@ -52,6 +52,7 @@ export function ChatPage() {
   const [activeChatId, setActiveChatId] = useState<number | null>(null); // ID чата в БД
   const [isTemporaryChat, setIsTemporaryChat] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [chats, setChats] = useState<Chat[]>([
     {
       id: 1,
@@ -108,15 +109,21 @@ export function ChatPage() {
     initChat();
   }, []);
 
-  // Отслеживание состояния клавиатуры
+  // Отслеживание состояния клавиатуры с высотой
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => setKeyboardVisible(true)
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardVisible(true);
+        setKeyboardHeight(e.endCoordinates.height);
+      }
     );
     const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => setKeyboardVisible(false)
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+        setKeyboardHeight(0);
+      }
     );
 
     return () => {
@@ -526,46 +533,40 @@ export function ChatPage() {
   }, [isDark, messages.length]);
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={
-          isDark
-            ? ['#0f172a', '#1e1b4b', '#312e81', '#1e293b']
-            : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
-        }
-        style={StyleSheet.absoluteFillObject}
-      />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        <LinearGradient
+          colors={
+            isDark
+              ? ['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']
+              : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
+          }
+          style={StyleSheet.absoluteFillObject}
+        />
 
-      <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
         {/* Header */}
         <View
           style={[
             styles.header,
             {
-              paddingTop: insets.top + 4,
-              backgroundColor: isDark
-                ? 'rgba(15, 23, 42, 0.7)'
-                : 'rgba(255, 255, 255, 0.85)',
-                  borderBottomColor: isDark
-                    ? 'rgba(71, 85, 105, 0.4)'
-                    : 'rgba(226, 232, 240, 0.7)',
-                },
-              ]}
+              paddingTop: insets.top + 12,
+              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.95)' : '#ffffff',
+              borderBottomWidth: 0,
+            },
+          ]}
             >
           <View style={styles.headerContent}>
-            <TouchableOpacity onPress={() => setShowSidebar(true)}>
+            <TouchableOpacity 
+              onPress={() => setShowSidebar(true)}
+              style={styles.backButton}
+            >
               <Ionicons
-                name="menu"
+                name="chevron-back"
                 size={24}
-                color={isDark ? '#a78bfa' : '#8b5cf6'}
+                color={isDark ? '#e2e8f0' : '#1e293b'}
               />
             </TouchableOpacity>
-            <LinearGradient
-              colors={['#60a5fa', '#a78bfa']}
-              style={styles.headerIcon}
-            >
-              <Ionicons name="cloud" size={18} color="#fff" />
-            </LinearGradient>
             <Text
               style={[
                 styles.headerTitle,
@@ -574,32 +575,14 @@ export function ChatPage() {
             >
               CloudMind
             </Text>
-            {isTemporaryChat && (
-              <View style={styles.temporaryBadge}>
-                <Ionicons name="time-outline" size={12} color="#f59e0b" />
-                <Text style={styles.temporaryText}>Временный</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.headerButtons}>
             <TouchableOpacity 
-              style={styles.headerButton}
-              onPress={handleNewTemporaryChat}
-            >
-              <Ionicons
-                name={isTemporaryChat ? "time" : "time-outline"}
-                size={22}
-                color={isTemporaryChat ? '#f59e0b' : (isDark ? '#f59e0b' : '#f97316')}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.headerButton}
+              style={styles.menuButton}
               onPress={() => setShowVoiceAssistant(true)}
             >
               <Ionicons
-                name="mic-outline"
-                size={22}
-                color={isDark ? '#a78bfa' : '#8b5cf6'}
+                name="ellipsis-vertical"
+                size={20}
+                color={isDark ? '#e2e8f0' : '#1e293b'}
               />
             </TouchableOpacity>
           </View>
@@ -623,52 +606,41 @@ export function ChatPage() {
         />
 
         {/* Messages или приветствие */}
-        {messages.length === 0 ? (
+        {messages.length === 0 && !isKeyboardVisible ? (
           <View style={[
             styles.emptyStateContainer,
-            { paddingBottom: insets.bottom + 100 }
+            { 
+              paddingTop: insets.top + 100,
+              paddingBottom: insets.bottom + 80
+            }
           ]}>
             <View style={styles.welcomeCard}>
               <View style={styles.welcomeIconContainer}>
                 <LinearGradient
-                  colors={['#3b82f6', '#8b5cf6']}
+                  colors={isDark ? ['#6366f1', '#a855f7'] : ['#8b5cf6', '#ec4899']}
                   style={styles.welcomeIcon}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                  <Ionicons name="cloud" size={48} color="#fff" />
+                  <Ionicons name="sparkles" size={48} color="#fff" />
                 </LinearGradient>
               </View>
-              <Text style={[styles.welcomeTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>
-                Привет! 👋
+              <Text style={[styles.welcomeTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+                Привет!
               </Text>
               <Text style={[styles.welcomeSubtitle, { color: isDark ? '#cbd5e1' : '#475569' }]}>
-                Это CloudMind
+                Как я могу помочь тебе сегодня?
               </Text>
-              <Text style={[styles.welcomeText, { color: isDark ? '#94a3b8' : '#64748b' }]}>
-                Твой персональный помощник для поддержки ментального здоровья
-              </Text>
-              <View style={styles.welcomeFeatures}>
-                <View style={styles.featureItem}>
-                  <Ionicons name="ear" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-                  <Text style={[styles.featureText, { color: isDark ? '#cbd5e1' : '#475569' }]}>
-                    Выслушаю тебя
-                  </Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <Ionicons name="heart" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-                  <Text style={[styles.featureText, { color: isDark ? '#cbd5e1' : '#475569' }]}>
-                    Помогу с эмоциями
-                  </Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <Ionicons name="sunny" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-                  <Text style={[styles.featureText, { color: isDark ? '#cbd5e1' : '#475569' }]}>
-                    Найдём спокойствие
-                  </Text>
-                </View>
+              <View style={styles.quickActions}>
+                <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(139, 92, 246, 0.1)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(139, 92, 246, 0.2)' }]}>
+                  <Ionicons name="chatbubble" size={20} color={isDark ? '#818cf8' : '#8b5cf6'} />
+                  <Text style={[styles.actionText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Поговорить</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(236, 72, 153, 0.1)', borderColor: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(236, 72, 153, 0.2)' }]}>
+                  <Ionicons name="heart" size={20} color={isDark ? '#c084fc' : '#ec4899'} />
+                  <Text style={[styles.actionText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Поддержка</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={[styles.welcomePrompt, { color: isDark ? '#a78bfa' : '#8b5cf6' }]}>
-                Расскажи, как ты себя чувствуешь? 💬
-              </Text>
             </View>
           </View>
         ) : (
@@ -682,82 +654,77 @@ export function ChatPage() {
               { paddingBottom: insets.bottom + 20 }
             ]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={true}
             scrollEnabled={true}
           />
         )}
 
         {/* Input Area */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        >
-          <View
-            style={[
-              styles.inputContainer,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(15, 23, 42, 0.6)'
-                  : 'rgba(255, 255, 255, 0.6)',
-                borderTopColor: isDark
-                  ? 'rgba(71, 85, 105, 0.3)'
-                  : 'rgba(226, 232, 240, 0.5)',
-                paddingBottom: 8,
-                marginBottom: isKeyboardVisible ? 0 : insets.bottom + 60,
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.98)' : '#ffffff',
+              paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 8,
+              marginBottom: Platform.OS === 'ios' ? (isKeyboardVisible ? keyboardHeight - insets.bottom : 60) : (isKeyboardVisible ? keyboardHeight : 60),
+              borderTopWidth: 1,
+              borderTopColor: isDark ? 'rgba(99, 102, 241, 0.15)' : '#e2e8f0',
+              shadowColor: isDark ? '#6366f1' : '#8b5cf6',
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: isDark ? 0.2 : 0.1,
+                shadowRadius: 12,
+                elevation: 8,
               },
-            ]}
-          >
+            ]}>
           <View style={styles.inputWrapper}>
-            <TextInput
-              value={message}
-              onChangeText={setMessage}
-              placeholder="Напиши всё, что чувствуешь..."
-              placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
-              multiline
-              maxLength={500}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(30, 41, 59, 0.5)'
-                    : 'rgba(255, 255, 255, 0.5)',
-                  borderColor: isDark
-                    ? 'rgba(71, 85, 105, 0.5)'
-                    : 'rgba(226, 232, 240, 0.5)',
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                },
-              ]}
-            />
+            <View style={[styles.inputRow, { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : '#f1f5f9', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'transparent', borderWidth: 1 }]}>
+              <TouchableOpacity style={styles.attachButton}>
+                <Ionicons name="add" size={22} color={isDark ? '#94a3b8' : '#64748b'} />
+              </TouchableOpacity>
+              <TextInput
+                value={message}
+                onChangeText={setMessage}
+                placeholder="Сообщение CloudMind"
+                placeholderTextColor={isDark ? '#475569' : '#94a3b8'}
+                multiline
+                maxLength={500}
+                style={[
+                  styles.input,
+                  { color: isDark ? '#f1f5f9' : '#0f172a' },
+                ]}
+              />
+              <TouchableOpacity style={styles.voiceButton}>
+                <Ionicons name="mic" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               onPress={handleSendMessage}
               disabled={!message.trim() || isLoading}
+              style={styles.sendButtonContainer}
             >
               <LinearGradient
-                colors={
-                  message.trim() && !isLoading
-                    ? ['#3b82f6', '#8b5cf6']
-                    : isDark
-                    ? ['#334155', '#475569']
-                    : ['#cbd5e1', '#94a3b8']
-                }
+                colors={message.trim() && !isLoading ? ['#6366f1', '#a855f7'] : ['#475569', '#64748b']}
                 style={styles.sendButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
               >
                 {isLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Ionicons
-                    name="send"
-                    size={20}
-                    color={message.trim() ? '#fff' : isDark ? '#64748b' : '#94a3b8'}
+                    name="arrow-up"
+                    size={24}
+                    color="#fff"
                   />
                 )}
               </LinearGradient>
             </TouchableOpacity>
           </View>
-          </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
-    </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -769,17 +736,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingBottom: 8,
-    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    flex: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
   },
   headerIcon: {
     width: 32,
@@ -788,20 +775,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   headerButton: {
     padding: 8,
   },
   messagesList: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   messageContainer: {
-    marginBottom: 12,
-    maxWidth: '85%',
+    marginBottom: 16,
+    maxWidth: '75%',
   },
   messageContainerUser: {
     alignSelf: 'flex-end',
@@ -810,54 +793,74 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   messageUserBubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderTopRightRadius: 4,
   },
   messageUserText: {
     color: '#fff',
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 22,
+    letterSpacing: 0.1,
   },
   messageAIBubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
+    borderTopLeftRadius: 4,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   messageAIText: {
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 22,
+    letterSpacing: 0.1,
   },
   inputContainer: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    borderTopWidth: 1,
+    paddingTop: 12,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
   },
+  inputRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  attachButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   input: {
     flex: 1,
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
     fontSize: 15,
-    maxHeight: 120,
+    maxHeight: 100,
+    paddingVertical: 8,
+    lineHeight: 20,
+  },
+  sendButtonContainer: {
+    marginBottom: 4,
   },
   sendButton: {
     width: 44,
@@ -865,46 +868,46 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
     elevation: 4,
   },
   headerButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   temporaryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
   },
   temporaryText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#f59e0b',
+    letterSpacing: 0.3,
   },
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingHorizontal: 32,
   },
   welcomeCard: {
     alignItems: 'center',
-    maxWidth: 480,
+    maxWidth: 400,
     width: '100%',
   },
   welcomeIconContainer: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   welcomeIcon: {
     width: 96,
@@ -921,38 +924,60 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 32,
     fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  welcomeSubtitle: {
-    fontSize: 24,
-    fontWeight: '600',
     marginBottom: 12,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
-  welcomeText: {
-    fontSize: 16,
+  welcomeSubtitle: {
+    fontSize: 17,
+    fontWeight: '500',
+    marginBottom: 32,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 32,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  actionCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  welcomeText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
   },
   welcomeFeatures: {
-    gap: 16,
-    marginBottom: 32,
+    gap: 12,
+    marginBottom: 20,
     width: '100%',
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
+    gap: 8,
+    paddingVertical: 4,
   },
   featureText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
   welcomePrompt: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },

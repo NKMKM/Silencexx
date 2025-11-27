@@ -156,6 +156,29 @@ app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) =>
       userName,
     });
 
+    // Доп. рекомендация: предложить посмотреть календарь, если пользователь говорит о дневнике
+    let suggestViewCalendar = false;
+    try {
+      const lower = (message || '').toLowerCase();
+      const calendarKeywords = ['календар', 'дневник', 'запис', 'журнал', 'дневник мыслей'];
+      if (calendarKeywords.some(k => lower.includes(k))) {
+        suggestViewCalendar = true;
+      } else {
+        // если настроение анализируется как плохое/стресс — предложим обсудить на основе календаря
+        try {
+          const moodAnalysis = await analyzeMood(message);
+          if (moodAnalysis && (moodAnalysis.detectedMood === 'Low' || moodAnalysis.detectedMood === 'Stressed')) {
+            suggestViewCalendar = true;
+          }
+        } catch (e) {
+          // ignore mood analysis errors
+          console.warn('Mood analysis failed for suggestViewCalendar:', e);
+        }
+      }
+    } catch (e) {
+      console.warn('Error determining suggestViewCalendar:', e);
+    }
+
     console.log(`✅ [${requestId}] Response received`);
     console.log(`🤖 [${requestId}] AI response length: ${response.response.length}`);
     console.log(`🤖 [${requestId}] AI preview: "${response.response.substring(0, 80)}..."`);
@@ -199,6 +222,7 @@ app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) =>
       response: response.response,
       isCrisis: response.isCrisis,
       mood: response.mood,
+      suggestViewCalendar,
       requestId,
     });
     
@@ -332,6 +356,154 @@ app.post('/api/journal', async (req: Request, res: Response) => {
       error: 'Ошибка при обработке записи в журнал',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+/**
+ * GET /api/journal/entry?date=YYYY-MM-DD
+ * Возвращает запись пользователя за конкретную дату (если есть)
+ * Требует авторизации (Bearer token)
+ */
+app.get('/api/journal/entry', async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const { date } = req.query;
+    if (!date || typeof date !== 'string') {
+      return res.status(400).json({ success: false, error: 'Query param "date" required in YYYY-MM-DD format' });
+    }
+
+    const entry = await query(
+      'SELECT id, diary_date, diary_content FROM diary WHERE user_id = $1 AND DATE(diary_date) = $2',
+      [userId, date]
+    );
+
+    if (entry.rows.length === 0) {
+      return res.json({ success: true, exists: false, entry: null });
+    }
+
+    return res.json({ success: true, exists: true, entry: entry.rows[0] });
+  } catch (error) {
+    console.error('Ошибка в GET /api/journal/entry:', error);
+    return res.status(500).json({ success: false, error: 'Ошибка при получении записи' });
+  }
+});
+
+/**
+ * GET /api/journal/list
+ * Возвращает список дат, в которые пользователь делал записи
+ */
+app.get('/api/journal/list', async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const rows = await query(
+      `SELECT id, diary_date FROM diary WHERE user_id = $1 ORDER BY diary_date DESC`,
+      [userId]
+    );
+
+    // map to simple date-only strings
+    const dates = rows.rows.map((r: any) => ({ id: r.id, date: r.diary_date.toISOString().slice(0,10) }));
+
+    return res.json({ success: true, dates });
+  } catch (error) {
+    console.error('Ошибка в GET /api/journal/list:', error);
+    return res.status(500).json({ success: false, error: 'Ошибка при получении списка записей' });
+  }
+});
+
+/**
+ * POST /api/journal/entry
+ * Создать запись в журнал для указанной даты.
+ * Правила: можно создать только одну запись в день; нельзя создавать записи для прошлых дат; редактирование не предусмотрено.
+ * Body: { date: 'YYYY-MM-DD', content: string }
+ */
+app.post('/api/journal/entry', async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const { date, content } = req.body;
+    if (!date || typeof date !== 'string' || !content || typeof content !== 'string') {
+      return res.status(400).json({ success: false, error: 'Fields "date" and "content" are required' });
+    }
+
+    // check date format (basic)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ success: false, error: 'Дата должна быть в формате YYYY-MM-DD' });
+    }
+
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0,10);
+
+    // disallow creating for past dates
+    if (date < todayStr) {
+      return res.status(403).json({ success: false, error: 'Нельзя создавать записи за прошлые даты' });
+    }
+
+    // allow only one entry per day
+    const existing = await query('SELECT id FROM diary WHERE user_id = $1 AND DATE(diary_date) = $2', [userId, date]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ success: false, error: 'Запись на эту дату уже существует' });
+    }
+
+    // AI moderation: detect crisis and analyze mood
+    try {
+      const isCrisis = detectCrisisKeywords(content);
+      if (isCrisis) {
+        // If crisis — do not save, respond with helplines
+        return res.status(422).json({
+          success: false,
+          isCrisis: true,
+          helplines: [
+            { name: 'Телефон доверия', number: '8-800-2000-122', country: 'Россия' },
+            { name: 'Ясное утро', number: '8-800-100-49-94', country: 'Россия' },
+          ],
+          error: 'Обнаружены кризисные сигналы — требуются немедленные действия и поддержка',
+        });
+      }
+
+      // analyze mood
+      let moodResult: any = null;
+      try {
+        moodResult = await analyzeMood(content);
+      } catch (moodErr) {
+        console.warn('Mood analysis failed:', moodErr);
+      }
+
+      // Optionally create a short supportive AI feedback (ask permission to view calendar)
+      let aiFeedback: string | null = null;
+      try {
+        const prompt = `Пользователь написал в дневник: "${content}"\n\nДай короткий (1-2 предложения) эмпатичный отклик и в конце спроси: можно ли посмотреть его календарь и обсудить записи на его основе?`;
+        const aiResp = await generateAIResponse(prompt, {});
+        aiFeedback = aiResp.response;
+      } catch (feedErr) {
+        console.warn('AI feedback generation failed:', feedErr);
+      }
+
+      // insert (set timestamp to date at midnight)
+      const insert = await query(
+        'INSERT INTO diary (user_id, diary_date, diary_content) VALUES ($1, $2::timestamp, $3) RETURNING id',
+        [userId, date, content]
+      );
+
+      return res.json({ success: true, id: insert.rows[0].id, mood: moodResult?.detectedMood || null, aiFeedback });
+
+    } catch (moderationErr) {
+      console.error('Error during moderation for journal entry:', moderationErr);
+      return res.status(500).json({ success: false, error: 'Ошибка модерации записи' });
+    }
+  } catch (error) {
+    console.error('Ошибка в POST /api/journal/entry:', error);
+    return res.status(500).json({ success: false, error: 'Ошибка при создании записи' });
   }
 });
 

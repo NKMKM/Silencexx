@@ -5,10 +5,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Image,
+  TextInput,
   Alert,
-  ActivityIndicator,
-  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -16,11 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
-import { Label } from './ui/Label';
-import { Separator } from './ui/Separator';
-import { FloatingClouds } from './FloatingClouds';
+import { AnimatedGradient } from './AnimatedGradient';
 
 interface AccountSettingsProps {
   onNavigateBack?: () => void;
@@ -33,20 +27,8 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
   const insets = useSafeAreaInsets();
   
   const [name, setName] = useState('Иван Иванов');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [passwordAttempts, setPasswordAttempts] = useState(0);
-  const [showEmailConfirm, setShowEmailConfirm] = useState(false);
-  const [showPhoneConfirm, setShowPhoneConfirm] = useState(false);
-  const [tempEmail, setTempEmail] = useState('');
-  const [tempPhone, setTempPhone] = useState('');
+  const [email, setEmail] = useState('ivan@example.com');
+  const [phone, setPhone] = useState('+7 (999) 123-45-67');
 
   const handleNavigateBack = () => {
     if (onNavigateBack) {
@@ -56,99 +38,17 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
     }
   };
 
-  const handleSaveProfile = () => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      Alert.alert('Успех', 'Профиль обновлен!');
-    }, 1000);
-  };
-
-  const handleChangePassword = () => {
-    // Проверка текущего пароля (в реальном приложении - запрос к API)
-    const correctPassword = 'password123'; // Для демо
-    
-    if (currentPassword !== correctPassword) {
-      const newAttempts = passwordAttempts + 1;
-      setPasswordAttempts(newAttempts);
-      
-      if (newAttempts >= 3) {
-        Alert.alert(
-          'Забыли пароль?',
-          'Вы ввели неверный пароль 3 раза. Хотите восстановить пароль?',
-          [
-            { text: 'Отмена', style: 'cancel', onPress: () => setPasswordAttempts(0) },
-            {
-              text: 'Восстановить',
-              onPress: () => {
-                setPasswordAttempts(0);
-                Alert.alert('Восстановление пароля', 'Ссылка для восстановления отправлена на ваш email');
-              },
-            },
-          ]
-        );
-        return;
-      }
-      
-      Alert.alert('Ошибка', `Неверный текущий пароль. Попыток осталось: ${3 - newAttempts}`);
-      return;
-    }
-    
-    setPasswordAttempts(0);
-    
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Ошибка', 'Пароли не совпадают');
-      return;
-    }
-    if (newPassword.length < 8) {
-      Alert.alert('Ошибка', 'Пароль должен содержать минимум 8 символов');
-      return;
-    }
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      Alert.alert('Успех', 'Пароль изменен!');
-    }, 1000);
-  };
-
-  const handleEmailChange = (newEmail: string) => {
-    setTempEmail(newEmail);
-    setShowEmailConfirm(true);
-  };
-
-  const confirmEmailChange = () => {
-    setEmail(tempEmail);
-    setShowEmailConfirm(false);
-    Alert.alert('Успех', 'Email изменён. Подтверждение отправлено на новый адрес.');
-  };
-
-  const handlePhoneChange = (newPhone: string) => {
-    setTempPhone(newPhone);
-    setShowPhoneConfirm(true);
-  };
-
-  const confirmPhoneChange = () => {
-    setPhone(tempPhone);
-    setShowPhoneConfirm(false);
-    Alert.alert('Успех', 'Телефон изменён. SMS-код отправлен на новый номер.');
+  const handleSave = () => {
+    Alert.alert('Успех', 'Профиль обновлен!');
   };
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Вы уверены?',
-      'Это действие нельзя отменить. Все ваши данные, включая дневники, настроения и настройки будут удалены навсегда.',
+      'Удалить аккаунт?',
+      'Все ваши данные будут удалены навсегда.',
       [
         { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить аккаунт',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Аккаунт удален', 'Ваш аккаунт был удален');
-          },
-        },
+        { text: 'Удалить', style: 'destructive', onPress: () => {} },
       ]
     );
   };
@@ -158,370 +58,154 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
   };
 
   return (
-    <View style={[styles.container, isDark && styles.containerDark]}>
-      <FloatingClouds />
+    <View style={styles.container}>
+      <AnimatedGradient
+        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
+        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
+        isDark={isDark}
+      />
 
       {/* Header */}
-      <View style={[styles.header, isDark && styles.headerDark, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity
-          onPress={handleNavigateBack}
-          style={[styles.backButton, isDark && styles.backButtonDark]}
-        >
-          <Ionicons name="arrow-back" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity style={styles.backButton} onPress={handleNavigateBack}>
+          <Ionicons name="chevron-back" size={28} color={isDark ? '#818cf8' : '#6366f1'} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>
-          Настройки аккаунта
-        </Text>
+        <View style={styles.headerContent}>
+          <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.15)' }]}>
+            <Ionicons name="person-circle" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
+          </View>
+          <View>
+            <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+              Мой профиль
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+              Управление аккаунтом
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Section */}
-        <Animated.View entering={FadeInDown.duration(400).delay(100)}>
-          <LinearGradient
-            colors={isDark ? ['rgba(55, 65, 81, 0.5)', 'rgba(31, 41, 55, 0.5)'] : ['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.5)']}
-            style={styles.card}
-          >
-            <View style={styles.cardHeader}>
-              <Ionicons name="person" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-              <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]}>Профиль</Text>
-            </View>
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}>
 
-            {/* Avatar */}
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatarWrapper}>
-                <LinearGradient
-                  colors={['#a78bfa', '#ec4899']}
-                  style={styles.avatar}
-                >
-                  <Text style={styles.avatarText}>{getInitials()}</Text>
-                </LinearGradient>
-                <TouchableOpacity style={styles.cameraButton}>
-                  <LinearGradient
-                    colors={['#8b5cf6', '#ec4899']}
-                    style={styles.cameraGradient}
-                  >
-                    <Ionicons name="camera" size={16} color="#ffffff" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-              <View>
-                <Text style={[styles.avatarName, isDark && styles.avatarNameDark]}>{name}</Text>
-                <Text style={[styles.avatarPlan, isDark && styles.avatarPlanDark]}>
-                  Бесплатный план
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.formContainer}>
-              <Input
-                label="Имя"
-                value={name}
-                onChangeText={setName}
-                containerStyle={styles.input}
-              />
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={handleEmailChange}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                leftIcon="mail-outline"
-                containerStyle={styles.input}
-              />
-              <Input
-                label="Телефон"
-                value={phone}
-                onChangeText={handlePhoneChange}
-                keyboardType="phone-pad"
-                leftIcon="call-outline"
-                containerStyle={styles.input}
-              />
-            </View>
-
-            <TouchableOpacity
-              onPress={handleSaveProfile}
-              disabled={isSaving}
-              style={[styles.submitButton, isSaving && styles.submitButtonDisabled]}
-              activeOpacity={0.8}
-            >
+        {/* Avatar Card */}
+        <Animated.View entering={FadeInDown.duration(400).delay(50)}>
+          <View style={[styles.avatarCard, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
+            <View style={styles.avatarSection}>
               <LinearGradient
-                colors={['#8b5cf6', '#ec4899']}
+                colors={['#6366f1', '#a855f7']}
+                style={styles.avatar}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.submitGradient}
-              >
-                {isSaving ? (
-                  <>
-                    <ActivityIndicator color="#ffffff" size="small" />
-                    <Text style={styles.submitText}>Сохранение...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="save-outline" size={20} color="#ffffff" />
-                    <Text style={styles.submitText}>Сохранить изменения</Text>
-                  </>
-                )}
+                end={{ x: 1, y: 1 }}>
+                <Text style={styles.avatarText}>{getInitials()}</Text>
               </LinearGradient>
-            </TouchableOpacity>
-          </LinearGradient>
-        </Animated.View>
-
-        {/* Security Section */}
-        <Animated.View entering={FadeInDown.duration(400).delay(200)}>
-          <LinearGradient
-            colors={isDark ? ['rgba(55, 65, 81, 0.5)', 'rgba(31, 41, 55, 0.5)'] : ['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.5)']}
-            style={styles.card}
-          >
-            <View style={styles.cardHeader}>
-              <Ionicons name="shield-checkmark" size={20} color={isDark ? '#60a5fa' : '#3b82f6'} />
-              <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]}>Безопасность</Text>
+              <TouchableOpacity style={[styles.editAvatarButton, { backgroundColor: isDark ? '#6366f1' : '#818cf8' }]}>
+                <Ionicons name="camera" size={18} color="#fff" />
+              </TouchableOpacity>
             </View>
-
-            <View style={styles.formContainer}>
-              <Input
-                label="Текущий пароль"
-                placeholder="••••••••"
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                secureTextEntry={!showCurrentPassword}
-                rightIcon={
-                  <Ionicons
-                    name={showCurrentPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={isDark ? '#9ca3af' : '#64748b'}
-                  />
-                }
-                onRightIconPress={() => setShowCurrentPassword(!showCurrentPassword)}
-                containerStyle={styles.input}
-              />
-
-              <View style={styles.separator} />
-
-              <Input
-                label="Новый пароль"
-                placeholder="••••••••"
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showNewPassword}
-                rightIcon={
-                  <Ionicons
-                    name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={isDark ? '#9ca3af' : '#64748b'}
-                  />
-                }
-                onRightIconPress={() => setShowNewPassword(!showNewPassword)}
-                containerStyle={styles.input}
-              />
-              <Text style={[styles.hint, isDark && styles.hintDark]}>
-                Минимум 8 символов
+            <View style={styles.avatarInfo}>
+              <Text style={[styles.userName, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+                {name}
               </Text>
-
-              <Input
-                label="Подтвердите новый пароль"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                rightIcon={
-                  <Ionicons
-                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={isDark ? '#9ca3af' : '#64748b'}
-                  />
-                }
-                onRightIconPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                containerStyle={styles.input}
-              />
+              <View style={[styles.planBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' }]}>
+                <Ionicons name="diamond" size={14} color="#10b981" />
+                <Text style={[styles.planText, { color: '#10b981' }]}>Бесплатный план</Text>
+              </View>
             </View>
-
-            <TouchableOpacity
-              onPress={handleChangePassword}
-              disabled={isSaving || !currentPassword || !newPassword || !confirmPassword}
-              style={[styles.submitButton, (isSaving || !currentPassword || !newPassword || !confirmPassword) && styles.submitButtonDisabled]}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#3b82f6', '#06b6d4']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.submitGradient}
-              >
-                <Ionicons name="lock-closed" size={20} color="#ffffff" />
-                <Text style={styles.submitText}>Изменить пароль</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </LinearGradient>
+          </View>
         </Animated.View>
 
-        {/* Connected Accounts */}
-        <Animated.View entering={FadeInDown.duration(400).delay(300)}>
-          <LinearGradient
-            colors={isDark ? ['rgba(55, 65, 81, 0.5)', 'rgba(31, 41, 55, 0.5)'] : ['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.5)']}
-            style={styles.card}
-          >
-            <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]}>
-              Подключенные аккаунты
-            </Text>
-
-            <View style={styles.connectedAccounts}>
-              {/* Google Account */}
-              <View style={[styles.connectedAccount, isDark && styles.connectedAccountDark]}>
-                <View style={styles.accountInfo}>
-                  <View style={styles.accountIcon}>
-                    <Ionicons name="mail" size={20} color="#3b82f6" />
-                  </View>
-                  <View>
-                    <Text style={[styles.accountName, isDark && styles.accountNameDark]}>
-                      Google
-                    </Text>
-                    <Text style={[styles.accountEmail, isDark && styles.accountEmailDark]}>
-                      {email}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.connectedBadge}>
-                  <Text style={styles.connectedBadgeText}>Подключено</Text>
-                </View>
+        {/* Personal Info */}
+        <Animated.View entering={FadeInDown.duration(400).delay(100)}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#cbd5e1' : '#475569' }]}>
+            Личная информация
+          </Text>
+          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
+            <View style={styles.inputGroup}>
+              <View style={[styles.inputIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.08)' }]}>
+                <Ionicons name="person-outline" size={20} color={isDark ? '#818cf8' : '#6366f1'} />
               </View>
-
-              {/* Apple Account */}
-              <View style={[styles.connectedAccount, styles.disconnectedAccount, isDark && styles.disconnectedAccountDark]}>
-                <View style={styles.accountInfo}>
-                  <View style={[styles.accountIcon, styles.appleIcon]}>
-                    <Ionicons name="logo-apple" size={24} color="#ffffff" />
-                  </View>
-                  <View>
-                    <Text style={[styles.accountName, isDark && styles.accountNameDark]}>
-                      Apple ID
-                    </Text>
-                    <Text style={[styles.accountDisconnected, isDark && styles.accountDisconnectedDark]}>
-                      Не подключено
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity style={[styles.connectButton, isDark && styles.connectButtonDark]}>
-                  <Text style={[styles.connectButtonText, isDark && styles.connectButtonTextDark]}>
-                    Подключить
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.inputContent}>
+                <Text style={[styles.inputLabel, { color: isDark ? '#94a3b8' : '#64748b' }]}>Имя</Text>
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+                  value={name}
+                  onChangeText={setName}
+                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                />
               </View>
             </View>
-          </LinearGradient>
+
+            <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(226, 232, 240, 0.5)' }]} />
+
+            <View style={styles.inputGroup}>
+              <View style={[styles.inputIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.08)' }]}>
+                <Ionicons name="mail-outline" size={20} color={isDark ? '#818cf8' : '#6366f1'} />
+              </View>
+              <View style={styles.inputContent}>
+                <Text style={[styles.inputLabel, { color: isDark ? '#94a3b8' : '#64748b' }]}>Email</Text>
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                />
+              </View>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(226, 232, 240, 0.5)' }]} />
+
+            <View style={styles.inputGroup}>
+              <View style={[styles.inputIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.08)' }]}>
+                <Ionicons name="call-outline" size={20} color={isDark ? '#818cf8' : '#6366f1'} />
+              </View>
+              <View style={styles.inputContent}>
+                <Text style={[styles.inputLabel, { color: isDark ? '#94a3b8' : '#64748b' }]}>Телефон</Text>
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                />
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Save Button */}
+        <Animated.View entering={FadeInDown.duration(400).delay(150)}>
+          <TouchableOpacity onPress={handleSave} activeOpacity={0.8}>
+            <LinearGradient
+              colors={['#6366f1', '#a855f7']}
+              style={styles.saveButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}>
+              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <Text style={styles.saveButtonText}>Сохранить изменения</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Danger Zone */}
-        <Animated.View entering={FadeInDown.duration(400).delay(400)}>
-          <LinearGradient
-            colors={['rgba(254, 226, 226, 0.7)', 'rgba(254, 226, 226, 0.5)']}
-            style={[styles.card, styles.dangerCard]}
-          >
-            <Text style={styles.dangerTitle}>Опасная зона</Text>
-            
-            <TouchableOpacity
-              onPress={handleDeleteAccount}
-              style={styles.deleteButton}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#dc2626', '#b91c1c']}
-                style={styles.deleteGradient}
-              >
-                <Ionicons name="trash-outline" size={20} color="#ffffff" />
-                <Text style={styles.deleteText}>Удалить аккаунт</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </LinearGradient>
+        <Animated.View entering={FadeInDown.duration(400).delay(200)}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#cbd5e1' : '#475569' }]}>
+            Опасная зона
+          </Text>
+          <TouchableOpacity
+            style={[styles.dangerButton, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.08)', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.2)' }]}
+            onPress={handleDeleteAccount}>
+            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            <Text style={[styles.dangerButtonText, { color: '#ef4444' }]}>
+              Удалить аккаунт
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
-
-      {/* Email Confirmation Modal */}
-      <Modal
-        visible={showEmailConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEmailConfirm(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isDark && styles.modalContentDark]}>
-            <Ionicons name="mail" size={48} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-            <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
-              Подтвердите изменение email
-            </Text>
-            <Text style={[styles.modalText, isDark && styles.modalTextDark]}>
-              Новый email: {tempEmail}
-            </Text>
-            <Text style={[styles.modalSubtext, isDark && styles.modalSubtextDark]}>
-              На новый адрес будет отправлено письмо с подтверждением
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => setShowEmailConfirm(false)}
-                style={[styles.modalButton, styles.modalButtonCancel]}
-              >
-                <Text style={styles.modalButtonCancelText}>Отмена</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={confirmEmailChange}
-                style={styles.modalButton}
-              >
-                <LinearGradient
-                  colors={['#3b82f6', '#8b5cf6']}
-                  style={styles.modalButtonGradient}
-                >
-                  <Text style={styles.modalButtonText}>Подтвердить</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Phone Confirmation Modal */}
-      <Modal
-        visible={showPhoneConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPhoneConfirm(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isDark && styles.modalContentDark]}>
-            <Ionicons name="call" size={48} color={isDark ? '#a78bfa' : '#8b5cf6'} />
-            <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
-              Подтвердите изменение телефона
-            </Text>
-            <Text style={[styles.modalText, isDark && styles.modalTextDark]}>
-              Новый номер: {tempPhone}
-            </Text>
-            <Text style={[styles.modalSubtext, isDark && styles.modalSubtextDark]}>
-              На новый номер будет отправлен SMS-код подтверждения
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => setShowPhoneConfirm(false)}
-                style={[styles.modalButton, styles.modalButtonCancel]}
-              >
-                <Text style={styles.modalButtonCancelText}>Отмена</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={confirmPhoneChange}
-                style={styles.modalButton}
-              >
-                <LinearGradient
-                  colors={['#3b82f6', '#8b5cf6']}
-                  style={styles.modalButtonGradient}
-                >
-                  <Text style={styles.modalButtonText}>Подтвердить</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -529,361 +213,190 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  containerDark: {
-    backgroundColor: '#0f172a',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-    gap: 12,
-  },
-  headerDark: {
-    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
-  backButtonDark: {
-    backgroundColor: 'rgba(167, 139, 250, 0.2)',
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  headerTitleDark: {
-    color: '#f1f5f9',
+  headerSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    gap: 16,
+    paddingHorizontal: 20,
+    gap: 24,
   },
-  card: {
-    borderRadius: 24,
+  avatarCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    gap: 16,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  cardTitleDark: {
-    color: '#f1f5f9',
-  },
-  avatarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  avatarWrapper: {
+  avatarSection: {
     position: 'relative',
+    marginRight: 16,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#ffffff',
   },
   avatarText: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
   },
-  cameraButton: {
+  editAvatarButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  cameraGradient: {
     width: 32,
     height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#1a1a2e',
+  },
+  avatarInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  planText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  card: {
+    borderRadius: 24,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  inputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 16,
+  },
+  inputIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
+  inputContent: {
+    flex: 1,
   },
-  avatarNameDark: {
-    color: '#f1f5f9',
-  },
-  avatarPlan: {
+  inputLabel: {
     fontSize: 12,
-    color: '#64748b',
-  },
-  avatarPlanDark: {
-    color: '#94a3b8',
-  },
-  formContainer: {
-    gap: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    marginBottom: 0,
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 0,
   },
-  inputWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  separator: {
+  divider: {
     height: 1,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 4,
+    marginHorizontal: 16,
   },
-  hint: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: -8,
-  },
-  hintDark: {
-    color: '#94a3b8',
-  },
-  submitButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitGradient: {
+  saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  submitText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  connectedAccounts: {
-    gap: 12,
-  },
-  connectedAccount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  connectedAccountDark: {
-    backgroundColor: 'rgba(31, 41, 55, 0.5)',
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-  },
-  disconnectedAccount: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  disconnectedAccountDark: {
-    backgroundColor: 'rgba(31, 41, 55, 0.3)',
-    borderColor: 'rgba(55, 65, 81, 0.3)',
-  },
-  accountInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  accountIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  appleIcon: {
-    backgroundColor: '#000000',
-  },
-  accountName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  accountNameDark: {
-    color: '#f1f5f9',
-  },
-  accountEmail: {
-    fontSize: 11,
-    color: '#64748b',
-  },
-  accountEmailDark: {
-    color: '#94a3b8',
-  },
-  accountDisconnected: {
-    fontSize: 11,
-    color: '#64748b',
-  },
-  accountDisconnectedDark: {
-    color: '#64748b',
-  },
-  connectedBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-  },
-  connectedBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#16a34a',
-  },
-  connectButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-  },
-  connectButtonDark: {
-    borderColor: '#374151',
-    backgroundColor: '#1f2937',
-  },
-  connectButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  connectButtonTextDark: {
-    color: '#9ca3af',
-  },
-  dangerCard: {
-    borderColor: 'rgba(220, 38, 38, 0.2)',
-  },
-  dangerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#991b1b',
-  },
-  deleteButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  deleteGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  deleteText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
+    gap: 10,
+    paddingVertical: 18,
     borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    gap: 16,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  modalContentDark: {
-    backgroundColor: '#1e293b',
+  saveButtonText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.3,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-  },
-  modalTitleDark: {
-    color: '#e2e8f0',
-  },
-  modalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8b5cf6',
-    textAlign: 'center',
-  },
-  modalTextDark: {
-    color: '#a78bfa',
-  },
-  modalSubtext: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  modalSubtextDark: {
-    color: '#94a3b8',
-  },
-  modalButtons: {
+  dangerButton: {
     flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  modalButtonCancel: {
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
   },
-  modalButtonCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  modalButtonGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#ffffff',
+  dangerButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
 });
