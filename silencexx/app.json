@@ -2,7 +2,7 @@
   "expo": {
     "name": "silencexx",
     "slug": "silencexx",
-    "owner": "anonymous",
+    "owner": "n0ks1",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -11,7 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.silencexx"
+      "bundleIdentifier": "com.n0ks1.silencexx"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,8 +22,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "softInputMode": "adjustResize",
-      "package": "com.anonymous.silencexx"
+      "package": "com.n0ks1.silencexx"
     },
     "web": {
       "output": "static",
@@ -48,6 +47,18 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0f66f92d-30ac-4d1b-9174-66ed436344c2"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0f66f92d-30ac-4d1b-9174-66ed436344c2"
     }
   }
 }

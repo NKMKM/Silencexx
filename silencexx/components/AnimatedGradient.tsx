@@ -1,10 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
-import { StyleSheet, ViewStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useMemo } from 'react';
+import { StyleSheet, ViewStyle, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface AnimatedGradientProps {
@@ -22,37 +17,20 @@ export const AnimatedGradient = React.memo(({
   style,
   children,
 }: AnimatedGradientProps) => {
-  // Используем opacity для плавного перехода между двумя градиентами
-  const opacity = useSharedValue(isDark ? 1 : 0);
-
-  useEffect(() => {
-    opacity.value = withTiming(isDark ? 1 : 0, {
-      duration: 300,
-    });
-  }, [isDark, opacity]);
-
-  const darkGradientStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
   const finalStyle = useMemo(() => style || StyleSheet.absoluteFill, [style]);
+  
+  // Используем градиент на обеих платформах
+  const colors = isDark ? darkColors : lightColors;
 
   return (
-    <>
-      {/* Светлый градиент (фон) */}
-      <LinearGradient
-        colors={lightColors}
-        style={finalStyle}
-      />
-      {/* Темный градиент (поверх с анимированной opacity) */}
-      <Animated.View style={[StyleSheet.absoluteFill, darkGradientStyle, { backgroundColor: isDark ? '#1a1a2e' : '#e0e7ff' }]}>
-        <LinearGradient
-          colors={darkColors}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-      {/* Контент */}
+    <LinearGradient
+      colors={[...colors]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      pointerEvents="none"
+      style={finalStyle}
+    >
       {children}
-    </>
+    </LinearGradient>
   );
 });

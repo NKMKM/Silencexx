@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { authApi } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/utils/ThemeContext';
 
 interface UserProfile {
   id: number;
@@ -32,10 +34,47 @@ interface Session {
 }
 
 export default function SettingsPage() {
+  const { activeTheme } = useTheme();
+  const isDark = activeTheme === 'dark';
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const dynamicStyles = useMemo(() => ({
+    containerBg: isDark
+      ? Platform.OS === 'ios'
+        ? '#1a1f2e'
+        : '#111827'
+      : Platform.OS === 'ios'
+      ? '#F9FAFB'
+      : '#FAFBFC',
+    cardBg: isDark
+      ? Platform.OS === 'ios'
+        ? 'rgba(30, 41, 59, 0.5)'
+        : '#1e293b'
+      : Platform.OS === 'ios'
+      ? '#FFF'
+      : '#f8fafc',
+    cardBorder: isDark ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+    primaryText: isDark ? '#f1f5f9' : '#111827',
+    secondaryText: isDark ? '#94a3b8' : '#6B7280',
+    tertiaryText: isDark ? '#64748b' : '#9CA3AF',
+    lightBg: isDark
+      ? Platform.OS === 'ios'
+        ? 'rgba(99, 102, 241, 0.1)'
+        : 'rgba(99, 102, 241, 0.15)'
+      : Platform.OS === 'ios'
+      ? '#F3F4F6'
+      : '#F9FAFB',
+    lightRedBg: isDark
+      ? Platform.OS === 'ios'
+        ? 'rgba(239, 68, 68, 0.15)'
+        : 'rgba(239, 68, 68, 0.2)'
+      : Platform.OS === 'ios'
+      ? '#FEE2E2'
+      : '#FEF2F2',
+  }), [isDark]);
 
   useEffect(() => {
     loadData();
@@ -190,39 +229,30 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { backgroundColor: dynamicStyles.containerBg }]}>
         <ActivityIndicator size="large" color="#8B5CF6" />
-        <Text style={styles.loadingText}>Загрузка...</Text>
+        <Text style={[styles.loadingText, { color: dynamicStyles.secondaryText }]}>Загрузка...</Text>
       </View>
     );
   }
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: dynamicStyles.containerBg }]}
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
+      showsVerticalScrollIndicator={false}
     >
-      {/* DEBUG INFO */}
-      <View style={{ backgroundColor: '#FF0000', padding: 20, marginBottom: 10 }}>
-        <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold' }}>
-          DEBUG: Sessions count = {sessions.length}
-        </Text>
-        <Text style={{ color: '#FFF', fontSize: 14 }}>
-          Profile: {profile ? 'loaded' : 'null'}
-        </Text>
-      </View>
-
       {/* Profile Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="person-circle-outline" size={24} color="#8B5CF6" />
-          <Text style={styles.sectionTitle}>Профиль</Text>
+          <Text style={[styles.sectionTitle, { color: dynamicStyles.primaryText }]}>Профиль</Text>
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: dynamicStyles.cardBg, borderColor: dynamicStyles.cardBorder }]}>
           <View style={styles.profileAvatar}>
             <Text style={styles.profileAvatarText}>
               {profile?.name?.charAt(0).toUpperCase() || 'U'}
@@ -231,31 +261,31 @@ export default function SettingsPage() {
 
           <View style={styles.profileInfo}>
             <View style={styles.infoRow}>
-              <Ionicons name="person-outline" size={20} color="#6B7280" />
-              <Text style={styles.infoLabel}>Имя:</Text>
-              <Text style={styles.infoValue}>{profile?.name || 'Не указано'}</Text>
+              <Ionicons name="person-outline" size={20} color={dynamicStyles.secondaryText} />
+              <Text style={[styles.infoLabel, { color: dynamicStyles.secondaryText }]}>Имя:</Text>
+              <Text style={[styles.infoValue, { color: dynamicStyles.primaryText }]}>{profile?.name || 'Не указано'}</Text>
             </View>
 
             {profile?.email && (
               <View style={styles.infoRow}>
-                <Ionicons name="mail-outline" size={20} color="#6B7280" />
-                <Text style={styles.infoLabel}>Email:</Text>
-                <Text style={styles.infoValue}>{profile.email}</Text>
+                <Ionicons name="mail-outline" size={20} color={dynamicStyles.secondaryText} />
+                <Text style={[styles.infoLabel, { color: dynamicStyles.secondaryText }]}>Email:</Text>
+                <Text style={[styles.infoValue, { color: dynamicStyles.primaryText }]}>{profile.email}</Text>
               </View>
             )}
 
             {profile?.phone && (
               <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={20} color="#6B7280" />
-                <Text style={styles.infoLabel}>Телефон:</Text>
-                <Text style={styles.infoValue}>{profile.phone}</Text>
+                <Ionicons name="call-outline" size={20} color={dynamicStyles.secondaryText} />
+                <Text style={[styles.infoLabel, { color: dynamicStyles.secondaryText }]}>Телефон:</Text>
+                <Text style={[styles.infoValue, { color: dynamicStyles.primaryText }]}>{profile.phone}</Text>
               </View>
             )}
 
             <View style={styles.infoRow}>
-              <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-              <Text style={styles.infoLabel}>Регистрация:</Text>
-              <Text style={styles.infoValue}>
+              <Ionicons name="calendar-outline" size={20} color={dynamicStyles.secondaryText} />
+              <Text style={[styles.infoLabel, { color: dynamicStyles.secondaryText }]}>Регистрация:</Text>
+              <Text style={[styles.infoValue, { color: dynamicStyles.primaryText }]}>
                 {profile?.createdAt ? formatDate(profile.createdAt) : 'Не указано'}
               </Text>
             </View>
@@ -267,7 +297,7 @@ export default function SettingsPage() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="phone-portrait-outline" size={24} color="#8B5CF6" />
-          <Text style={styles.sectionTitle}>Активные устройства</Text>
+          <Text style={[styles.sectionTitle, { color: dynamicStyles.primaryText }]}>Активные устройства</Text>
         </View>
 
         {(() => {
@@ -277,9 +307,9 @@ export default function SettingsPage() {
         })()}
 
         {sessions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="phone-portrait-outline" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>Нет активных сессий</Text>
+          <View style={[styles.emptyState, { backgroundColor: dynamicStyles.cardBg }]}>
+            <Ionicons name="phone-portrait-outline" size={48} color={dynamicStyles.tertiaryText} />
+            <Text style={[styles.emptyStateText, { color: dynamicStyles.tertiaryText }]}>Нет активных сессий</Text>
           </View>
         ) : (
           sessions.map((session) => (
@@ -287,32 +317,33 @@ export default function SettingsPage() {
               key={session.id}
               style={[
                 styles.sessionCard,
+                { backgroundColor: dynamicStyles.cardBg, borderColor: dynamicStyles.cardBorder },
                 session.is_current && styles.currentSessionCard,
               ]}
             >
               <View style={styles.sessionHeader}>
-                <View style={styles.sessionIcon}>
+                <View style={[styles.sessionIcon, { backgroundColor: dynamicStyles.lightBg }]}>
                   <Ionicons
                     name={getDeviceIcon(session.device_type)}
                     size={24}
-                    color={session.is_current ? '#8B5CF6' : '#6B7280'}
+                    color={session.is_current ? '#8B5CF6' : dynamicStyles.secondaryText}
                   />
                 </View>
                 <View style={styles.sessionInfo}>
-                  <Text style={styles.sessionDevice}>
+                  <Text style={[styles.sessionDevice, { color: dynamicStyles.primaryText }]}>
                     {session.device_type}
                     {session.is_current && (
                       <Text style={styles.currentBadge}> (Текущее)</Text>
                     )}
                   </Text>
-                  <Text style={styles.sessionMeta}>
+                  <Text style={[styles.sessionMeta, { color: dynamicStyles.secondaryText }]}>
                     IP: {session.session_ip}
                   </Text>
-                  <Text style={styles.sessionMeta}>
+                  <Text style={[styles.sessionMeta, { color: dynamicStyles.secondaryText }]}>
                     Создано: {formatDate(session.created_at)}
                   </Text>
                   {session.last_active && (
-                    <Text style={styles.sessionMeta}>
+                    <Text style={[styles.sessionMeta, { color: dynamicStyles.secondaryText }]}>
                       Активность: {getTimeAgo(session.last_active)}
                     </Text>
                   )}
@@ -322,18 +353,20 @@ export default function SettingsPage() {
               <TouchableOpacity
                 style={[
                   styles.deleteButton,
-                  session.is_current && styles.logoutButton,
+                  { backgroundColor: dynamicStyles.lightBg },
+                  session.is_current && [styles.logoutButton, { backgroundColor: dynamicStyles.lightRedBg }],
                 ]}
                 onPress={() => handleDeleteSession(session.id, session.is_current)}
               >
                 <Ionicons
                   name={session.is_current ? 'log-out-outline' : 'trash-outline'}
                   size={20}
-                  color={session.is_current ? '#EF4444' : '#6B7280'}
+                  color={session.is_current ? '#EF4444' : dynamicStyles.secondaryText}
                 />
                 <Text
                   style={[
                     styles.deleteButtonText,
+                    { color: dynamicStyles.secondaryText },
                     session.is_current && styles.logoutButtonText,
                   ]}
                 >
@@ -359,7 +392,6 @@ export default function SettingsPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
   },
   content: {
     padding: 16,
@@ -369,12 +401,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
   },
   section: {
     marginBottom: 24,
@@ -388,17 +418,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
   },
   card: {
-    backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: Platform.OS === 'ios' ? 3 : 0,
+    borderWidth: 1,
   },
   profileAvatar: {
     width: 80,
@@ -425,28 +454,26 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: '#6B7280',
     fontWeight: '600',
     minWidth: 100,
   },
   infoValue: {
     fontSize: 14,
-    color: '#111827',
     flex: 1,
   },
   sessionCard: {
-    backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: Platform.OS === 'ios' ? 0.05 : 0,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: Platform.OS === 'ios' ? 2 : 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
   },
   currentSessionCard: {
     borderWidth: 2,
@@ -462,7 +489,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -472,7 +498,6 @@ const styles = StyleSheet.create({
   sessionDevice: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
     marginBottom: 4,
   },
   currentBadge: {
@@ -482,7 +507,6 @@ const styles = StyleSheet.create({
   },
   sessionMeta: {
     fontSize: 13,
-    color: '#6B7280',
   },
   deleteButton: {
     flexDirection: 'row',
@@ -491,34 +515,30 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
   },
-  logoutButton: {
-    backgroundColor: '#FEE2E2',
-  },
+  logoutButton: {},
   deleteButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
   },
   logoutButtonText: {
     color: '#EF4444',
   },
   emptyState: {
-    backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 40,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: Platform.OS === 'ios' ? 0.05 : 0,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: Platform.OS === 'ios' ? 2 : 0,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   emptyStateText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#9CA3AF',
   },
   logoutMainButton: {
     backgroundColor: '#EF4444',

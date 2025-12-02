@@ -170,9 +170,10 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 100}
+      enabled={true}
     >
       <View style={styles.gradient}>
         <AnimatedGradient
@@ -183,7 +184,18 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
         <FloatingClouds />
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={[styles.content, { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 120, 120) }]}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { 
+                paddingTop: Math.max(insets.top + 20, 40), 
+                paddingBottom: Math.max(insets.bottom + 200, 200) 
+              }
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={true}
+          >
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={isDark ? '#f1f5f9' : '#1e293b'} />
           </TouchableOpacity>
@@ -277,7 +289,7 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
-        </View>
+          </ScrollView>
         </TouchableWithoutFeedback>
       </View>
     </KeyboardAvoidingView>
@@ -287,7 +299,7 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   gradient: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
   backButton: { marginBottom: 20, width: 40, height: 40, justifyContent: 'center' },
   header: { alignItems: 'center', marginBottom: 32 },
   iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(139, 92, 246, 0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

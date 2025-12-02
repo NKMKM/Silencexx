@@ -9,6 +9,7 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -182,7 +183,7 @@ export default function SettingsScreen() {
         scrollEventThrottle={16}
       >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: 'transparent' }]}>
           <Text
             style={[
               styles.headerTitle,
@@ -197,12 +198,12 @@ export default function SettingsScreen() {
         <View style={{ marginBottom: 16 }}>
           <View
             style={[
-              styles.userCard,
-              {
-                backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-                borderColor: isDark ? 'rgba(71, 85, 105, 0)' : 'rgba(226, 232, 240, 0)',
-              },
-            ]}
+               styles.userCard,
+               {
+                 backgroundColor: isDark ? 'rgba(20, 27, 45, 0.65)' : 'rgba(255, 255, 255, 0.65)',
+                 borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(139, 92, 246, 0.15)',
+               },
+             ]}
           >
           <LinearGradient
             colors={['#6366f1', '#a855f7']}
@@ -254,12 +255,12 @@ export default function SettingsScreen() {
             </Text>
             <View
               style={[
-                styles.sectionCard,
-                {
-                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-                  borderColor: isDark ? 'rgba(71, 85, 105, 0)' : 'rgba(226, 232, 240, 0)',
-                },
-              ]}
+                 styles.sectionCard,
+                 {
+                   backgroundColor: isDark ? 'rgba(20, 27, 45, 0.65)' : 'rgba(255, 255, 255, 0.65)',
+                   borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(139, 92, 246, 0.15)',
+                 },
+               ]}
             >
               {section.items.map((item, itemIndex) => (
                 <TouchableOpacity
@@ -622,7 +623,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    bottom: 42,
   },
   scrollView: {
     flex: 1,
@@ -634,6 +634,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    backgroundColor: 'transparent',
   },
   headerTitle: {
     fontSize: 32,
@@ -648,9 +649,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: Platform.OS === 'ios' ? 2 : 0,
   },
   avatar: {
     width: 60,
@@ -700,9 +701,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: Platform.OS === 'ios' ? 0.06 : 0,
+    shadowRadius: 6,
+    elevation: Platform.OS === 'ios' ? 3 : 0,
   },
   settingItem: {
     flexDirection: 'row',

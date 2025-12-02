@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { inboxApi, AnonymousMessage } from '../services/api';
 import { useTheme } from '../utils/ThemeContext';
+import { AnimatedGradient } from '@/components/AnimatedGradient';
 
 export default function InboxPage() {
   const { activeTheme } = useTheme();
@@ -113,7 +114,16 @@ export default function InboxPage() {
     <TouchableOpacity
       style={[
         styles.messageCard,
-        { backgroundColor: isDark ? '#1e293b' : '#fff' },
+        { backgroundColor: isDark
+            ? Platform.OS === 'ios'
+              ? 'rgba(30, 41, 59, 0.6)'
+              : '#1e293b'
+            : Platform.OS === 'ios'
+            ? '#fff'
+            : '#f8fafc',
+          shadowOpacity: Platform.OS === 'ios' ? 0.06 : 0,
+          elevation: Platform.OS === 'ios' ? 3 : 0,
+        },
         !item.is_read && [styles.unreadCard, { borderLeftColor: isDark ? '#a78bfa' : '#6B46C1' }]
       ]}
       onPress={() => !item.is_read && handleMarkAsRead(item.id)}
@@ -156,9 +166,14 @@ export default function InboxPage() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: isDark ? '#1a1a2e' : '#F3E8FF' }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <AnimatedGradient
+        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
+        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
+        isDark={isDark}
+      />
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? 'rgba(26, 26, 46, 0.95)' : '#ffffff' }]}>
         <View style={styles.headerContent}>
@@ -179,15 +194,30 @@ export default function InboxPage() {
 
       {/* Send Section */}
       <View style={[styles.sendSection, { 
-        backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#ffffff',
+        backgroundColor: isDark
+          ? Platform.OS === 'ios'
+            ? 'rgba(30, 41, 59, 0.6)'
+            : '#1e293b'
+          : Platform.OS === 'ios'
+          ? '#ffffff'
+          : '#f8fafc',
         borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : '#e2e8f0',
+        shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0,
+        elevation: Platform.OS === 'ios' ? 4 : 0,
       }]}>
         <Text style={[styles.sectionTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
           Отправить пожелание 💬
         </Text>
         {canSend ? (
           <>
-            <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : '#f8fafc' }]}>
+            <View style={[styles.inputContainer, { backgroundColor: isDark
+              ? Platform.OS === 'ios'
+                ? 'rgba(15, 23, 42, 0.6)'
+                : '#0f172a'
+              : Platform.OS === 'ios'
+              ? '#f8fafc'
+              : '#ffffff'
+            }]}>
               <TextInput
                 style={[styles.input, { 
                   color: isDark ? '#f1f5f9' : '#0f172a',
@@ -314,9 +344,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1.5,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: Platform.OS === 'ios' ? 4 : 0,
   },
   sectionTitle: {
     fontSize: 18,
@@ -396,9 +426,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: Platform.OS === 'ios' ? 0.06 : 0,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: Platform.OS === 'ios' ? 3 : 0,
     position: 'relative',
   },
   unreadCard: {

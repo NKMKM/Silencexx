@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,8 +15,7 @@ import Animated, { FadeInLeft, FadeOutLeft, FadeIn, FadeOut } from 'react-native
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/utils/ThemeContext';
-import { AnimatedCard } from './AnimatedCard';
-import { AnimatedButton } from './AnimatedButton';
+import { LayoutAnimation, Platform, UIManager } from 'react-native';
 
 interface Chat {
   id: number;
@@ -29,7 +28,7 @@ interface ChatSidebarProps {
   visible: boolean;
   onClose: () => void;
   chats: Chat[];
-  currentChatId: number;
+  currentChatId: number | null;
   onSelectChat: (id: number) => void;
   onNewChat: () => void;
   onDeleteChat?: (id: number) => void;
@@ -46,7 +45,23 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
+  const [isRendered, setIsRendered] = React.useState(visible);
   const swipeableRefs = useRef<{ [key: number]: Swipeable | null }>({});
+
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      setIsRendered(true);
+    } else {
+      const timer = setTimeout(() => setIsRendered(false), 220);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
 
   const handleSelectChat = (id: number) => {
     onSelectChat(id);
@@ -75,6 +90,7 @@ export function ChatSidebar({
           style: 'destructive',
           onPress: () => {
             if (onDeleteChat) {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               onDeleteChat(id);
             }
             swipeableRefs.current[id]?.close();
@@ -101,7 +117,7 @@ export function ChatSidebar({
 
   return (
     <Modal
-      visible={visible}
+      visible={isRendered}
       animationType="none"
       transparent={true}
       onRequestClose={onClose}
@@ -361,17 +377,18 @@ const styles = StyleSheet.create({
   deleteAction: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 90,
+    width: 84,
     marginBottom: 8,
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
-    paddingHorizontal: 16,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   deleteText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
+    fontWeight: '700',
+    marginTop: 2,
   },
   deleteButton: {
     padding: 6,

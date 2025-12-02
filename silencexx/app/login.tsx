@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { LoginPage } from '@/components/LoginPage';
 import { OTPPage } from '@/components/OTPPage';
 import { ForgotPasswordPage } from '@/components/ForgotPasswordPage';
+import { DisclaimerModal } from '@/components/DisclaimerModal';
+import { useDisclaimerState } from '@/hooks/useDisclaimerState';
 
 type Screen = 'login' | 'otp' | 'forgotPassword';
 
@@ -10,8 +12,13 @@ export default function LoginScreen() {
   const router = useRouter();
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
   const [contactForOTP, setContactForOTP] = useState('');
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const { setShowDisclaimerAfterLogin } = useDisclaimerState();
 
   const handleLogin = () => {
+    // Устанавливаем флаг что нужно показать дисклеймер после входа в чат
+    setShowDisclaimerAfterLogin();
+    // Переходим в чат
     router.replace('/(tabs)');
   };
 
@@ -30,7 +37,21 @@ export default function LoginScreen() {
 
   const handleOTPVerify = (code: string) => {
     // После успешной верификации OTP
+    // Устанавливаем флаг что нужно показать дисклеймер после входа в чат
+    setShowDisclaimerAfterLogin();
+    // Переходим в чат
     router.replace('/(tabs)');
+  };
+
+  const handleDisclaimerAccept = () => {
+    setShowDisclaimer(false);
+    // Пользователь уже в чате, просто закрываем модаль
+  };
+
+  const handleDisclaimerReject = () => {
+    setShowDisclaimer(false);
+    // Пользователь не согласился - выходим из приложения
+    router.replace('/(auth)');
   };
 
   const handleOTPBack = () => {
@@ -72,12 +93,19 @@ export default function LoginScreen() {
   }
 
   return (
-    <LoginPage
-      onLogin={handleLogin}
-      onNavigateToRegister={handleNavigateToRegister}
-      onNavigateToOTP={handleNavigateToOTP}
-      onNavigateToForgotPassword={handleNavigateToForgotPassword}
-    />
+    <>
+      <LoginPage
+        onLogin={handleLogin}
+        onNavigateToRegister={handleNavigateToRegister}
+        onNavigateToOTP={handleNavigateToOTP}
+        onNavigateToForgotPassword={handleNavigateToForgotPassword}
+      />
+      <DisclaimerModal
+        visible={showDisclaimer}
+        onAccept={handleDisclaimerAccept}
+        onReject={handleDisclaimerReject}
+      />
+    </>
   );
 }
 

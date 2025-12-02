@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+﻿import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,30 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
-  Dimensions,
   ActivityIndicator,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeInLeft, FadeInRight } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInLeft, FadeInRight, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
 import { VoiceAssistant } from './VoiceAssistant';
 import { ChatSidebar } from './ChatSidebar';
-import { AnimatedButton } from './AnimatedButton';
+import { CrisisDetectionModal } from './CrisisDetectionModal';
+import { DisclaimerModal } from './DisclaimerModal';
 import chatApi, { ChatMessage } from '@/services/api';
+import { useCrisisDetection } from '@/hooks/useCrisisDetection';
+import { useDisclaimerState } from '@/hooks/useDisclaimerState';
 
 interface Message {
   id: number;
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
-  isTyping?: boolean; // Флаг для эффекта печатания
+  isTyping?: boolean;
 }
 
 interface Chat {
@@ -38,8 +39,6 @@ interface Chat {
   timestamp: Date;
 }
 
-const { width, height } = Dimensions.get('window');
-
 export function ChatPage() {
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
@@ -48,74 +47,105 @@ export function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showVoiceAssistant, setShowVoiceAssistant] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState(1);
-  const [activeChatId, setActiveChatId] = useState<number | null>(null); // ID чата в БД
+  const [currentChatId, setCurrentChatId] = useState<number | null>(null);
+  const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [isTemporaryChat, setIsTemporaryChat] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [chats, setChats] = useState<Chat[]>([
-    {
-      id: 1,
-      title: 'Сегодня',
-      preview: 'Привет! Это CloudMind...',
-      timestamp: new Date(),
-    },
-  ]);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showCrisisModal, setShowCrisisModal] = useState(false);
+  const [crisisMessage, setCrisisMessage] = useState('');
+  const [isCrisis, setIsCrisis] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIndexRef = useRef(0);
   const fullTextRef = useRef('');
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputTranslateY = useSharedValue(0);
+  const { detectCrisis } = useCrisisDetection();
+  const { shouldShowDisclaimer, setShouldShowDisclaimer } = useDisclaimerState();
 
-  // Загрузка списка чатов при монтировании
+  const tabBarOffset = useMemo(() => -5 + insets.bottom, [insets.bottom]);
+
+  const listPaddingBottom = useMemo(() => {
+    const inputAreaHeight = 110;
+    const bottomSpacer = isKeyboardVisible
+      ? Math.max(0, keyboardHeight - insets.bottom)
+      : tabBarOffset + 12;
+    return inputAreaHeight + bottomSpacer;
+  }, [isKeyboardVisible, keyboardHeight, insets.bottom, tabBarOffset]);
+
+  const inputAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: 0 }],
+  }));
+
+  const mapChats = useCallback((items: any[]): Chat[] => {
+    return items
+      .sort((a, b) => new Date(b.last_message_date || b.created_at || 0).getTime() - new Date(a.last_message_date || a.created_at || 0).getTime())
+      .map((chat) => {
+        const hasLastMessage = !!chat.last_message;
+        return {
+          id: chat.id,
+          title: hasLastMessage
+            ? new Date(chat.last_message_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+            : 'Новый чат',
+          preview: hasLastMessage ? `${chat.last_message.slice(0, 50)}${chat.last_message.length > 50 ? '...' : ''}` : 'Начните диалог',
+          timestamp: hasLastMessage ? new Date(chat.last_message_date) : new Date(),
+        };
+      });
+  }, []);
+
+  // Показываем дисклеймер если пользователь только что вошел
   useEffect(() => {
+    if (shouldShowDisclaimer) {
+      setShowDisclaimer(true);
+      setShouldShowDisclaimer(false);
+    }
+  }, [shouldShowDisclaimer]);
+
+    useEffect(() => {
     const initChat = async () => {
       try {
-        console.log('🔄 Loading chat list...');
+        console.log('[Chat] Loading chat list...');
         const listResponse = await chatApi.getChatList();
-        console.log('📦 Chat list response:', listResponse);
+        console.log('[Chat] Chat list response:', listResponse);
         
-        if (listResponse.success && listResponse.chats.length > 0) {
-          // Фильтруем чаты которые имеют сообщения
-          const chatsWithMessages = listResponse.chats.filter(chat => chat.last_message);
-          
-          if (chatsWithMessages.length > 0) {
-            // Есть сохраненные чаты - загружаем только список
-            const loadedChats: Chat[] = chatsWithMessages.map(chat => ({
-              id: chat.id,
-              title: new Date(chat.last_message_date).toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'long'
-              }),
-              preview: chat.last_message.substring(0, 50) + (chat.last_message.length > 50 ? '...' : ''),
-              timestamp: new Date(chat.last_message_date)
-            }));
-            
-            setChats(loadedChats);
-            console.log('✅ Loaded', loadedChats.length, 'chats in sidebar');
-            
-            // НЕ создаём чат - создастся при первом сообщении
-            console.log('⚡ Ready - chat will be created on first message');
+        if (listResponse.success) {
+          const loadedChats = mapChats(listResponse.chats || []);
+          setChats(loadedChats);
+
+          if (loadedChats.length > 0) {
+            const firstChat = loadedChats[0];
+            setCurrentChatId(firstChat.id);
+            setActiveChatId(firstChat.id);
+            await loadChatMessages(firstChat.id);
+          } else {
+            setMessages([]);
           }
         } else {
-          // Нет чатов - тоже не создаём, создастся при первом сообщении
-          console.log('⚡ No chats - will create on first message');
+          console.log('[Chat] No chats - will create on first message');
         }
       } catch (error) {
-        console.error('❌ Error initializing chat:', error);
+        console.error('[Chat] Error initializing chat:', error);
       }
     };
     initChat();
-  }, []);
+  }, [mapChats]);
 
-  // Отслеживание состояния клавиатуры с высотой
-  useEffect(() => {
+    useEffect(() => {
+    const animateInput = (toValue: number) => {
+      inputTranslateY.value = withTiming(toValue, { duration: 220 });
+    };
+
     const keyboardDidShowListener = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
         setKeyboardVisible(true);
-        setKeyboardHeight(e.endCoordinates.height);
+        const height = Math.max(0, e.endCoordinates.height - insets.bottom);
+        setKeyboardHeight(height);
+        animateInput(0);
       }
     );
     const keyboardDidHideListener = Keyboard.addListener(
@@ -123,6 +153,7 @@ export function ChatPage() {
       () => {
         setKeyboardVisible(false);
         setKeyboardHeight(0);
+        animateInput(0);
       }
     );
 
@@ -130,10 +161,9 @@ export function ChatPage() {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
-  }, []);
+  }, [inputTranslateY]);
 
-  // Android: скрывать клавиатуру при системной кнопке "Назад" если она открыта
-  useEffect(() => {
+    useEffect(() => {
     if (Platform.OS !== 'android') return;
 
     const backHandler = (event: any) => {
@@ -145,8 +175,7 @@ export function ChatPage() {
     };
 
     const subscription = Keyboard.addListener('keyboardDidHide', () => {
-      // ничего, просто держим стейт в актуальном виде
-    });
+          });
 
     const BackHandler = require('react-native').BackHandler;
     const backSub = BackHandler.addEventListener('hardwareBackPress', backHandler);
@@ -158,83 +187,77 @@ export function ChatPage() {
   }, [isKeyboardVisible]);
 
   const handleSendMessage = async () => {
-    if (!message.trim() || isLoading) return;
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || isLoading) return;
 
     const newUserMessage: Message = {
-      id: messages.length + 1,
-      text: message,
+      id: Date.now(),
+      text: trimmedMessage,
       sender: 'user',
       timestamp: new Date(),
     };
 
-    setMessages([...messages, newUserMessage]);
-    const userText = message;
+    const updatedMessages = [...messages, newUserMessage];
+    setMessages(updatedMessages);
     setMessage('');
     setIsLoading(true);
 
-    // Скролл к последнему сообщению после небольшой задержки
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
 
     try {
-      // Если нет активного chatId, создаём его перед отправкой
-      let currentChatId = activeChatId;
-      
-      if (!currentChatId) {
-        console.log('⚡ Creating chat on-demand before sending message');
+      let chatIdToUse = activeChatId;
+
+      if (!chatIdToUse) {
+        console.log('Creating chat on-demand before sending message');
         try {
           const chatResponse = await chatApi.createChat(isTemporaryChat);
           if (chatResponse.success && chatResponse.chatId) {
-            currentChatId = chatResponse.chatId;
+            chatIdToUse = chatResponse.chatId;
             setActiveChatId(chatResponse.chatId);
             setCurrentChatId(chatResponse.chatId);
-            console.log(`✅ ${isTemporaryChat ? 'Temporary' : 'Regular'} chat created:`, chatResponse.chatId);
+            console.log((isTemporaryChat ? 'Temporary' : 'Regular') + ' chat created: ' + chatResponse.chatId);
           }
         } catch (error) {
-          console.warn('⚠️ Could not create chat, sending without chatId:', error);
+          console.warn('Could not create chat, sending without chatId:', error);
         }
       }
-      
-      // Подготовка истории разговора для контекста
-      const conversationHistory: ChatMessage[] = messages.map(msg => ({
+
+      const conversationHistory: ChatMessage[] = updatedMessages.map((msg) => ({
         role: msg.sender === 'user' ? 'user' : 'model',
         text: msg.text,
       }));
 
-      // Отправка запроса к AI
-      console.log('🚀 Sending message with chatId:', currentChatId);
+      console.log('Sending message with chatId:', chatIdToUse);
       const response = await chatApi.sendMessage({
-        message: userText,
+        message: trimmedMessage,
         conversationHistory,
-        chatId: currentChatId || undefined,
+        chatId: chatIdToUse || undefined,
       });
-      console.log('📨 Message sent, response received');
+      console.log('Message sent, response received');
 
-      // Добавление ответа AI с эффектом печатания
       const aiResponse: Message = {
-        id: messages.length + 2,
-        text: '', // Начинаем с пустого текста
+        id: Date.now() + 1,
+        text: '',
         sender: 'ai',
         timestamp: new Date(),
         isTyping: true,
       };
 
       setMessages((prev) => [...prev, aiResponse]);
-      
-      // Анимация печатания
-      fullTextRef.current = response.response;
+
+      fullTextRef.current = response.response || '';
       currentIndexRef.current = 0;
-      
-      // Очищаем предыдущий интервал если он был
+
       if (typingIntervalRef.current) {
         clearInterval(typingIntervalRef.current);
       }
-      
+
       typingIntervalRef.current = setInterval(() => {
         if (currentIndexRef.current < fullTextRef.current.length) {
           const nextChar = fullTextRef.current[currentIndexRef.current];
-          
+
           setMessages((prev) => {
             const updated = [...prev];
             const lastMsg = updated[updated.length - 1];
@@ -243,20 +266,18 @@ export function ChatPage() {
             }
             return updated;
           });
-          
+
           currentIndexRef.current++;
-          
-          // Прокрутка только каждые 10 символов для оптимизации
+
           if (currentIndexRef.current % 10 === 0) {
             flatListRef.current?.scrollToEnd({ animated: false });
           }
         } else {
-          // Завершаем печатание
           if (typingIntervalRef.current) {
             clearInterval(typingIntervalRef.current);
             typingIntervalRef.current = null;
           }
-          
+
           setMessages((prev) => {
             const updated = [...prev];
             const lastMsg = updated[updated.length - 1];
@@ -265,66 +286,63 @@ export function ChatPage() {
             }
             return updated;
           });
-          
-          // Финальный скролл после завершения печатания
+
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
           }, 100);
         }
-      }, 30) as ReturnType<typeof setInterval>; // Скорость печатания: 30мс на символ
+      }, 30) as ReturnType<typeof setInterval>;
 
-      // Если обнаружен кризис, можно показать дополнительное уведомление
       if (response.isCrisis) {
-        console.log('⚠️ Crisis detected in conversation');
-        // Здесь можно добавить модальное окно с ресурсами помощи
+        console.log('Crisis detected in conversation');
+        setCrisisMessage(trimmedMessage);
+        setIsCrisis(true);
+        setShowCrisisModal(true);
       }
-      
-      // Обновляем список чатов только если это первое сообщение в чате
-      if (messages.length === 1) {
+
+      if (updatedMessages.length === 1) {
         await refreshChatList();
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      
-      // Останавливаем анимацию печатания если была ошибка
+
       if (typingIntervalRef.current) {
         clearInterval(typingIntervalRef.current);
       }
-      
-      // Убираем сообщение с печатанием
-      setMessages((prev) => prev.filter(msg => !msg.isTyping));
-      
-      // Показываем подробное сообщение об ошибке
-      const errorText = error instanceof Error 
-        ? error.message 
-        : 'Извините, произошла ошибка. Пожалуйста, убедитесь что backend запущен и попробуйте снова.';
-      
+
+      setMessages((prev) => prev.filter((msg) => !msg.isTyping));
+
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : 'Произошла ошибка, попробуйте снова. Если проблема повторяется, свяжитесь с поддержкой.';
+
       const errorMessage: Message = {
-        id: messages.length + 2,
+        id: Date.now(),
         text: errorText,
         sender: 'ai',
         timestamp: new Date(),
       };
-      
+
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Очистка интервала при размонтировании
   useEffect(() => {
     return () => {
       if (typingIntervalRef.current) {
         clearInterval(typingIntervalRef.current);
       }
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
     };
   }, []);
 
-  // Функция загрузки сообщений чата из БД
-  const loadChatMessages = async (chatId: number) => {
+    const loadChatMessages = async (chatId: number) => {
     try {
-      console.log('📥 Loading messages for chat:', chatId);
+      console.log('[Chat] Loading messages for chat:', chatId);
       const response = await chatApi.getChatMessages(chatId);
       
       if (response.success && response.messages) {
@@ -336,45 +354,32 @@ export function ChatPage() {
         }));
         
         setMessages(loadedMessages);
-        console.log('✅ Loaded', loadedMessages.length, 'messages');
-        
-        // НЕ автоматически скроллим - пользователь сам может прокрутить если нужно
+        console.log('[Chat] Loaded', loadedMessages.length, 'messages');
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }, 50);
       }
     } catch (error) {
-      console.error('❌ Error loading chat messages:', error);
-      // Если чат не найден или нет доступа, просто показываем пустой чат
+      console.error('[Chat] Error loading chat messages:', error);
       setMessages([]);
     }
   };
 
-  // Функция обновления списка чатов с debounce
-  const refreshChatList = async () => {
-    // Отменяем предыдущий таймер если есть
+    const refreshChatList = async () => {
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
     }
     
-    // Создаём новый таймер - обновление через 1 секунду
     refreshTimeoutRef.current = setTimeout(async () => {
       try {
         const listResponse = await chatApi.getChatList();
-        if (listResponse.success && listResponse.chats.length > 0) {
-          // Фильтруем только чаты с сообщениями
-          const chatsWithMessages = listResponse.chats.filter(chat => chat.last_message);
-          
-          const loadedChats: Chat[] = chatsWithMessages.map(chat => ({
-            id: chat.id,
-            title: new Date(chat.last_message_date).toLocaleDateString('ru-RU', {
-              day: 'numeric',
-              month: 'long'
-            }),
-            preview: chat.last_message.substring(0, 50) + (chat.last_message.length > 50 ? '...' : ''),
-            timestamp: new Date(chat.last_message_date)
-          }));
+        if (listResponse.success) {
+          const loadedChats = mapChats(listResponse.chats || []);
           setChats(loadedChats);
         }
       } catch (error) {
-        console.error('❌ Error refreshing chat list:', error);
+        console.error('[Chat] Error refreshing chat list:', error);
       }
     }, 1000);
   };
@@ -383,64 +388,55 @@ export function ChatPage() {
     try {
       setIsTemporaryChat(false);
       
-      // Проверяем есть ли уже пустой чат
-      if (messages.length === 0 && activeChatId) {
-        console.log('♻️ Already have empty chat:', activeChatId);
+            if (messages.length === 0 && activeChatId) {
+        console.log('[Chat] Already have empty chat:', activeChatId);
         return;
       }
       
-      // Мгновенно создаём локальное состояние
-      setMessages([]);
-      setActiveChatId(null); // Временно null
-      console.log('⚡ Created local empty chat');
+            setMessages([]);
+      setActiveChatId(null);       console.log('[Chat] Created local empty chat');
       
-      // В фоне создаём чат на сервере
-      chatApi.createChat().then(response => {
+            chatApi.createChat().then(response => {
         if (response.success && response.chatId) {
           setActiveChatId(response.chatId);
           setCurrentChatId(response.chatId);
-          console.log('✅ Server chat created:', response.chatId);
+          console.log('[Chat] Server chat created:', response.chatId);
         }
       }).catch(error => {
-        console.error('❌ Error creating chat on server:', error);
-        // Продолжаем работать локально даже если сервер не ответил
-      });
+        console.error('[Chat] Error creating chat on server:', error);
+              });
       
     } catch (error) {
-      console.error('❌ Error creating new chat:', error);
+      console.error('[Chat] Error creating new chat:', error);
     }
   };
 
   const handleNewTemporaryChat = async () => {
     try {
-      // Переключаем режим временного чата
-      if (isTemporaryChat) {
-        // Выключаем временный режим
-        setIsTemporaryChat(false);
-        console.log('⚠️ Temporary chat mode disabled');
+            if (isTemporaryChat) {
+                setIsTemporaryChat(false);
+        console.log('[Chat] Temporary chat mode disabled');
         return;
       }
       
       setIsTemporaryChat(true);
       
-      // Мгновенно создаём локальное состояние
-      setMessages([]);
+            setMessages([]);
       setActiveChatId(null);
-      console.log('⚡ Created local temporary chat');
+      console.log('[Chat] Created local temporary chat');
       
-      // В фоне создаём временный чат на сервере
-      chatApi.createChat(true).then(response => {
+            chatApi.createChat(true).then(response => {
         if (response.success && response.chatId) {
           setActiveChatId(response.chatId);
           setCurrentChatId(response.chatId);
-          console.log('✅ Temporary chat created on server:', response.chatId);
+          console.log('[Chat] Temporary chat created on server:', response.chatId);
         }
       }).catch(error => {
-        console.error('❌ Error creating temporary chat:', error);
+        console.error('[Chat] Error creating temporary chat:', error);
       });
       
     } catch (error) {
-      console.error('❌ Error creating temporary chat:', error);
+      console.error('[Chat] Error creating temporary chat:', error);
     }
   };
 
@@ -449,34 +445,30 @@ export function ChatPage() {
     setCurrentChatId(id);
     setActiveChatId(id);
     
-    // Загружаем сообщения из БД
-    await loadChatMessages(id);
+        await loadChatMessages(id);
   };
 
   const handleDeleteChat = async (chatId: number) => {
     try {
-      console.log('🗑️ Deleting chat:', chatId);
+      console.log('[Chat] Deleting chat:', chatId);
       await chatApi.deleteChatHistory(chatId);
       
-      // Удаляем из локального состояния
-      const updatedChats = chats.filter(chat => chat.id !== chatId);
+            const updatedChats = chats.filter(chat => chat.id !== chatId);
       setChats(updatedChats);
       
-      // Если удалили текущий чат, переключаемся на другой или создаем новый
-      if (currentChatId === chatId) {
+            if (currentChatId === chatId) {
         if (updatedChats.length > 0) {
           setCurrentChatId(updatedChats[0].id);
           setActiveChatId(updatedChats[0].id);
           await loadChatMessages(updatedChats[0].id);
         } else {
-          // Если чатов не осталось, создаем новый
-          await handleNewChat();
+                    await handleNewChat();
         }
       }
       
-      console.log('✅ Chat deleted successfully');
+      console.log('[Chat] Chat deleted successfully');
     } catch (error) {
-      console.error('❌ Error deleting chat:', error);
+      console.error('[Chat] Error deleting chat:', error);
     }
   };
 
@@ -523,7 +515,7 @@ export function ChatPage() {
             >
               {item.text}
               {item.isTyping && (
-                <Text style={{ color: isDark ? '#a78bfa' : '#8b5cf6' }}>▊</Text>
+                <Text style={{ color: isDark ? '#a78bfa' : '#8b5cf6' }}>...</Text>
               )}
             </Text>
           </View>
@@ -533,20 +525,21 @@ export function ChatPage() {
   }, [isDark, messages.length]);
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <LinearGradient
-          colors={
-            isDark
-              ? ['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']
-              : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
-          }
-          style={StyleSheet.absoluteFillObject}
-        />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.mainContainer}>
+        <View style={styles.container}>
+          <LinearGradient
+            colors={
+              isDark
+                ? ['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']
+                : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
+            }
+            style={StyleSheet.absoluteFillObject}
+          />
 
-        <View style={{ flex: 1 }}>
-        {/* Header */}
-        <View
+          <View style={{ flex: 1 }}>
+            {/* Header */}
+            <View
           style={[
             styles.header,
             {
@@ -605,13 +598,13 @@ export function ChatPage() {
           onDeleteChat={handleDeleteChat}
         />
 
-        {/* Messages или приветствие */}
-        {messages.length === 0 && !isKeyboardVisible ? (
+        {/* Сообщения или приветствие */}
+        {messages.length === 0 ? (
           <View style={[
             styles.emptyStateContainer,
             { 
               paddingTop: insets.top + 100,
-              paddingBottom: insets.bottom + 80
+              paddingBottom: listPaddingBottom
             }
           ]}>
             <View style={styles.welcomeCard}>
@@ -649,25 +642,29 @@ export function ChatPage() {
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item) => item.id.toString()}
+            style={{ flex: 1 }}
             contentContainerStyle={[
               styles.messagesList,
-              { paddingBottom: insets.bottom + 20 }
+              { paddingBottom: listPaddingBottom + 20, flexGrow: 1 }
             ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={true}
-            scrollEnabled={true}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            showsVerticalScrollIndicator={false}
           />
         )}
 
         {/* Input Area */}
-        <View
+        <Animated.View
           style={[
             styles.inputContainer,
+            inputAnimatedStyle,
             {
-              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.98)' : '#ffffff',
-              paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 8,
-              marginBottom: Platform.OS === 'ios' ? (isKeyboardVisible ? keyboardHeight - insets.bottom : 60) : (isKeyboardVisible ? keyboardHeight : 60),
+              backgroundColor: isDark ? 'rgba(10, 12, 18, 0.85)' : 'rgba(20, 22, 30, 0.85)',
+              paddingBottom: insets.bottom + 6,
+              marginBottom: isKeyboardVisible
+                ? Math.max(8, keyboardHeight - insets.bottom + 8)
+                : tabBarOffset + 12,
               borderTopWidth: 1,
               borderTopColor: isDark ? 'rgba(99, 102, 241, 0.15)' : '#e2e8f0',
               shadowColor: isDark ? '#6366f1' : '#8b5cf6',
@@ -685,8 +682,8 @@ export function ChatPage() {
               <TextInput
                 value={message}
                 onChangeText={setMessage}
-                placeholder="Сообщение CloudMind"
-                placeholderTextColor={isDark ? '#475569' : '#94a3b8'}
+                placeholder="Message Pulsar AI"
+                placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
                 multiline
                 maxLength={500}
                 style={[
@@ -721,14 +718,30 @@ export function ChatPage() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+        </Animated.View>
+        <CrisisDetectionModal
+          visible={showCrisisModal}
+          message={crisisMessage}
+          isCrisis={isCrisis}
+          onClose={() => setShowCrisisModal(false)}
+          onDismiss={() => setShowCrisisModal(false)}
+        />
+        <DisclaimerModal
+          visible={showDisclaimer}
+          onAccept={() => setShowDisclaimer(false)}
+          onReject={() => setShowDisclaimer(false)}
+        />
+          </View>
         </View>
-      </View>
       </View>
     </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
@@ -820,7 +833,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     position: 'absolute',
-    bottom: 0,
+    bottom: 30,
     left: 0,
     right: 0,
   },
@@ -833,10 +846,18 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 28,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   attachButton: {
     width: 32,
@@ -844,6 +865,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   voiceButton: {
     width: 32,
@@ -851,13 +875,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     maxHeight: 100,
-    paddingVertical: 8,
-    lineHeight: 20,
+    paddingVertical: 6,
+    lineHeight: 22,
   },
   sendButtonContainer: {
     marginBottom: 4,
@@ -982,3 +1009,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+
+
+
+
+

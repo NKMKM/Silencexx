@@ -138,7 +138,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="inbox"
         options={{
-          title: 'Inbox',
+          title: 'Сообщения',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon
               name="mail"

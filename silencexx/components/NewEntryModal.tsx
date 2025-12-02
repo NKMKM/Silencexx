@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
+import { useTheme } from '@/utils/ThemeContext';
 
 interface NewEntryModalProps {
   visible: boolean;
@@ -30,6 +30,8 @@ const moods = [
 ];
 
 export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) {
+  const { activeTheme } = useTheme();
+  const isDark = activeTheme === 'dark';
   const [selectedMood, setSelectedMood] = useState(moods[0]);
   const [entryText, setEntryText] = useState('');
 
@@ -59,101 +61,141 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
           onPress={onClose}
         >
           <Animated.View
-            entering={FadeInDown.springify()}
+            entering={SlideInUp.springify()}
             style={styles.modalContent}
           >
             <TouchableOpacity activeOpacity={1}>
-              <BlurView intensity={95} tint="light" style={styles.blurContainer}>
-                {/* Header */}
-                <View style={styles.header}>
-                  <View style={styles.headerLeft}>
-                    <Ionicons name="create-outline" size={24} color="#8b5cf6" />
-                    <Text style={styles.headerTitle}>Новая запись</Text>
-                  </View>
-                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                    <Ionicons name="close" size={24} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Mood Selection */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Как вы себя чувствуете?</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.moodList}
-                  >
-                    {moods.map((mood) => (
-                      <TouchableOpacity
-                        key={mood.id}
-                        onPress={() => setSelectedMood(mood)}
-                        style={styles.moodItem}
+              <LinearGradient
+                colors={isDark ? ['#0f172a', '#1e1b4b', '#16213e'] : ['#f8fafc', '#f1f5f9', '#e2e8f0']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradientContainer}
+              >
+                <View
+                  style={[
+                    styles.blurContainer,
+                    {
+                      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                    },
+                  ]}
+                >
+                  {/* Header */}
+                  <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.15)' }]}>
+                    <View style={styles.headerLeft}>
+                      <LinearGradient
+                        colors={isDark ? ['#6366f1', '#a855f7'] : ['#8b5cf6', '#ec4899']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.headerIcon}
                       >
-                        <LinearGradient
-                          colors={mood.color}
-                          style={[
-                            styles.moodButton,
-                            selectedMood.id === mood.id && styles.moodButtonSelected,
-                          ]}
-                        >
-                          <Text style={styles.moodEmoji}>{mood.emoji}</Text>
-                        </LinearGradient>
-                        <Text
-                          style={[
-                            styles.moodLabel,
-                            selectedMood.id === mood.id && styles.moodLabelSelected,
-                          ]}
-                        >
-                          {mood.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
+                        <Ionicons name="create-outline" size={22} color="#fff" />
+                      </LinearGradient>
+                      <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Новая запись</Text>
+                    </View>
+                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                      <Ionicons name="close" size={24} color={isDark ? '#cbd5e1' : '#64748b'} />
+                    </TouchableOpacity>
+                  </View>
 
-                {/* Text Input */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Что у вас на душе?</Text>
-                  <TextInput
-                    value={entryText}
-                    onChangeText={setEntryText}
-                    placeholder="Напишите о своих мыслях и чувствах..."
-                    placeholderTextColor="#94a3b8"
-                    multiline
-                    maxLength={1000}
-                    style={styles.textInput}
-                  />
-                  <Text style={styles.charCount}>{entryText.length} / 1000</Text>
-                </View>
-
-                {/* Buttons */}
-                <View style={styles.buttonsContainer}>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={styles.cancelButton}
-                  >
-                    <Text style={styles.cancelButtonText}>Отмена</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleSave}
-                    disabled={!entryText.trim()}
-                  >
-                    <LinearGradient
-                      colors={
-                        entryText.trim()
-                          ? ['#3b82f6', '#8b5cf6']
-                          : ['#cbd5e1', '#94a3b8']
-                      }
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.saveButton}
+                  {/* Mood Selection */}
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Как вы себя чувствуете?</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.moodList}
                     >
-                      <Ionicons name="checkmark" size={20} color="#fff" />
-                      <Text style={styles.saveButtonText}>Сохранить</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
+                      {moods.map((mood) => (
+                        <TouchableOpacity
+                          key={mood.id}
+                          onPress={() => setSelectedMood(mood)}
+                          style={styles.moodItem}
+                        >
+                          <LinearGradient
+                            colors={mood.color}
+                            style={[
+                              styles.moodButton,
+                              selectedMood.id === mood.id && styles.moodButtonSelected,
+                            ]}
+                          >
+                            <Text style={styles.moodEmoji}>{mood.emoji}</Text>
+                          </LinearGradient>
+                          <Text
+                            style={[
+                              styles.moodLabel,
+                              { color: isDark ? '#cbd5e1' : '#64748b' },
+                              selectedMood.id === mood.id && { color: isDark ? '#e2e8f0' : '#1e293b', fontWeight: '700' },
+                            ]}
+                          >
+                            {mood.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Text Input */}
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Что у вас на душе?</Text>
+                    <TextInput
+                      value={entryText}
+                      onChangeText={setEntryText}
+                      placeholder="Напишите о своих мыслях и чувствах..."
+                      placeholderTextColor={isDark ? '#64748b' : '#cbd5e1'}
+                      multiline
+                      maxLength={1000}
+                      style={[
+                        styles.textInput,
+                        {
+                          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.6)',
+                          borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.15)',
+                          color: isDark ? '#e2e8f0' : '#1e293b',
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.charCount, { color: isDark ? '#94a3b8' : '#cbd5e1' }]}>
+                      {entryText.length} / 1000
+                    </Text>
+                  </View>
+
+                  {/* Buttons */}
+                  <View style={styles.buttonsContainer}>
+                    <TouchableOpacity
+                      onPress={onClose}
+                      style={[
+                        styles.cancelButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(139, 92, 246, 0.1)',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.cancelButtonText, { color: isDark ? '#818cf8' : '#8b5cf6' }]}>Отмена</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSave}
+                      disabled={!entryText.trim()}
+                    >
+                      <LinearGradient
+                        colors={
+                          entryText.trim()
+                            ? isDark
+                              ? ['#6366f1', '#a855f7']
+                              : ['#8b5cf6', '#ec4899']
+                            : isDark
+                            ? ['#475569', '#64748b']
+                            : ['#cbd5e1', '#b0bec5']
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.saveButton}
+                      >
+                        <Ionicons name="checkmark" size={20} color="#fff" />
+                        <Text style={styles.saveButtonText}>Сохранить</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </BlurView>
+              </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
@@ -168,17 +210,23 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     maxHeight: '90%',
   },
-  blurContainer: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  gradientContainer: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     overflow: 'hidden',
-    paddingBottom: 40,
+    paddingBottom: 20,
+  },
+  blurContainer: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
@@ -186,20 +234,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(226, 232, 240, 0.5)',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#1e293b',
+    letterSpacing: -0.5,
   },
   closeButton: {
     padding: 4,
+    borderRadius: 12,
   },
   section: {
     padding: 20,
@@ -207,8 +262,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#334155',
     marginBottom: 16,
+    letterSpacing: -0.3,
   },
   moodList: {
     gap: 16,
@@ -218,52 +273,44 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   moodButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   moodButtonSelected: {
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.15 }],
     shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 10,
   },
   moodEmoji: {
-    fontSize: 32,
+    fontSize: 36,
   },
   moodLabel: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#64748b',
-  },
-  moodLabelSelected: {
-    color: '#1e293b',
-    fontWeight: '700',
   },
   textInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.3)',
-    borderRadius: 16,
+    borderWidth: 1.5,
+    borderRadius: 18,
     padding: 16,
     fontSize: 15,
-    color: '#1e293b',
     minHeight: 150,
     maxHeight: 250,
     textAlignVertical: 'top',
   },
   charCount: {
     fontSize: 12,
-    color: '#94a3b8',
     textAlign: 'right',
     marginTop: 8,
+    fontWeight: '500',
   },
   buttonsContainer: {
     flexDirection: 'row',
@@ -273,15 +320,15 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(226, 232, 240, 0.5)',
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#64748b',
   },
   saveButton: {
     flex: 1,
@@ -290,7 +337,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,

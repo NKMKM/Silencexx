@@ -8,6 +8,7 @@ import {
   TextInputProps,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/utils/ThemeContext';
@@ -22,6 +23,8 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   inputStyle?: TextStyle;
   labelStyle?: TextStyle;
   errorStyle?: TextStyle;
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
 }
 
 export const Input = forwardRef<TextInput, InputProps>(
@@ -32,6 +35,8 @@ export const Input = forwardRef<TextInput, InputProps>(
       leftIcon,
       rightIcon,
       onRightIconPress,
+      onInputFocus,
+      onInputBlur,
       containerStyle,
       inputStyle,
       labelStyle,
@@ -48,6 +53,7 @@ export const Input = forwardRef<TextInput, InputProps>(
 
     const handleFocus = () => {
       setIsFocused(true);
+      onInputFocus?.();
       Animated.spring(focusAnim, {
         toValue: 1,
         useNativeDriver: false,
@@ -58,6 +64,7 @@ export const Input = forwardRef<TextInput, InputProps>(
 
     const handleBlur = () => {
       setIsFocused(false);
+      onInputBlur?.();
       Animated.spring(focusAnim, {
         toValue: 0,
         useNativeDriver: false,
@@ -81,11 +88,17 @@ export const Input = forwardRef<TextInput, InputProps>(
     const getInputContainerStyle = (): ViewStyle => ({
       flexDirection: 'row',
       alignItems: 'center',
-      minHeight: 48,
-      borderRadius: 16,
+      minHeight: 52,
+      borderRadius: 14,
       paddingHorizontal: 16,
       gap: 12,
-      backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.7)',
+      backgroundColor: isDark
+        ? Platform.OS === 'ios'
+          ? 'rgba(30, 41, 59, 0.4)'
+          : '#1e293b'
+        : Platform.OS === 'ios'
+        ? '#ffffff'
+        : '#f8fafc',
     });
 
     const getInputTextStyle = (): TextStyle => ({
@@ -133,9 +146,9 @@ export const Input = forwardRef<TextInput, InputProps>(
               borderColor: borderColor,
               shadowColor: isDark ? '#a78bfa' : '#8b5cf6',
               shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: shadowOpacity,
+              shadowOpacity: Platform.OS === 'ios' ? shadowOpacity : 0,
               shadowRadius: 12,
-              elevation: isFocused ? 8 : 2,
+              elevation: Platform.OS === 'ios' ? (isFocused ? 8 : 2) : 0,
             },
           ]}
         >

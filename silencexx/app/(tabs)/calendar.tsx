@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ export default function CalendarScreen() {
   const [markedDatesState, setMarkedDatesState] = useState<any>({});
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
   const [showViewEntry, setShowViewEntry] = useState(false);
+  const [isLoadingEntry, setIsLoadingEntry] = useState(false);
   const today = new Date().toISOString().split('T')[0];
   
   const [entries, setEntries] = useState<Entry[]>([
@@ -66,28 +68,37 @@ export default function CalendarScreen() {
     },
   ]);
 
-  const handleDayPress = async (day: DateData) => {
-    // Разрешаем выбирать только сегодня и прошлые даты
-    if (day.dateString <= today) {
-      setSelectedDate(day.dateString);
-      try {
-        const res = await journalApi.getEntry(day.dateString);
+  const handleDayPress = (day: DateData) => {
+    if (day.dateString > today) return;
+    setShowNewEntry(false);
+    setShowViewEntry(false);
+    setSelectedEntry(null);
+    setSelectedDate(day.dateString);
+    setIsLoadingEntry(true);
+
+    // подгружаем данные сразу
+    journalApi.getEntry(day.dateString)
+      .then((res) => {
+        const isToday = day.dateString === today;
         if (res && res.exists) {
           setSelectedEntry(res.entry);
           setShowViewEntry(true);
+        } else if (isToday) {
+          setShowNewEntry(true);
         } else {
-          // нет записи
-          if (day.dateString === today) {
-            setShowNewEntry(true);
-          } else {
-            setSelectedEntry(null);
-            setShowViewEntry(true); // открываем просмотр с пустым состоянием
-          }
+          setShowViewEntry(true);
         }
-      } catch (error) {
+      })
+      .catch((error) => {
         console.log('Error fetching entry', error);
-      }
-    }
+        const isToday = day.dateString === today;
+        if (isToday) {
+          setShowNewEntry(true);
+        } else {
+          setShowViewEntry(true);
+        }
+      })
+      .finally(() => setIsLoadingEntry(false));
   };
 
   const handleSaveEntry = (mood: string, text: string) => {
@@ -156,8 +167,9 @@ export default function CalendarScreen() {
           { paddingBottom: insets.bottom + 100 }
         ]}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -202,9 +214,17 @@ export default function CalendarScreen() {
         {/* Calendar */}
         <View style={styles.calendarSection}>
           <View style={[styles.calendarCard, { 
-            backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#ffffff',
+            backgroundColor: isDark
+              ? Platform.OS === 'ios'
+                ? 'rgba(30, 41, 59, 0.6)'
+                : '#1e293b'
+              : Platform.OS === 'ios'
+              ? '#ffffff'
+              : '#f8fafc',
             borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(139, 92, 246, 0.2)',
             borderWidth: 1.5,
+            shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
+            elevation: Platform.OS === 'ios' ? 6 : 0,
           }]}>
             <Calendar
               markedDates={markedDates}
@@ -236,27 +256,6 @@ export default function CalendarScreen() {
           </View>
         </View>
 
-        {/* New Entry Button */}
-        <View style={{ marginVertical: 16 }}>
-          <TouchableOpacity 
-            onPress={() => setShowNewEntry(true)}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#6366f1', '#a855f7']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.newEntryGradient}
-            >
-              <Ionicons name="add-circle" size={24} color="#fff" />
-              <Text style={styles.newEntryText}>Новая запись</Text>
-              <View style={styles.sparkle}>
-                <Ionicons name="sparkles" size={16} color="rgba(255,255,255,0.8)" />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
         {/* New Entry Modal */}
         <NewEntryModal
           visible={showNewEntry}
@@ -270,123 +269,6 @@ export default function CalendarScreen() {
           entry={selectedEntry}
         />
 
-        {/* Entries List - показываем только если выбрана дата */}
-        {selectedDate && (
-          <View style={styles.entriesSection}>
-            <View style={styles.sectionHeader}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: isDark ? '#cbd5e1' : '#334155' },
-                ]}
-              >
-                Записи за {selectedDate === today ? 'сегодня' : selectedDate}
-              </Text>
-              <TouchableOpacity onPress={() => setSelectedDate('')}>
-                <Ionicons
-                  name="close-circle"
-                  size={24}
-                  color={isDark ? '#64748b' : '#94a3b8'}
-                />
-              </TouchableOpacity>
-            </View>
-            {entries
-              .filter((entry) => entry.fullDate === selectedDate)
-              .map((entry, index) => (
-            <View key={entry.id} style={{ marginBottom: 12 }}>
-              <View
-                style={[
-                  styles.entryCard,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(30, 41, 59, 0.6)'
-                      : 'rgba(255, 255, 255, 0.7)',
-                    borderColor: isDark
-                      ? 'rgba(71, 85, 105, 0.3)'
-                      : 'rgba(226, 232, 240, 0.5)',
-                  },
-                ]}
-              >
-                <View style={styles.entryHeader}>
-                  <View style={styles.entryHeaderLeft}>
-                    <View style={styles.moodContainer}>
-                      <Text style={styles.entryMood}>{entry.mood}</Text>
-                    </View>
-                    <View>
-                      <Text
-                        style={[
-                          styles.entryDate,
-                          { color: isDark ? '#e2e8f0' : '#1e293b' },
-                        ]}
-                      >
-                        {entry.date}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.entryTime,
-                          { color: isDark ? '#64748b' : '#94a3b8' },
-                        ]}
-                      >
-                        {entry.time}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity style={styles.entryMenu}>
-                    <Ionicons
-                      name="ellipsis-horizontal"
-                      size={20}
-                      color={isDark ? '#64748b' : '#94a3b8'}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <Text
-                  style={[
-                    styles.entryText,
-                    { color: isDark ? '#cbd5e1' : '#475569' },
-                  ]}
-                >
-                  {entry.text}
-                </Text>
-              </View>
-            </View>
-            ))}
-            {entries.filter((entry) => entry.fullDate === selectedDate)
-              .length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={48}
-                  color={isDark ? '#475569' : '#cbd5e1'}
-                />
-                <Text
-                  style={[
-                    styles.emptyStateText,
-                    { color: isDark ? '#64748b' : '#94a3b8' },
-                  ]}
-                >
-                  Нет записей за эту дату
-                </Text>
-                {selectedDate === today && (
-                  <TouchableOpacity
-                    onPress={() => setShowNewEntry(true)}
-                    style={styles.emptyStateButton}
-                  >
-                    <LinearGradient
-                      colors={['#3b82f6', '#8b5cf6']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.emptyStateGradient}
-                    >
-                      <Text style={styles.emptyStateButtonText}>
-                        Создать запись
-                      </Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -400,8 +282,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
+    paddingTop: 20,
     paddingHorizontal: 20,
+    paddingBottom: 100,
+    flexGrow: 1,
   },
   header: {
     marginBottom: 24,
@@ -451,6 +335,9 @@ const styles = StyleSheet.create({
   },
   calendarSection: {
     marginBottom: 24,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   calendarCard: {
     borderRadius: 24,
@@ -458,133 +345,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: Platform.OS === 'ios' ? 4 : 0,
+    width: '100%',
+    maxWidth: 400,
   },
   calendar: {
     borderRadius: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    letterSpacing: -0.3,
-  },
-  newEntryButton: {
-    marginBottom: 24,
-  },
-  newEntryGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 24,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  newEntryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  sparkle: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    transform: [{ translateY: -8 }],
-  },
-  entriesSection: {
-    gap: 12,
-  },
-  entryCard: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    padding: 18,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  entryHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  moodContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
-  },
-  entryMood: {
-    fontSize: 28,
-  },
-  entryMenu: {
-    padding: 8,
-    borderRadius: 12,
-  },
-  entryDate: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-    letterSpacing: -0.2,
-  },
-  entryTime: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  entryText: {
-    fontSize: 15,
-    lineHeight: 22,
-    letterSpacing: 0.1,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 16,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  emptyStateButton: {
-    marginTop: 16,
-    width: '80%',
-  },
-  emptyStateGradient: {
-    paddingVertical: 14,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  emptyStateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

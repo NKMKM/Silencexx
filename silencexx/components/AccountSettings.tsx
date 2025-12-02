@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -92,7 +93,7 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
 
         {/* Avatar Card */}
         <Animated.View entering={FadeInDown.duration(400).delay(50)}>
-          <View style={[styles.avatarCard, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
+          <View style={[styles.avatarCard, { backgroundColor: isDark ? 'rgba(30, 41, 59, 1)' : 'rgba(255, 255, 255, 1)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
             <View style={styles.avatarSection}>
               <LinearGradient
                 colors={['#6366f1', '#a855f7']}
@@ -110,7 +111,7 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
                 {name}
               </Text>
               <View style={[styles.planBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' }]}>
-                <Ionicons name="diamond" size={14} color="#10b981" />
+                <Ionicons name="diamond" size={14} color="#10b981"  />
                 <Text style={[styles.planText, { color: '#10b981' }]}>Бесплатный план</Text>
               </View>
             </View>
@@ -122,7 +123,7 @@ export function AccountSettings({ onNavigateBack }: AccountSettingsProps) {
           <Text style={[styles.sectionTitle, { color: isDark ? '#cbd5e1' : '#475569' }]}>
             Личная информация
           </Text>
-          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
+          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(30, 41, 59, 1)' : 'rgba(255, 255, 255, 1)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)' }]}>
             <View style={styles.inputGroup}>
               <View style={[styles.inputIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.08)' }]}>
                 <Ionicons name="person-outline" size={20} color={isDark ? '#818cf8' : '#6366f1'} />
@@ -259,7 +260,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
-    borderRadius: 24,
+    borderRadius: Platform.OS === 'ios' ? 24 : 16,
     borderWidth: 1.5,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
@@ -310,7 +311,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 15,
     alignSelf: 'flex-start',
   },
   planText: {
@@ -325,7 +326,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: Platform.OS === 'ios' ? 24 : 16,
     borderWidth: 1.5,
     overflow: 'hidden',
     shadowColor: '#6366f1',
@@ -372,7 +373,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     paddingVertical: 18,
-    borderRadius: 24,
+    borderRadius: Platform.OS === 'ios' ? 24 : 16,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
@@ -391,7 +392,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     paddingVertical: 16,
-    borderRadius: 20,
+    borderRadius: Platform.OS === 'ios' ? 20 : 12,
     borderWidth: 1.5,
   },
   dangerButtonText: {
