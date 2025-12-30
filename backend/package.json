@@ -1,7 +1,7 @@
 {
   "name": "cloudmind-backend",
   "version": "1.0.0",
-  "description": "CloudMind AI Backend with Gemini API",
+  "description": "CloudMind AI Backend with Ollama Integration",
   "main": "src/server.ts",
   "scripts": {
     "dev": "ts-node src/server.ts",
@@ -16,22 +16,23 @@
   "keywords": [
     "ai",
     "mental-health",
-    "gemini",
+    "ollama",
     "express"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.17.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.15.6",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "undici": "^6.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

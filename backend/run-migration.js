@@ -57,6 +57,24 @@ async function runMigration() {
     await client.query(receiveCooldownSQL);
     console.log('✅ Receive cooldown added\n');
     
+    // 5. Voice messages
+    console.log('5️⃣ Adding voice messages support...');
+    const voiceMessagesSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_voice_messages.sql'),
+      'utf8'
+    );
+    await client.query(voiceMessagesSQL);
+    console.log('✅ Voice messages support added\n');
+    
+    // 6. Voice transcription and language support
+    console.log('6️⃣ Adding voice transcription and language support...');
+    const voiceTranscriptionSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_voice_transcription.sql'),
+      'utf8'
+    );
+    await client.query(voiceTranscriptionSQL);
+    console.log('✅ Voice transcription and language support added\n');
+    
     console.log('✅ All migrations completed successfully!\n');
     
   } catch (error) {

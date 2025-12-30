@@ -1,38 +1,113 @@
 # CloudMind Backend 🧠
 
-AI-powered backend для CloudMind приложения на базе Google Gemini API.
+AI-powered backend для CloudMind приложения на базе Ollama - локальной LLM платформы.
 
 ## 🚀 Технологии
 
 - **Node.js** + **Express** - веб-сервер
 - **TypeScript** - типизация
-- **Google Generative AI (Gemini)** - AI модель для чата
-- **dotenv** - управление переменными окружения
-- **ts-node** - выполнение TypeScript в dev режиме
+- **Ollama** - локальная LLM платформа (работает на вашем ПК)
+- **Axios** - HTTP клиент для Ollama
+- **PostgreSQL** - база данных
+- **JWT** - аутентификация
 
-## 📦 Установка
+## 🎯 Что такое Ollama?
+
+Ollama позволяет запускать большие языковые модели (LLMs) прямо на вашем компьютере. Это означает:
+
+✅ Полную приватность - ваши данные никуда не отправляются
+✅ Бесплатное использование - нет счетов за API
+✅ Полный контроль - выбирайте любую модель
+✅ Работает офлайн - интернет нужен только для загрузки модели
+
+## 📦 Быстрый Старт (5 минут)
+
+### 1. Установить Ollama
+
+- Скачайте с https://ollama.ai
+- Установите для вашей ОС (Windows, Mac, Linux)
+
+### 2. Загрузить Модель
+
+```bash
+ollama pull mistral
+```
+
+Доступные модели:
+- `mistral` - быстро, хорошо (рекомендуется)
+- `neural-chat` - отлично для разговоров
+- `openchat` - очень быстро
+- `zephyr` - умная, аккуратная
+
+### 3. Запустить Ollama
+
+```bash
+ollama serve
+```
+
+Оставьте терминал открытым!
+
+### 4. Запустить Backend
 
 ```bash
 npm install
-```
-
-## ⚙️ Настройка
-
-1. Создайте файл `.env` из шаблона:
-
-```bash
 cp .env.example .env
+npm run dev
 ```
 
-2. Получите API ключ Google Gemini:
-   - Перейдите на https://ai.google.dev/
-   - Создайте проект и получите API ключ
-   - Скопируйте ключ в `.env`:
+Готово! 🎉
+
+## ⚙️ Детальная Настройка
+
+Смотрите подробные инструкции:
+- [OLLAMA_QUICKSTART.md](./OLLAMA_QUICKSTART.md) - быстрый старт
+- [OLLAMA_SETUP.md](./OLLAMA_SETUP.md) - полная документация
 
 ```env
-GEMINI_API_KEY=your_actual_api_key_here
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
 PORT=3000
 NODE_ENV=development
+```
+
+## 🔗 API Endpoints
+
+### Основные роуты чата
+
+```
+POST /api/chat/send - Отправить сообщение AI
+POST /api/chat/with-voice - Чат с голосом
+GET /api/chats/list - Список чатов
+GET /api/chats/:chatId/messages - Сообщения чата
+```
+
+### Аутентификация
+
+```
+POST /api/auth/register - Регистрация
+POST /api/auth/login - Вход
+POST /api/auth/verify-otp - Проверка OTP
+POST /api/auth/logout - Выход
+```
+
+### Голос
+
+```
+POST /api/transcribe - Транскрипция аудио
+POST /api/synthesize - Синтез речи
+```
+
+### Другое
+
+```
+GET /health - Проверка здоровья сервера
+```
+
+## 📝 Переменные Окружения
+
+Обязательные:
+```env
+HTTPS_PROXY=http://username:password@proxy.example.com:8080
 ```
 
 ## 🏃 Запуск
@@ -92,9 +167,11 @@ npm start
 backend/
 ├── src/
 │   ├── server.ts      # Express сервер, endpoints
-│   ├── ai.ts          # Интеграция с Gemini AI
+│   ├── ai.ts          # Интеграция с Ollama AI
 │   └── config.ts      # Конфигурация (env variables)
 ├── .env.example       # Шаблон переменных окружения
+├── OLLAMA_SETUP.md    # Подробная документация Ollama
+├── OLLAMA_QUICKSTART.md # Быстрый старт
 ├── package.json
 └── tsconfig.json
 ```
@@ -160,15 +237,26 @@ ngrok http 3000
 
 | Переменная | Описание | Обязательно | По умолчанию |
 |------------|----------|-------------|--------------|
-| `GEMINI_API_KEY` | API ключ Google Gemini | Да | - |
+| `OLLAMA_URL` | URL Ollama сервера | Нет | http://localhost:11434 |
+| `OLLAMA_MODEL` | Модель для Ollama | Нет | mistral |
 | `PORT` | Порт сервера | Нет | 3000 |
 | `NODE_ENV` | Окружение (development/production) | Нет | development |
+| `DB_HOST` | PostgreSQL хост | Нет | localhost |
+| `DB_PORT` | PostgreSQL порт | Нет | 5432 |
+| `DB_NAME` | Имя БД | Нет | cloudmind |
+| `DB_USER` | Пользователь БД | Нет | postgres |
+| `DB_PASSWORD` | Пароль БД | Нет | - |
+| `JWT_SECRET` | Секрет для JWT токенов | Да | - |
 
 ## 🐛 Troubleshooting
 
-**Ошибка "GEMINI_API_KEY not configured":**
-- Проверьте, что `.env` файл существует в папке `backend/`
-- Убедитесь, что в `.env` указан валидный API ключ
+**Ошибка "Connection refused to localhost:11434":**
+- Убедитесь, что Ollama запущена: `ollama serve`
+- Проверьте, что `OLLAMA_URL` верно указан в `.env`
+
+**Ошибка "Model not found":**
+- Выполните: `ollama pull mistral`
+- Проверьте, что `OLLAMA_MODEL` совпадает с установленной моделью
 
 **Ошибка "Network Error" во фронтенде:**
 - Проверьте, что backend запущен (`npm run dev`)
@@ -187,46 +275,53 @@ npm install
 MIT
 
 
-> **Node.js + TypeScript API для AI интеграции с Gemini**
+> **Node.js + TypeScript API для AI интеграции с Ollama**
 
 ## 🚀 Быстрый старт
 
-### 1. Установка зависимостей
+### 1. Установить Ollama
+
+- Скачайте с https://ollama.ai
+- Выполните: `ollama pull mistral`
+- Запустите: `ollama serve` (оставьте окно открытым)
+
+### 2. Установка зависимостей
 ```bash
 npm install
 ```
 
-### 2. Настройка переменных окружения
+### 3. Настройка переменных окружения
 ```bash
 cp .env.example .env
 ```
 
-Добавьте ваш Gemini API ключ в `.env`:
+Обновите `.env`:
 ```
-GEMINI_API_KEY=your_gemini_api_key_here
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
 PORT=3000
 NODE_ENV=development
 ```
 
-**Как получить Gemini API ключ:**
-1. Перейти на https://aistudio.google.com/apikey
-2. Нажать "Create API key"
-3. Скопировать ключ в `.env`
-
-### 3. Запуск сервера
+### 4. Запуск сервера
 
 **Development режим (с автоперезагрузкой):**
 ```bash
 npm run dev
 ```
 
-**Production режим:**
+Проверьте: http://localhost:3000/health
+
+**Production:**
 ```bash
 npm run build
 npm start
 ```
 
-Сервер запустится на `http://localhost:3000`
+## 📚 Документация
+
+- [OLLAMA_QUICKSTART.md](./OLLAMA_QUICKSTART.md) - Быстрый старт за 5 минут
+- [OLLAMA_SETUP.md](./OLLAMA_SETUP.md) - Полная документация, оптимизация, GPU
 
 ## 📡 API Endpoints
 
@@ -252,7 +347,7 @@ GET /health
 POST /api/chat
 ```
 
-Отправляет сообщение пользователя в Gemini и получает эмпатичный ответ.
+Отправляет сообщение пользователя в Ollama и получает эмпатичный ответ.
 
 **Body:**
 ```json
@@ -418,7 +513,7 @@ curl -X POST http://localhost:3000/api/journal \
 ## 🔧 Как работает внутри
 
 ### AI System Prompt
-Сервер использует специальный system prompt для Gemini, который:
+Сервер использует специальный system prompt для Ollama, который:
 - ✅ Настраивает AI на эмпатичные ответы
 - ✅ Определяет ключевые слова кризиса
 - ✅ Рекомендует обращение к профессионалам
@@ -489,7 +584,8 @@ curl -X POST http://localhost:3000/api/journal \
 
 | Переменная | Описание | Пример |
 |-----------|---------|--------|
-| `GEMINI_API_KEY` | Ключ API Google Gemini | `AIzaSy...` |
+| `OLLAMA_URL` | URL Ollama сервера | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Модель для Ollama | `mistral` |
 | `PORT` | Порт сервера | `3000` |
 | `NODE_ENV` | Окружение | `development` \| `production` |
 
@@ -497,11 +593,13 @@ curl -X POST http://localhost:3000/api/journal \
 
 ## 🐛 Решение проблем
 
-### "GEMINI_API_KEY не установлен"
+### "Connection refused to localhost:11434"
 ```
-⚠️ GEMINI_API_KEY не установлен в .env файле
+❌ Ollama не запущена или недоступна
 ```
-**Решение:** Добавьте ключ в `.env` файл.
+**Решение:** 
+1. Убедитесь, что Ollama запущена: `ollama serve`
+2. Проверьте URL в `.env`: `OLLAMA_URL=http://localhost:11434`
 
 ### "Cannot POST /api/chat"
 **Решение:** Убедитесь, что:
@@ -509,8 +607,11 @@ curl -X POST http://localhost:3000/api/journal \
 2. URL правильный (без лишних слэшей)
 3. Body в формате JSON
 
-### "Timeout при запросе к AI"
-**Решение:** Gemini может работать медленнее на некоторых запросах. Увеличьте timeout в клиенте.
+### "Model not found"
+**Решение:**
+1. Выполните: `ollama pull mistral`
+2. Проверьте, что модель установлена: `ollama list`
+3. Обновите `OLLAMA_MODEL` в `.env`
 
 ---
 
@@ -540,8 +641,11 @@ npm run dev
 
 ### Docker
 ```bash
+# Убедитесь, что Ollama запущена на хосте
+# Или используйте Docker для Ollama
+
 docker build -t cloudmind-backend .
-docker run -p 3000:3000 -e GEMINI_API_KEY=your_key cloudmind-backend
+docker run -p 3000:3000 -e OLLAMA_URL=http://host.docker.internal:11434 cloudmind-backend
 ```
 
 ### Heroku

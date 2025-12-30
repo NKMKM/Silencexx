@@ -1,19 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
 import { Input } from './ui/Input';
@@ -41,41 +39,31 @@ export function LoginPage({
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
   
-  const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
-
-  const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  
+  const contentTranslateY = useSharedValue(0);
 
   const handleInputFocus = (offset: number) => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        y: offset,
-        animated: true,
-      });
-    }, 50);
+    // Поднимаем форму при фокусе
+    contentTranslateY.value = withTiming(-120, { duration: 300 });
   };
 
   const handleInputBlur = () => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        y: 0,
-        animated: true,
-      });
-    }, 50);
+    // Опускаем форму при потере фокуса
+    contentTranslateY.value = withTiming(0, { duration: 300 });
   };
 
   const handleLogin = async () => {
     let emailError = '';
     let passwordError = '';
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
     if (!email) {
       emailError = 'Введите email';
-    } else if (!isValidEmail(email)) {
+    } else if (!emailRegex.test(email)) {
       emailError = 'Неверный формат email';
     }
 
@@ -138,12 +126,7 @@ export function LoginPage({
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 100}
-      enabled={true}
-    >
+    <View style={styles.container}>
       <View style={styles.gradient}>
         <AnimatedGradient
           lightColors={['#fafbfc', '#f8fafc', '#f5f7fa']}
@@ -153,19 +136,18 @@ export function LoginPage({
         <FloatingClouds />
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
-            ref={scrollViewRef}
-            contentContainerStyle={[
+          <Animated.View
+            style={[
               styles.scrollContent,
               { 
-                paddingTop: Math.max(insets.top + 40, 60), 
-                paddingBottom: Math.max(insets.bottom + 280, 280) 
-              }
+                flex: 1,
+                justifyContent: 'center',
+                paddingHorizontal: 24,
+              },
+              useAnimatedStyle(() => ({
+                transform: [{ translateY: contentTranslateY.value }],
+              })),
             ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-            scrollEnabled={true}
           >
             {/* Header */}
             <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
@@ -288,10 +270,10 @@ export function LoginPage({
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
+          </Animated.View>
         </TouchableWithoutFeedback>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

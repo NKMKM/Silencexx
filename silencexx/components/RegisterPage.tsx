@@ -1,19 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
 import { Input } from './ui/Input';
@@ -39,27 +37,20 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', name: '', password: '', confirmPassword: '' });
 
-  const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
+  
+  const contentTranslateY = useSharedValue(0);
 
   const handleInputFocus = (offset: number) => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        y: offset,
-        animated: true,
-      });
-    }, 50);
+    // Поднимаем форму при фокусе
+    contentTranslateY.value = withTiming(-100, { duration: 300 });
   };
 
   const handleInputBlur = () => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        y: 0,
-        animated: true,
-      });
-    }, 50);
+    // Опускаем форму при потере фокуса
+    contentTranslateY.value = withTiming(0, { duration: 300 });
   };
 
   const isValidEmail = (email: string): boolean => {
@@ -170,12 +161,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 100}
-      enabled={true}
-    >
+    <View style={styles.container}>
       <View style={styles.gradient}>
         <AnimatedGradient
           lightColors={['#fafbfc', '#f8fafc', '#f5f7fa']}
@@ -185,19 +171,18 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
         <FloatingClouds />
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView 
-            ref={scrollViewRef}
-            contentContainerStyle={[
+          <Animated.View
+            style={[
               styles.scrollContent,
               { 
-                paddingTop: Math.max(insets.top + 40, 60), 
-                paddingBottom: Math.max(insets.bottom + 280, 280) 
-              }
+                flex: 1,
+                justifyContent: 'center',
+                paddingHorizontal: 24,
+              },
+              useAnimatedStyle(() => ({
+                transform: [{ translateY: contentTranslateY.value }],
+              })),
             ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-            scrollEnabled={true}
           >
             {/* Back Button */}
             {step !== 'email' && (
@@ -431,10 +416,10 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
+          </Animated.View>
         </TouchableWithoutFeedback>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

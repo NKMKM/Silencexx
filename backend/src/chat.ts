@@ -5,6 +5,11 @@ import { verifyToken } from './auth';
 /**
  * POST /api/chat/create
  * Создать новый чат
+ * 
+ * Требования по изоляции:
+ * - Каждый чат строго привязан к userId
+ * - is_first_message инициализируется как true
+ * - История не наследуется от предыдущего чата
  */
 export const createChat = async (req: Request, res: Response) => {
   try {
@@ -17,21 +22,31 @@ export const createChat = async (req: Request, res: Response) => {
 
     const decoded = verifyToken(token);
     const userId = decoded.userId;
-    const isTemporary = req.body.isTemporary || false; // Флаг временного чата
+    const isTemporary = req.body.isTemporary || false;
     console.log(`👤 Creating chat for user ID: ${userId}, temporary: ${isTemporary}`);
 
-    // Создаем новый чат с флагом is_temporary
+    // Создаем новый чат:
+    // - user_id для строгой изоляции
+    // - is_first_message = true (флаг первого сообщения)
+    // - is_temporary флаг
+    // - created_at/updated_at для отслеживания
     const chatResult = await query(
-      'INSERT INTO chat_id (user_id, is_temporary) VALUES ($1, $2) RETURNING id',
-      [userId, isTemporary]
+      `INSERT INTO chat_id (user_id, is_temporary, is_first_message, created_at, updated_at) 
+       VALUES ($1, $2, $3, NOW(), NOW()) 
+       RETURNING id, is_first_message, created_at`,
+      [userId, isTemporary, true]
     );
 
     const chatId = chatResult.rows[0].id;
-    console.log(`✅ Chat created successfully with ID: ${chatId}`);
+    const isFirstMessage = chatResult.rows[0].is_first_message;
+    console.log(`✅ Chat created successfully with ID: ${chatId} (isFirstMessage: ${isFirstMessage})`);
+    console.log(`📝 Chat history starts empty - no inheritance from previous chats`);
 
     res.json({
       success: true,
       chatId,
+      isFirstMessage,
+      createdAt: chatResult.rows[0].created_at,
     });
   } catch (error) {
     console.error('❌ Create chat error:', error);
@@ -115,6 +130,13 @@ export const getChatList = async (req: Request, res: Response) => {
 /**
  * GET /api/chat/:chatId/messages
  * Получить все сообщения из конкретного чата
+ * 
+ * ТРЕБОВАНИЯ ИЗОЛЯЦИИ:
+ * - Проверяем что чат принадлежит userId (double-check)
+ * - Загружаем только сообщения этого конкретного чата и пользователя
+ * - При получении сообщений проверяем user_id в обеих таблицах
+ * - История передается в правильном порядке (ORDER BY senddate ASC)
+ * - Дублей быть не должно (нет UNION ALL, каждое сообщение от одного типа)
  */
 export const getChatMessages = async (req: Request, res: Response) => {
   try {
@@ -130,9 +152,9 @@ export const getChatMessages = async (req: Request, res: Response) => {
     const chatId = parseInt(req.params.chatId);
     console.log(`👤 User ${userId} requesting messages from chat ${chatId}`);
 
-    // Проверяем, что чат принадлежит пользователю
+    // ПЕРВАЯ ПРОВЕРКА: Убеждаемся что чат принадлежит пользователю
     const chatCheck = await query(
-      'SELECT id FROM chat_id WHERE id = $1 AND user_id = $2',
+      'SELECT id, user_id FROM chat_id WHERE id = $1 AND user_id = $2',
       [chatId, userId]
     );
 
@@ -140,34 +162,64 @@ export const getChatMessages = async (req: Request, res: Response) => {
       console.warn(`⚠️ Chat ${chatId} not found or access denied for user ${userId}`);
       return res.status(403).json({
         success: false,
-        error: 'Доступ запрещен',
+        error: 'Доступ запрещен. Чат не найден или принадлежит другому пользователю.',
       });
     }
 
-    // Получаем все сообщения из чата (пользователя и AI)
+    const chatUserId = chatCheck.rows[0].user_id;
+    console.log(`✅ Chat verification passed: chat user_id = ${chatUserId}, request user_id = ${userId}`);
+
+    // ВТОРАЯ ПРОВЕРКА: Получаем сообщения с проверкой user_id в обеих таблицах
+    // Это двойная изоляция - даже если в DB была ошибка, мы не выдадим чужие сообщения
     const messagesQuery = `
+      -- Сообщения пользователя
       SELECT 
         'user' as sender,
         message,
-        senddate
+        senddate,
+        audio_uri,
+        language,
+        transcript,
+        is_transcribed,
+        mood
       FROM user_chat
-      WHERE chat_id = $1
+      WHERE chat_id = $1 
+        AND user_id = $2
+      
       UNION ALL
+      
+      -- Ответы AI
       SELECT 
         'ai' as sender,
         message,
-        senddate
+        senddate,
+        tts_audio_uri as audio_uri,
+        language,
+        NULL as transcript,
+        is_voice_response as is_transcribed,
+        mood
       FROM ai_response
-      WHERE chat_id = $1
+      WHERE chat_id = $1 
+        AND user_id = $2
+      
       ORDER BY senddate ASC
     `;
 
-    const result = await query(messagesQuery, [chatId]);
-    console.log(`✅ Found ${result.rows.length} messages in chat ${chatId}`);
+    const result = await query(messagesQuery, [chatId, userId]);
+    console.log(`✅ Found ${result.rows.length} messages in chat ${chatId} for user ${userId}`);
+    
+    // Логируем структуру для проверки
+    if (result.rows.length > 0) {
+      console.log(`📋 First message: ${result.rows[0].sender} at ${result.rows[0].senddate}`);
+      console.log(`📋 Last message: ${result.rows[result.rows.length - 1].sender} at ${result.rows[result.rows.length - 1].senddate}`);
+    }
 
     res.json({
       success: true,
       messages: result.rows,
+      chatId,
+      userId,
+      messageCount: result.rows.length,
     });
   } catch (error) {
     console.error('❌ Get chat messages error:', error);
@@ -181,6 +233,13 @@ export const getChatMessages = async (req: Request, res: Response) => {
 /**
  * POST /api/chat/:chatId/message
  * Сохранить сообщение пользователя в чат
+ * 
+ * ТРЕБОВАНИЯ:
+ * - Проверяем что чат принадлежит userId
+ * - Сохраняем user_id для каждого сообщения (двойная изоляция)
+ * - Сохраняем mood если указано
+ * - Обновляем is_first_message флаг на чате
+ * - Валидируем mood перед сохранением
  */
 export const saveChatMessage = async (req: Request, res: Response) => {
   try {
@@ -192,7 +251,7 @@ export const saveChatMessage = async (req: Request, res: Response) => {
     const decoded = verifyToken(token);
     const userId = decoded.userId;
     const chatId = parseInt(req.params.chatId);
-    const { message, sender } = req.body;
+    const { message, sender, mood } = req.body;
 
     if (!message || !sender) {
       return res.status(400).json({
@@ -201,29 +260,43 @@ export const saveChatMessage = async (req: Request, res: Response) => {
       });
     }
 
+    // Валидация mood enum
+    const validMoods = ['Happy', 'Neutral', 'Sad', 'Anxious', 'Angry', 'Low', 'Stressed', null, undefined];
+    if (mood && !validMoods.includes(mood)) {
+      return res.status(400).json({
+        success: false,
+        error: `Недопустимое значение mood. Допустимые: ${validMoods.filter(m => m).join(', ')}`,
+      });
+    }
+
     // Проверяем, что чат принадлежит пользователю
     const chatCheck = await query(
-      'SELECT id FROM chat_id WHERE id = $1 AND user_id = $2',
+      'SELECT id, is_first_message FROM chat_id WHERE id = $1 AND user_id = $2',
       [chatId, userId]
     );
 
     if (chatCheck.rows.length === 0) {
       return res.status(403).json({
         success: false,
-        error: 'Доступ запрещен',
+        error: 'Доступ запрещен. Чат не найден или принадлежит другому пользователю.',
       });
     }
 
-    // Сохраняем сообщение
+    const isFirstMessage = chatCheck.rows[0].is_first_message;
+    console.log(`💾 Saving message to chat ${chatId}: isFirstMessage=${isFirstMessage}, sender=${sender}`);
+
+    // Сохраняем сообщение с user_id (двойная изоляция)
     if (sender === 'user') {
       await query(
-        'INSERT INTO user_chat (chat_id, message, senddate) VALUES ($1, $2, NOW())',
-        [chatId, message]
+        `INSERT INTO user_chat (chat_id, user_id, message, senddate, mood) 
+         VALUES ($1, $2, $3, NOW(), $4)`,
+        [chatId, userId, message, mood || null]
       );
     } else if (sender === 'ai') {
       await query(
-        'INSERT INTO ai_response (chat_id, message, senddate) VALUES ($1, $2, NOW())',
-        [chatId, message]
+        `INSERT INTO ai_response (chat_id, user_id, message, senddate, mood) 
+         VALUES ($1, $2, $3, NOW(), $4)`,
+        [chatId, userId, message, mood || null]
       );
     } else {
       return res.status(400).json({
@@ -232,8 +305,19 @@ export const saveChatMessage = async (req: Request, res: Response) => {
       });
     }
 
+    // После первого сообщения переключаем флаг
+    if (isFirstMessage && sender === 'user') {
+      await query(
+        'UPDATE chat_id SET is_first_message = false, updated_at = NOW() WHERE id = $1 AND user_id = $2',
+        [chatId, userId]
+      );
+      console.log(`✅ First message flag switched to false for chat ${chatId}`);
+    }
+
     res.json({
       success: true,
+      isFirstMessage,
+      savedMood: mood || null,
     });
   } catch (error) {
     console.error('❌ Save chat message error:', error);

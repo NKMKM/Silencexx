@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { handleSessionTerminated, handleUnauthorized } from './sessionHandler';
 
 // Пытаемся загрузить ngrok URL из файла
@@ -20,9 +21,19 @@ const getApiUrl = () => {
       return ngrokConfig.apiUrl;
     }
     
-    // Приоритет 2: Локальный IP адрес (если в одной сети)
-    console.log('📡 Using local network IP');
-    return 'http://192.168.100.120:3000/api';
+    // Приоритет 2: Используем localhost для веб, и локальный IP для мобильного
+    // Это правильнее, чем угадывать IP
+    const isWeb = Platform.OS === 'web';
+    if (isWeb) {
+      console.log('📱 Web platform, using localhost');
+      return 'http://localhost:3000/api';
+    } else {
+      // Для мобильного - используем локальный IP или ngrok
+      console.log('📡 Mobile platform, using local network IP');
+      // Если вы знаете IP своей машины, замените здесь
+      // В противном случае используйте ngrok или создайте ngrok-url.json
+      return 'http://192.168.100.120:3000/api';
+    }
   }
   
   // Для продакшена замените на ваш реальный API URL
@@ -35,7 +46,7 @@ console.log('🔌 API URL:', API_URL);
 // Создаем axios инстанс
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 200000, // 200 seconds - match backend timeout for Ollama responses
   headers: {
     'Content-Type': 'application/json',
   },
@@ -101,6 +112,11 @@ export interface ChatRequest {
   mood?: string;
   conversationHistory?: ChatMessage[];
   chatId?: number;
+  audioUri?: string; // Добавляем URI голосового сообщения
+  isVoiceMessage?: boolean; // Флаг голосового сообщения
+  language?: string; // Язык сообщения
+  transcript?: string; // Транскрипция голоса
+  isTranscribed?: boolean; // Статус транскрипции
 }
 
 export interface ChatResponse {
@@ -122,6 +138,12 @@ export interface ChatHistoryMessage {
   sender: 'user' | 'ai';
   message: string;
   senddate: string;
+  audio_uri?: string;
+  language?: string;
+  transcript?: string;
+  is_transcribed?: boolean;
+  tts_audio_uri?: string;
+  is_voice_response?: boolean;
 }
 
 export interface CrisisDetectionRequest {
@@ -603,6 +625,68 @@ export const inboxApi = {
   },
 };
 
+// Voice Message API
+export interface VoiceMessageRequest {
+  audioBase64: string;
+  recognizedText?: string;
+  conversationHistory?: ChatMessage[];
+  chatId?: number;
+  mimeType?: string;
+}
+
+export interface VoiceMessageResponse {
+  success: boolean;
+  recognizedText: string;
+  response: string;
+  isCrisis?: boolean;
+  audioUrl?: string;
+  requestId?: string;
+}
+
+export const voiceApi = {
+  /**
+   * Отправить голосовое сообщение
+   */
+  sendVoiceMessage: async (request: VoiceMessageRequest): Promise<VoiceMessageResponse> => {
+    try {
+      console.log('🎤 Sending voice message...');
+      const response = await api.post<VoiceMessageResponse>('/chat/voice', request);
+      console.log('✅ Voice message processed:', response.data.recognizedText);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error sending voice message:', error);
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.message || 
+          'Failed to process voice message. Please try again.';
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Только распознать речь (без обработки)
+   */
+  recognizeAudio: async (audioBase64: string, language: string = 'en-US'): Promise<{ text: string; confidence: number }> => {
+    try {
+      console.log('🎙️ Recognizing audio...');
+      const response = await api.post<{ text: string; confidence: number }>('/chat/recognize', {
+        audioBase64,
+        language,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error recognizing audio:', error);
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.message || 
+          'Failed to recognize audio. Please try again.';
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
+  },
+};
+
 // Journal API (diary)
 export const journalApi = {
   /**
@@ -645,7 +729,165 @@ export const journalApi = {
   },
 };
 
-export default chatApi;
+/**
+ * API для голосовых сообщений
+ */
+const voiceApi = {
+  /**
+   * Отправить голосовое сообщение
+   */
+  sendVoiceMessage: async (
+    chatId: number,
+    audioUri: string,
+    duration: number,
+    size: number,
+    mimeType: string,
+    mood?: string,
+    transcript?: string
+  ) => {
+    try {
+      const formData = new FormData();
+      formData.append('chatId', chatId.toString());
+      formData.append('duration', duration.toString());
+      formData.append('size', size.toString());
+      formData.append('mimeType', mimeType);
 
-// Экспорт axios инстанса для прямого доступа (OAuth, Auth endpoints)
-export { api as axiosInstance };
+      if (mood) {
+        formData.append('mood', mood);
+      }
+
+      if (transcript) {
+        formData.append('transcript', transcript);
+      }
+
+      // Добавляем аудиофайл
+      const uriParts = audioUri.split('.');
+      const fileExtension = uriParts[uriParts.length - 1];
+
+      formData.append('audio', {
+        uri: audioUri,
+        type: mimeType,
+        name: `voice_${Date.now()}.${fileExtension}`,
+      } as any);
+
+      const response = await api.post('/voice-messages', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      console.log('✅ Voice message sent successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error sending voice message:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Загрузить голосовые сообщения из чата
+   */
+  getVoiceMessages: async (chatId: number, limit: number = 50, offset: number = 0) => {
+    try {
+      const response = await api.get('/voice-messages', {
+        params: {
+          chatId,
+          limit,
+          offset,
+        },
+      });
+
+      console.log(`✅ Loaded ${response.data.messages.length} voice messages`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error loading voice messages:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Скачать голосовое сообщение
+   */
+  downloadVoiceMessage: async (messageId: string) => {
+    try {
+      const response = await api.get(`/voice-messages/${messageId}`, {
+        responseType: 'blob',
+      });
+
+      console.log('✅ Voice message downloaded successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error downloading voice message:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Удалить голосовое сообщение
+   */
+  deleteVoiceMessage: async (messageId: string) => {
+    try {
+      const response = await api.delete(`/voice-messages/${messageId}`);
+
+      console.log('✅ Voice message deleted successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error deleting voice message:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить метаданные голосового сообщения
+   */
+  getVoiceMessageMetadata: async (messageId: string) => {
+    try {
+      const response = await api.get(`/voice-messages/${messageId}/metadata`);
+
+      console.log('✅ Voice message metadata retrieved successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting voice message metadata:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Транскрибировать голосовое сообщение
+   */
+  transcribeVoiceMessage: async (messageId: string) => {
+    try {
+      const response = await api.post(`/voice-messages/${messageId}/transcribe`);
+
+      console.log('✅ Voice message transcribed successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error transcribing voice message:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Синтезировать речь из текста (TTS)
+   */
+  synthesizeSpeech: async (text: string, language: string = 'ru') => {
+    try {
+      const response = await api.post('/voice-messages/synthesize', {
+        text,
+        language,
+      });
+
+      console.log('✅ Speech synthesized successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error synthesizing speech:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+};
+
+export default chatApi;
+export { voiceApi };
+
+// Экспорт axios инстанса для прямого доступа (OAuth, Auth endpoints, VoiceService)
+export { api, api as axiosInstance };

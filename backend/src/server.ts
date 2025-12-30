@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { config } from './config';
-import { generateAIResponse, detectCrisisKeywords, analyzeMood } from './ai';
+import { generateAIResponse, detectCrisisKeywords, analyzeMood, aiTranscribeVoice } from './ai';
 import { 
   register, 
   login, 
@@ -29,8 +29,20 @@ import {
   canSendMessage,
   markMessageAsRead
 } from './inbox';
+import {
+  transcribeAudio,
+  synthesizeSpeech,
+  processChatWithVoice,
+  getSupportedLanguages
+} from './voice';
 import { query } from './db'; // Добавляем импорт query
 import './db'; // Initialize database connection
+import {
+  checkChatLimit,
+  checkFeatureAccess,
+  incrementLimitCounter,
+  getUserLimits,
+} from './subscriptions';
 
 const app = express();
 
@@ -70,9 +82,26 @@ app.post('/api/auth/logout', checkSessionActive, logout);
 app.post('/api/chats/create', checkSessionActive, createChat);
 app.get('/api/chats/list', checkSessionActive, getChatList);
 app.get('/api/chats/:chatId/messages', checkSessionActive, getChatMessages);
+
+// Voice routes
+app.post('/api/transcribe', transcribeAudio);
+app.post('/api/synthesize', synthesizeSpeech);
+app.post('/api/chat-with-voice', checkSessionActive, processChatWithVoice);
+app.get('/api/supported-languages', getSupportedLanguages);
+
+// Inbox
+app.post('/api/anonymous-message', canSendMessage, sendAnonymousMessage);
+app.get('/api/inbox/received', checkSessionActive, getReceivedMessages);
+app.patch('/api/inbox/messages/:messageId/read', checkSessionActive, markMessageAsRead);
+
+// Server info and startup logs
+const startupMessage = () => {
+  console.log('🚀 CloudMind Backend is starting up...');
+};
+startupMessage();
+
 app.post('/api/chats/:chatId/message', checkSessionActive, saveChatMessage);
 app.delete('/api/chats/:chatId', checkSessionActive, deleteChatHistory);
-
 // OAuth Routes
 app.post('/api/auth/oauth/google', googleAuth);
 app.post('/api/auth/oauth/apple', appleAuth);
@@ -91,27 +120,77 @@ app.post('/api/inbox/:id/mark-read', checkSessionActive, markMessageAsRead);
  * 
  * Body:
  * - message: string (обязательно) - Сообщение пользователя
- * - mood?: string - Текущее настроение
- * - conversationHistory?: Array<{role: 'user'|'model', text: string}> - История чата
+ * - mood?: string (enum) - Текущее настроение: Happy, Neutral, Sad, Anxious, Angry, Low, Stressed
+ * - conversationHistory?: Array - История чата
  * - chatId?: number - ID чата для сохранения истории
+ * 
+ * УЛУЧШЕНИЯ:
+ * - Валидация mood перед обработкой
+ * - Логирование информации о подписке пользователя
+ * - Правильное сохранение mood в БД
+ * - Гарантированная изоляция сообщений между пользователями
+ * - Автоматическое обновление счётчика лимита
  */
-app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) => {
+app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, res: Response) => {
   const requestId = Math.random().toString(36).substring(7);
   try {
-    const { message, mood, conversationHistory, chatId } = req.body;
+    const { 
+      message, 
+      mood, 
+      conversationHistory, 
+      chatId, 
+      audioUri, 
+      isVoiceMessage,
+      language = 'ru',
+      transcript,
+      isTranscribed
+    } = req.body;
 
     console.log(`\n🔹 [${requestId}] POST /api/chat - NEW REQUEST`);
 
-    if (!message || typeof message !== 'string') {
+    // ===== ВАЛИДАЦИЯ MOOD =====
+    // Валидируем mood перед тем как использовать его
+    const validMoods = ['Happy', 'Neutral', 'Sad', 'Anxious', 'Angry', 'Low', 'Stressed'];
+    let validatedMood: string | undefined = undefined;
+
+    if (mood) {
+      if (!validMoods.includes(mood)) {
+        console.warn(`⚠️ [${requestId}] Invalid mood value: "${mood}". Valid: ${validMoods.join(', ')}`);
+        return res.status(400).json({
+          success: false,
+          error: `Недопустимое значение mood. Допустимые: ${validMoods.join(', ')}`,
+        });
+      }
+      validatedMood = mood;
+      console.log(`📊 [${requestId}] Mood validated: ${validatedMood}`);
+    } else {
+      console.log(`📊 [${requestId}] No mood provided (undefined is acceptable)`);
+    }
+
+    // Если это голосовое сообщение без транскрипции - используем ИИ для транскрипции
+    let processedMessage = message;
+    if (isVoiceMessage && (!message || message.trim().length === 0) && audioUri) {
+      console.log(`🎤 [${requestId}] Voice message without transcription, using AI to transcribe...`);
+      try {
+        processedMessage = await aiTranscribeVoice({ conversationHistory });
+        console.log(`✅ [${requestId}] AI Transcription: "${processedMessage.substring(0, 80)}..."`);
+      } catch (error) {
+        console.warn(`⚠️ [${requestId}] AI Transcription failed, using fallback text`);
+        processedMessage = '🎙️ Голосовое сообщение (не распознано)';
+      }
+    }
+
+    if (!processedMessage || typeof processedMessage !== 'string') {
       console.warn(`⚠️ [${requestId}] Invalid message parameter`);
       return res.status(400).json({
         error: 'Требуется поле "message" (строка)',
       });
     }
 
-    // Получаем имя пользователя и userId из БД
+    // ===== ПОЛУЧЕНИЕ ИНФОРМАЦИИ О ПОЛЬЗОВАТЕЛЕ И ЕГО ПОДПИСКЕ =====
     let userName: string | undefined;
     let userId: number | undefined;
+    let subscriptionInfo: any = null;
     
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
@@ -122,36 +201,71 @@ app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) =>
         userId = decoded.userId;
         console.log(`👤 [${requestId}] User ID from token: ${userId}`);
         
+        // Получаем информацию о пользователе и его подписке
         const userQuery = `
-          SELECT ud.name 
+          SELECT 
+            ud.name,
+            st.slug as subscription_tier,
+            st.name as subscription_name,
+            st.daily_chat_limit,
+            st.daily_voice_limit,
+            st.daily_mood_analysis_limit,
+            st.daily_journal_limit,
+            st.priority_level,
+            (SELECT COUNT(*) FROM daily_limits 
+             WHERE user_id = u.id AND reset_date = CURRENT_DATE AND chat_requests_used > 0) as has_usage_today
           FROM users u
-          JOIN user_description ud ON u.user_desc_id = ud.id
+          LEFT JOIN user_description ud ON u.user_desc_id = ud.id
+          LEFT JOIN user_subscriptions us ON u.id = us.user_id
+          LEFT JOIN subscription_tiers st ON us.tier_id = st.id
           WHERE u.id = $1
         `;
         const userResult = await query(userQuery, [userId]);
         
-        console.log(`📊 [${requestId}] Query result rows:`, userResult.rows.length);
-        console.log(`📊 [${requestId}] Query result:`, userResult.rows);
+        console.log(`📊 [${requestId}] User query result rows:`, userResult.rows.length);
         
-        if (userResult.rows.length > 0 && userResult.rows[0].name) {
-          userName = userResult.rows[0].name;
-          console.log(`✅👤 [${requestId}] User name from DB: "${userName}"`);
+        if (userResult.rows.length > 0) {
+          const userData = userResult.rows[0];
+          
+          if (userData.name) {
+            userName = userData.name;
+            console.log(`✅👤 [${requestId}] User name from DB: "${userName}"`);
+          }
+          
+          // Логируем информацию о подписке
+          if (userData.subscription_tier) {
+            subscriptionInfo = {
+              tier: userData.subscription_tier,
+              tierName: userData.subscription_name,
+              dailyChatLimit: userData.daily_chat_limit,
+              dailyVoiceLimit: userData.daily_voice_limit,
+              dailyMoodLimit: userData.daily_mood_analysis_limit,
+              dailyJournalLimit: userData.daily_journal_limit,
+              priority: userData.priority_level,
+            };
+            console.log(`💳 [${requestId}] Subscription Info:`);
+            console.log(`   Tier: ${subscriptionInfo.tierName} (${subscriptionInfo.tier})`);
+            console.log(`   Daily Chat Limit: ${subscriptionInfo.dailyChatLimit}`);
+            console.log(`   Has usage today: ${userData.has_usage_today > 0 ? 'YES' : 'NO'}`);
+          } else {
+            console.log(`⚠️ [${requestId}] No subscription found - user may be Free tier or uninitialized`);
+          }
         } else {
-          console.log(`⚠️ [${requestId}] No name found in DB`);
+          console.log(`⚠️ [${requestId}] No user data found in DB`);
         }
       }
     } catch (error) {
-      console.warn(`⚠️ [${requestId}] Could not get user name:`, error);
+      console.warn(`⚠️ [${requestId}] Could not get user info:`, error);
     }
 
-    console.log(`📨 [${requestId}] User message: "${message.substring(0, 50)}..."`);
+    console.log(`📨 [${requestId}] User message: "${processedMessage.substring(0, 50)}..."`);
     if (conversationHistory) {
       console.log(`📜 [${requestId}] History size: ${conversationHistory.length}`);
     }
 
-    console.log(`⏳ [${requestId}] Calling generateAIResponse...`);
-    const response = await generateAIResponse(message, {
-      mood,
+    console.log(`⏳ [${requestId}] Calling generateAIResponse with mood=${validatedMood || 'undefined'}...`);
+    const response = await generateAIResponse(processedMessage, {
+      mood: validatedMood, // Передаём валидированное значение
       conversationHistory,
       userName,
     });
@@ -183,33 +297,54 @@ app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) =>
     console.log(`🤖 [${requestId}] AI response length: ${response.response.length}`);
     console.log(`🤖 [${requestId}] AI preview: "${response.response.substring(0, 80)}..."`);
 
-    // Сохраняем сообщения в БД если указан chatId
+    // ===== СОХРАНЕНИЕ СООБЩЕНИЙ В БД =====
     if (chatId && userId) {
       try {
-        console.log(`💾 [${requestId}] Saving messages to chat ${chatId}`);
+        console.log(`💾 [${requestId}] Saving messages to chat ${chatId} with mood=${validatedMood || 'null'}`);
         
-        // Проверяем что чат принадлежит пользователю
+        // Проверяем что чат принадлежит пользователю (двойная проверка безопасности)
         const chatCheck = await query(
-          'SELECT id FROM chat_id WHERE id = $1 AND user_id = $2',
+          'SELECT id, is_first_message FROM chat_id WHERE id = $1 AND user_id = $2',
           [chatId, userId]
         );
 
         if (chatCheck.rows.length > 0) {
-          // Сохраняем сообщение пользователя
+          const isFirstMessage = chatCheck.rows[0].is_first_message;
+          
+          // Сохраняем сообщение пользователя с user_id и mood
+          if (isVoiceMessage && audioUri) {
+            await query(
+              `INSERT INTO user_chat (chat_id, user_id, message, senddate, audio_uri, language, transcript, is_transcribed, mood) 
+               VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)`,
+              [chatId, userId, processedMessage, audioUri, language, transcript || processedMessage, isTranscribed || true, validatedMood || null]
+            );
+          } else {
+            await query(
+              `INSERT INTO user_chat (chat_id, user_id, message, senddate, language, mood) 
+               VALUES ($1, $2, $3, NOW(), $4, $5)`,
+              [chatId, userId, processedMessage, language, validatedMood || null]
+            );
+          }
+          
+          // Сохраняем ответ AI с user_id и mood
           await query(
-            'INSERT INTO user_chat (chat_id, message, senddate) VALUES ($1, $2, NOW())',
-            [chatId, message]
+            `INSERT INTO ai_response (chat_id, user_id, message, senddate, language, mood) 
+             VALUES ($1, $2, $3, NOW(), $4, $5)`,
+            [chatId, userId, response.response, language, validatedMood || null]
           );
           
-          // Сохраняем ответ AI
-          await query(
-            'INSERT INTO ai_response (chat_id, message, senddate) VALUES ($1, $2, NOW())',
-            [chatId, response.response]
-          );
+          // Обновляем is_first_message флаг если это первое сообщение
+          if (isFirstMessage) {
+            await query(
+              'UPDATE chat_id SET is_first_message = false, updated_at = NOW() WHERE id = $1 AND user_id = $2',
+              [chatId, userId]
+            );
+            console.log(`✅ [${requestId}] First message flag updated to false`);
+          }
           
-          console.log(`✅ [${requestId}] Messages saved to database`);
+          console.log(`✅ [${requestId}] Messages saved to database with user isolation`);
         } else {
-          console.warn(`⚠️ [${requestId}] Chat ${chatId} not found or access denied`);
+          console.warn(`⚠️ [${requestId}] Chat ${chatId} not found or access denied for user ${userId}`);
         }
       } catch (saveError) {
         console.error(`❌ [${requestId}] Error saving messages:`, saveError);
@@ -221,10 +356,51 @@ app.post('/api/chat', checkSessionActive, async (req: Request, res: Response) =>
       success: true,
       response: response.response,
       isCrisis: response.isCrisis,
-      mood: response.mood,
+      mood: validatedMood, // Возвращаем валидированное значение mood
       suggestViewCalendar,
       requestId,
+      subscription: subscriptionInfo, // Добавляем информацию о подписке в ответ
     });
+    
+    // ===== УВЕЛИЧЕНИЕ СЧЁТЧИКА ЛИМИТА =====
+    // После успешного ответа уменьшаем лимит запросов пользователя
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token && userId) {
+      try {
+        const decoded = verifyToken(token);
+        console.log(`📊 [${requestId}] Incrementing chat request counter for user ${decoded.userId}...`);
+        
+        const limitResult = await incrementLimitCounter(decoded.userId, 'chat_requests');
+        console.log(`✅ [${requestId}] Counter incremented:`, limitResult);
+        
+        // Логируем текущее состояние лимитов
+        try {
+          const limitsQuery = `
+            SELECT 
+              dl.chat_requests_used,
+              st.daily_chat_limit,
+              (st.daily_chat_limit - dl.chat_requests_used) as remaining_requests,
+              dl.reset_date
+            FROM daily_limits dl
+            JOIN user_subscriptions us ON dl.user_id = us.user_id
+            JOIN subscription_tiers st ON us.tier_id = st.id
+            WHERE dl.user_id = $1 AND dl.reset_date = CURRENT_DATE
+          `;
+          const currentLimits = await query(limitsQuery, [decoded.userId]);
+          if (currentLimits.rows.length > 0) {
+            const limits = currentLimits.rows[0];
+            console.log(`📈 [${requestId}] Current limits for user ${decoded.userId}:`);
+            console.log(`   Used: ${limits.chat_requests_used}/${limits.daily_chat_limit}`);
+            console.log(`   Remaining: ${limits.remaining_requests}`);
+            console.log(`   Reset at: ${limits.reset_date}`);
+          }
+        } catch (limitsError) {
+          console.warn(`⚠️ [${requestId}] Could not log current limits:`, limitsError);
+        }
+      } catch (e) {
+        console.warn(`⚠️ [${requestId}] Could not increment chat request counter:`, e);
+      }
+    }
     
     console.log(`✨ [${requestId}] Response sent successfully\n`);
   } catch (error) {
@@ -290,10 +466,40 @@ app.post('/api/detect-crisis', (req: Request, res: Response) => {
 });
 
 /**
+ * Middleware для проверки функции анализа настроения
+ */
+const checkMoodAnalysisLimit = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No token provided' });
+    }
+
+    const decoded = verifyToken(token);
+    const access = await checkFeatureAccess(decoded.userId, 'mood_analysis');
+
+    if (!access.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: access.reason,
+        limits: access.limitsInfo,
+      });
+    }
+
+    (req as any).userLimits = access.limitsInfo;
+    (req as any).userId = decoded.userId;
+    next();
+  } catch (error) {
+    console.error('❌ Error in checkMoodAnalysisLimit:', error);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+/**
  * POST /api/analyze-mood
  * Анализирует текст и определяет эмоциональное состояние
  */
-app.post('/api/analyze-mood', async (req: Request, res: Response) => {
+app.post('/api/analyze-mood', checkSessionActive, checkMoodAnalysisLimit, async (req: Request, res: Response) => {
   try {
     const { text } = req.body;
 
@@ -306,6 +512,11 @@ app.post('/api/analyze-mood', async (req: Request, res: Response) => {
     console.log(`🎭 Анализ настроения: ${text.substring(0, 50)}...`);
 
     const analysis = await analyzeMood(text);
+
+    // Увеличиваем счётчик анализа настроения
+    if ((req as any).userId) {
+      await incrementLimitCounter((req as any).userId, 'mood_analysis');
+    }
 
     res.json({
       success: true,
@@ -321,10 +532,40 @@ app.post('/api/analyze-mood', async (req: Request, res: Response) => {
 });
 
 /**
+ * Middleware для проверки функции журнала
+ */
+const checkJournalLimit = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No token provided' });
+    }
+
+    const decoded = verifyToken(token);
+    const access = await checkFeatureAccess(decoded.userId, 'journal');
+
+    if (!access.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: access.reason,
+        limits: access.limitsInfo,
+      });
+    }
+
+    (req as any).userLimits = access.limitsInfo;
+    (req as any).userId = decoded.userId;
+    next();
+  } catch (error) {
+    console.error('❌ Error in checkJournalLimit:', error);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+/**
  * POST /api/journal
  * Обрабатывает запись в журнал с AI анализом
  */
-app.post('/api/journal', async (req: Request, res: Response) => {
+app.post('/api/journal', checkSessionActive, checkJournalLimit, async (req: Request, res: Response) => {
   try {
     const { thoughts } = req.body;
 
@@ -344,6 +585,11 @@ app.post('/api/journal', async (req: Request, res: Response) => {
       `Я написал в своём журнал это:\n\n${thoughts}`,
       {}
     );
+
+    // Увеличиваем счётчик записей в журнал
+    if ((req as any).userId) {
+      await incrementLimitCounter((req as any).userId, 'journal_entries');
+    }
 
     res.json({
       success: true,
@@ -526,7 +772,7 @@ app.listen(PORT, () => {
 ╠══════════════════════════════════════════════════════╣
 ║  Port: ${PORT}                                     ║
 ║  Environment: ${config.nodeEnv}                     ║
-║  Gemini API: ${config.geminiApiKey ? '✅ Готов' : '❌ Не настроен'}                              ║
+║  Ollama API: ${config.ollamaUrl ? '✅ Готов' : '❌ Не настроен'}                              ║
 ╠══════════════════════════════════════════════════════╣
 ║  Endpoints:                                          ║
 ║  ✓ GET  /health                                      ║
@@ -547,8 +793,43 @@ app.listen(PORT, () => {
 ║  ✓ POST /api/detect-crisis                           ║
 ║  ✓ POST /api/analyze-mood                            ║
 ║  ✓ POST /api/journal                                 ║
+║                                                      ║
+║  Subscriptions:                                      ║
+║  ✓ GET /api/subscription/limits                      ║
 ╚══════════════════════════════════════════════════════╝
   `);
+});
+
+// Subscription Routes
+/**
+ * GET /api/subscription/limits
+ * Получить информацию о лимитах пользователя
+ */
+app.get('/api/subscription/limits', checkSessionActive, async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No token' });
+    }
+
+    const decoded = verifyToken(token);
+    const limits = await getUserLimits(decoded.userId);
+
+    if (!limits) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      limits,
+    });
+  } catch (error) {
+    console.error('Error getting user limits:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get subscription limits',
+    });
+  }
 });
 
 export default app;

@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments } from 'expo-router';
 import { authApi } from '@/services/api';
+import { speechRecognitionService } from '@/services/SpeechRecognition';
 
 // Публичные страницы, где не нужна проверка авторизации
 const PUBLIC_ROUTES = ['/', '/login', '/register', '/otp'];
@@ -86,6 +87,25 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
   useEffect(() => {
     console.log('🔐 [SessionProvider] Initializing session monitoring');
+
+    // Initialize speech recognition with API key from backend
+    const initializeSpeechRecognition = async () => {
+      try {
+        // Try to get API key from backend or environment
+        // For now, the service should be initialized with env variables
+        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_SPEECH_API_KEY || '';
+        if (apiKey) {
+          speechRecognitionService.setApiKey(apiKey);
+          console.log('🎤 [SessionProvider] Speech recognition initialized');
+        } else {
+          console.warn('⚠️ [SessionProvider] No GOOGLE_SPEECH_API_KEY found');
+        }
+      } catch (error) {
+        console.error('❌ [SessionProvider] Failed to initialize speech recognition:', error);
+      }
+    };
+
+    initializeSpeechRecognition();
 
     // Подписка на изменения состояния приложения
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {

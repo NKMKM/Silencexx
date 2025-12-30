@@ -10,19 +10,28 @@ import {
   Keyboard,
   ActivityIndicator,
   TouchableWithoutFeedback,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInLeft, FadeInRight, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AudioPlayer } from './AudioPlayer';
+import { VoiceMessageDisplay } from './VoiceMessageDisplay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
 import { VoiceAssistant } from './VoiceAssistant';
 import { ChatSidebar } from './ChatSidebar';
 import { CrisisDetectionModal } from './CrisisDetectionModal';
 import { DisclaimerModal } from './DisclaimerModal';
-import chatApi, { ChatMessage } from '@/services/api';
+import { VoiceRecordingInput } from './VoiceRecordingInput';
+import chatApi, { ChatMessage, voiceApi } from '@/services/api';
 import { useCrisisDetection } from '@/hooks/useCrisisDetection';
 import { useDisclaimerState } from '@/hooks/useDisclaimerState';
+import { useVoiceMessages } from '@/hooks/useVoiceMessages';
+import { useVoiceMessagesWithLanguage } from '@/hooks/useVoiceMessagesWithLanguage';
+import { SupportedLanguage } from '@/services/VoiceService';
 
 interface Message {
   id: number;
@@ -30,6 +39,13 @@ interface Message {
   sender: 'user' | 'ai';
   timestamp: Date;
   isTyping?: boolean;
+  audioUri?: string; // Для голосовых сообщений
+  isVoiceMessage?: boolean; // Флаг что это голосовое сообщение
+  language?: string; // Язык сообщения
+  transcript?: string; // Транскрипция
+  isTranscribed?: boolean; // Статус транскрипции
+  ttsAudioUri?: string; // TTS аудиоответ ИИ
+  isVoiceResponse?: boolean; // ИИ голосовой ответ
 }
 
 interface Chat {
@@ -37,6 +53,44 @@ interface Chat {
   title: string;
   preview: string;
   timestamp: Date;
+}
+
+/**
+ * Автоматически определяет язык текста
+ */
+function detectLanguageFromText(text: string): SupportedLanguage {
+  if (!text || text.trim().length === 0) return 'ru'; // По умолчанию русский
+  
+  const sample = text.substring(0, 50).toLowerCase();
+  
+  // Русский: кириллица
+  if (/[а-яё]/i.test(sample)) return 'ru';
+  
+  // Китайский: иероглифы
+  if (/[\u4e00-\u9fff]/i.test(sample)) return 'zh';
+  
+  // Японский: хирагана, катакана
+  if (/[\u3040-\u309f\u30a0-\u30ff]/i.test(sample)) return 'ja';
+  
+  // Английский: распространенные англ. слова или много букв a-z
+  if (sample.includes('the ') || sample.includes('a ') || sample.includes('is ') || /[a-z]{5,}/i.test(sample)) {
+    // Если нет других признаков - это английский
+    if (!/[а-яё]/i.test(sample) && !/[\u4e00-\u9fff]/i.test(sample)) return 'en';
+  }
+  
+  // Испанский/Французский: специфичные буквы
+  if (/[àáâãäèéêëìíîïòóôõöùúûüñ]/i.test(sample)) {
+    // Французский буквы
+    if (/[àâäèêëîïôöûüœæ]/i.test(sample)) return 'fr';
+    // Испанский буквы
+    if (/[áéíóúñü¿¡]/i.test(sample)) return 'es';
+  }
+  
+  // Немецкий: умляуты
+  if (/[äöüßÄÖÜẞ]/i.test(sample)) return 'de';
+  
+  // По умолчанию русский
+  return 'ru';
 }
 
 export function ChatPage() {
@@ -58,27 +112,37 @@ export function ChatPage() {
   const [crisisMessage, setCrisisMessage] = useState('');
   const [isCrisis, setIsCrisis] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('ru');
   const flatListRef = useRef<FlatList>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIndexRef = useRef(0);
   const fullTextRef = useRef('');
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inputTranslateY = useSharedValue(0);
+  const textInputRef = useRef<TextInput>(null);
+  const panResponderRef = useRef<any>(null);
+  const scrollStartYRef = useRef<number>(0);
+  const keyboardDismissThresholdRef = useRef<number>(50);
   const { detectCrisis } = useCrisisDetection();
   const { shouldShowDisclaimer, setShouldShowDisclaimer } = useDisclaimerState();
+  
+  // Voice message hooks with language support
+  const voiceMessages = useVoiceMessagesWithLanguage();
+
+  const keyboardTranslateY = useSharedValue(0);
 
   const tabBarOffset = useMemo(() => -5 + insets.bottom, [insets.bottom]);
 
   const listPaddingBottom = useMemo(() => {
     const inputAreaHeight = 110;
+    const keyboardSpacing = 8;
     const bottomSpacer = isKeyboardVisible
-      ? Math.max(0, keyboardHeight - insets.bottom)
+      ? Math.max(0, keyboardHeight - insets.bottom) + keyboardSpacing
       : tabBarOffset + 12;
     return inputAreaHeight + bottomSpacer;
   }, [isKeyboardVisible, keyboardHeight, insets.bottom, tabBarOffset]);
 
   const inputAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: 0 }],
+    transform: [{ translateY: keyboardTranslateY.value }],
   }));
 
   const mapChats = useCallback((items: any[]): Chat[] => {
@@ -97,7 +161,7 @@ export function ChatPage() {
       });
   }, []);
 
-  // Показываем дисклеймер если пользователь только что вошел
+  // Show disclaimer if user just logged in
   useEffect(() => {
     if (shouldShowDisclaimer) {
       setShowDisclaimer(true);
@@ -105,7 +169,8 @@ export function ChatPage() {
     }
   }, [shouldShowDisclaimer]);
 
-    useEffect(() => {
+  // Initialize chat and load messages
+  useEffect(() => {
     const initChat = async () => {
       try {
         console.log('[Chat] Loading chat list...');
@@ -116,14 +181,10 @@ export function ChatPage() {
           const loadedChats = mapChats(listResponse.chats || []);
           setChats(loadedChats);
 
-          if (loadedChats.length > 0) {
-            const firstChat = loadedChats[0];
-            setCurrentChatId(firstChat.id);
-            setActiveChatId(firstChat.id);
-            await loadChatMessages(firstChat.id);
-          } else {
-            setMessages([]);
-          }
+          // Don't auto-load the first chat - start with empty new chat
+          setCurrentChatId(null);
+          setActiveChatId(null);
+          setMessages([]);
         } else {
           console.log('[Chat] No chats - will create on first message');
         }
@@ -134,18 +195,13 @@ export function ChatPage() {
     initChat();
   }, [mapChats]);
 
-    useEffect(() => {
-    const animateInput = (toValue: number) => {
-      inputTranslateY.value = withTiming(toValue, { duration: 220 });
-    };
-
+  useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
         setKeyboardVisible(true);
         const height = Math.max(0, e.endCoordinates.height - insets.bottom);
         setKeyboardHeight(height);
-        animateInput(0);
       }
     );
     const keyboardDidHideListener = Keyboard.addListener(
@@ -153,7 +209,6 @@ export function ChatPage() {
       () => {
         setKeyboardVisible(false);
         setKeyboardHeight(0);
-        animateInput(0);
       }
     );
 
@@ -161,174 +216,85 @@ export function ChatPage() {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
-  }, [inputTranslateY]);
+  }, [insets.bottom]);
 
-    useEffect(() => {
-    if (Platform.OS !== 'android') return;
+  // Reliable auto-scroll using native callbacks and requestAnimationFrame
+  const performAutoScroll = useCallback(() => {
+    if (messages.length === 0) return;
+    
+    // Use requestAnimationFrame for smooth animation frame
+    const scrollTask = requestAnimationFrame(() => {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    });
+    return () => cancelAnimationFrame(scrollTask);
+  }, [messages.length]);
 
-    const backHandler = (event: any) => {
-      if (isKeyboardVisible) {
-        Keyboard.dismiss();
-        return true;
-      }
-      return false;
-    };
+  // Auto-scroll on message content changes
+  useEffect(() => {
+    performAutoScroll();
+  }, [messages.length, performAutoScroll]);
 
-    const subscription = Keyboard.addListener('keyboardDidHide', () => {
-          });
-
-    const BackHandler = require('react-native').BackHandler;
-    const backSub = BackHandler.addEventListener('hardwareBackPress', backHandler);
-
-    return () => {
-      backSub.remove();
-      subscription.remove();
-    };
-  }, [isKeyboardVisible]);
-
-  const handleSendMessage = async () => {
-    const trimmedMessage = message.trim();
-    if (!trimmedMessage || isLoading) return;
-
-    const newUserMessage: Message = {
-      id: Date.now(),
-      text: trimmedMessage,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-
-    const updatedMessages = [...messages, newUserMessage];
-    setMessages(updatedMessages);
-    setMessage('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-
-    try {
-      let chatIdToUse = activeChatId;
-
-      if (!chatIdToUse) {
-        console.log('Creating chat on-demand before sending message');
-        try {
-          const chatResponse = await chatApi.createChat(isTemporaryChat);
-          if (chatResponse.success && chatResponse.chatId) {
-            chatIdToUse = chatResponse.chatId;
-            setActiveChatId(chatResponse.chatId);
-            setCurrentChatId(chatResponse.chatId);
-            console.log((isTemporaryChat ? 'Temporary' : 'Regular') + ' chat created: ' + chatResponse.chatId);
-          }
-        } catch (error) {
-          console.warn('Could not create chat, sending without chatId:', error);
-        }
-      }
-
-      const conversationHistory: ChatMessage[] = updatedMessages.map((msg) => ({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        text: msg.text,
-      }));
-
-      console.log('Sending message with chatId:', chatIdToUse);
-      const response = await chatApi.sendMessage({
-        message: trimmedMessage,
-        conversationHistory,
-        chatId: chatIdToUse || undefined,
+  // Auto-scroll when keyboard appears
+  useEffect(() => {
+    if (isKeyboardVisible && messages.length > 0) {
+      const task = requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
       });
-      console.log('Message sent, response received');
-
-      const aiResponse: Message = {
-        id: Date.now() + 1,
-        text: '',
-        sender: 'ai',
-        timestamp: new Date(),
-        isTyping: true,
-      };
-
-      setMessages((prev) => [...prev, aiResponse]);
-
-      fullTextRef.current = response.response || '';
-      currentIndexRef.current = 0;
-
-      if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current);
-      }
-
-      typingIntervalRef.current = setInterval(() => {
-        if (currentIndexRef.current < fullTextRef.current.length) {
-          const nextChar = fullTextRef.current[currentIndexRef.current];
-
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg && lastMsg.isTyping) {
-              lastMsg.text += nextChar;
-            }
-            return updated;
-          });
-
-          currentIndexRef.current++;
-
-          if (currentIndexRef.current % 10 === 0) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }
-        } else {
-          if (typingIntervalRef.current) {
-            clearInterval(typingIntervalRef.current);
-            typingIntervalRef.current = null;
-          }
-
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg) {
-              lastMsg.isTyping = false;
-            }
-            return updated;
-          });
-
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      }, 30) as ReturnType<typeof setInterval>;
-
-      if (response.isCrisis) {
-        console.log('Crisis detected in conversation');
-        setCrisisMessage(trimmedMessage);
-        setIsCrisis(true);
-        setShowCrisisModal(true);
-      }
-
-      if (updatedMessages.length === 1) {
-        await refreshChatList();
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-
-      if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current);
-      }
-
-      setMessages((prev) => prev.filter((msg) => !msg.isTyping));
-
-      const errorText =
-        error instanceof Error
-          ? error.message
-          : 'Произошла ошибка, попробуйте снова. Если проблема повторяется, свяжитесь с поддержкой.';
-
-      const errorMessage: Message = {
-        id: Date.now(),
-        text: errorText,
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+      return () => cancelAnimationFrame(task);
     }
-  };
+  }, [isKeyboardVisible, messages.length]);
+
+  // PanResponder: ONLY for downward gesture to dismiss keyboard
+  // Gated to activate ONLY when keyboard is visible AND gesture is downward > 40px
+  useEffect(() => {
+    // Only create responder when keyboard is visible
+    if (!isKeyboardVisible) {
+      panResponderRef.current = null;
+      return;
+    }
+
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () => false,  // Don't capture initially
+      
+      onMoveShouldSetPanResponder: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+        // CLEAR GATE: Only activate for downward drag > 40px
+        // This prevents interference with normal FlatList scrolling
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        const isDownwardEnough = gestureState.dy > 40;  // Only downward, not upward
+        
+        // Return true only when BOTH conditions met
+        return isVertical && isDownwardEnough;
+      },
+      
+      onPanResponderMove: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+        // Smooth drag animation during gesture
+        const dragDistance = gestureState.dy;  // Positive when dragging down
+        const maxDrag = keyboardHeight;
+        const translation = Math.min(dragDistance, maxDrag);
+        keyboardTranslateY.value = translation;
+      },
+      
+      onPanResponderRelease: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+        // Dismiss if threshold reached (30% of keyboard height)
+        const dismissThreshold = keyboardHeight * 0.3;
+        
+        if (gestureState.dy > dismissThreshold) {
+          // Animate to full dismiss and close keyboard
+          keyboardTranslateY.value = withTiming(keyboardHeight, { duration: 200 });
+          setTimeout(() => {
+            Keyboard.dismiss();
+            keyboardTranslateY.value = 0;
+          }, 150);
+        } else {
+          // Return smoothly to open position if threshold not met
+          keyboardTranslateY.value = withTiming(0, { duration: 200 });
+        }
+      },
+    });
+    
+    panResponderRef.current = panResponder;
+  }, [isKeyboardVisible, keyboardHeight]);
+
   useEffect(() => {
     return () => {
       if (typingIntervalRef.current) {
@@ -337,8 +303,352 @@ export function ChatPage() {
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
+      // Cleanup voice recorder on unmount only
+      console.log('[ChatPage] Component unmounting - calling cleanup');
+      voiceMessages.cleanup();
     };
-  }, []);
+  }, []); // ВАЖНО: Empty dependency array - cleanup вызывается ТОЛЬКО при размонтировании
+
+  // Handle voice recording start
+  const handleVoiceRecordingStart = useCallback(async () => {
+    console.log('[ChatPage] handleVoiceRecordingStart called');
+    try {
+      await voiceMessages.startRecording();
+      console.log('[ChatPage] Recording started successfully');
+    } catch (error) {
+      console.error('[ChatPage] Error starting voice recording:', error);
+    }
+  }, [voiceMessages]);
+
+  // Helper function to send any message (text or voice)
+  const sendMessageInternal = useCallback(
+    async (text: string, isVoiceMessage: boolean = false, audioUri?: string, language?: SupportedLanguage) => {
+      if (!text.trim() || isLoading) return;
+
+      // Автоматически определяем язык если не указан
+      const detectedLanguage = language || detectLanguageFromText(text);
+      
+      // Обновляем выбранный язык если он был определен автоматически
+      if (!language && detectedLanguage !== selectedLanguage) {
+        setSelectedLanguage(detectedLanguage);
+        voiceMessages.setLanguage(detectedLanguage);
+      }
+
+      const newUserMessage: Message = {
+        id: Date.now(),
+        text,
+        sender: 'user',
+        timestamp: new Date(),
+        audioUri,
+        isVoiceMessage,
+        language: detectedLanguage,
+      };
+
+      const updatedMessages = [...messages, newUserMessage];
+      setMessages(updatedMessages);
+      if (!isVoiceMessage) {
+        setMessage('');
+      }
+      setIsLoading(true);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+
+      try {
+        let chatIdToUse = activeChatId;
+
+        if (!chatIdToUse) {
+          try {
+            const chatResponse = await chatApi.createChat(isTemporaryChat);
+            if (chatResponse.success && chatResponse.chatId) {
+              chatIdToUse = chatResponse.chatId;
+              setActiveChatId(chatResponse.chatId);
+              setCurrentChatId(chatResponse.chatId);
+            }
+          } catch (error) {
+            console.warn('Could not create chat:', error);
+          }
+        }
+
+        const conversationHistory: ChatMessage[] = updatedMessages.map((msg) => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          text: msg.text,
+        }));
+
+        const response = await chatApi.sendMessage({
+          message: text,
+          conversationHistory,
+          chatId: chatIdToUse || undefined,
+          audioUri: audioUri,
+          isVoiceMessage: isVoiceMessage,
+          language: detectedLanguage,
+          isTranscribed: isVoiceMessage,
+        });
+
+        const aiResponse: Message = {
+          id: Date.now() + 1,
+          text: '',
+          sender: 'ai',
+          timestamp: new Date(),
+          isTyping: true,
+          language: detectedLanguage,
+        };
+
+        setMessages((prev) => [...prev, aiResponse]);
+        fullTextRef.current = response.response || '';
+        currentIndexRef.current = 0;
+
+        if (typingIntervalRef.current) {
+          clearInterval(typingIntervalRef.current);
+        }
+
+        typingIntervalRef.current = setInterval(() => {
+          if (currentIndexRef.current < fullTextRef.current.length) {
+            const nextChar = fullTextRef.current[currentIndexRef.current];
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastMsg = updated[updated.length - 1];
+              if (lastMsg && lastMsg.isTyping) {
+                lastMsg.text += nextChar;
+              }
+              return updated;
+            });
+
+            currentIndexRef.current++;
+            flatListRef.current?.scrollToEnd({ animated: false });
+          } else {
+            if (typingIntervalRef.current) {
+              clearInterval(typingIntervalRef.current);
+              typingIntervalRef.current = null;
+            }
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastMsg = updated[updated.length - 1];
+              if (lastMsg) {
+                lastMsg.isTyping = false;
+                // Auto-speak AI response on voice input
+                if (isVoiceMessage) {
+                  voiceMessages.speakText(lastMsg.text, 'en');
+                }
+              }
+              return updated;
+            });
+
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 50);
+          }
+        }, 30) as ReturnType<typeof setInterval>;
+
+        if (response.isCrisis) {
+          setCrisisMessage(text);
+          setIsCrisis(true);
+          setShowCrisisModal(true);
+        }
+
+        if (updatedMessages.length === 1) {
+          await refreshChatList();
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+
+        if (typingIntervalRef.current) {
+          clearInterval(typingIntervalRef.current);
+        }
+
+        setMessages((prev) => prev.filter((msg) => !msg.isTyping));
+
+        const errorText =
+          error instanceof Error ? error.message : 'Failed to process message';
+
+        const errorMessage: Message = {
+          id: Date.now(),
+          text: errorText,
+          sender: 'ai',
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, activeChatId, isTemporaryChat, isLoading, voiceMessages]
+  );
+
+  // Handle voice recording stop and process
+  const handleVoiceRecordingStop = useCallback(async () => {
+    try {
+      const audioUri = await voiceMessages.stopRecording();
+      if (!audioUri) {
+        console.warn('[ChatPage] No audio recorded');
+        return;
+      }
+
+      console.log('[ChatPage] Audio recorded, URI:', audioUri.substring(0, 50));
+
+      // Add voice message bubble immediately (before text recognition)
+      const voiceMessage: Message = {
+        id: Date.now(),
+        text: '🎙️ Обработка голоса...',
+        sender: 'user',
+        timestamp: new Date(),
+        audioUri,
+        isVoiceMessage: true,
+      };
+      setMessages((prev) => [...prev, voiceMessage]);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Process audio to text
+      const recognizedText = await voiceMessages.processAudioToText(audioUri);
+      if (!recognizedText) {
+        console.warn('[ChatPage] Could not recognize speech');
+        // Update message to show error
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (lastMsg && lastMsg.id === voiceMessage.id) {
+            lastMsg.text = '❌ Не удалось распознать речь';
+          }
+          return updated;
+        });
+        return;
+      }
+
+      // Update message text with recognized text
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg && lastMsg.id === voiceMessage.id) {
+          lastMsg.text = recognizedText;
+        }
+        return updated;
+      });
+
+      // Auto-send voice message with TTS response
+      setTimeout(() => sendMessageInternal(recognizedText, true, audioUri), 100);
+    } catch (error) {
+      console.error('[ChatPage] Error processing voice message:', error);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg?.isVoiceMessage) {
+          lastMsg.text = '❌ Ошибка обработки голоса';
+        }
+        return updated;
+      });
+    }
+  }, [voiceMessages, sendMessageInternal]);
+
+  // Transcribe voice to text and insert into input field
+  const handleTranscribeVoice = useCallback(async () => {
+    console.log('[ChatPage] handleTranscribeVoice called');
+    try {
+      const audioUri = await voiceMessages.stopRecording();
+      if (!audioUri) {
+        console.warn('[ChatPage] No audio recorded for transcription');
+        return;
+      }
+
+      console.log('[ChatPage] Transcribing audio...');
+      const recognizedText = await voiceMessages.processAudioToText(audioUri);
+      
+      if (recognizedText) {
+        setMessage(recognizedText); // Insert transcribed text into input
+        console.log('[ChatPage] Text inserted into input:', recognizedText);
+      } else {
+        console.warn('[ChatPage] Could not transcribe speech');
+      }
+    } catch (error) {
+      console.error('[ChatPage] Error transcribing voice:', error);
+    }
+  }, [voiceMessages]);
+
+  // Send voice message directly without transcription
+  const handleSendVoiceMessage = useCallback(async () => {
+    console.log('[ChatPage] handleSendVoiceMessage called');
+    try {
+      const audioUri = await voiceMessages.stopRecording();
+      if (!audioUri) {
+        console.warn('[ChatPage] No audio recorded to send');
+        return;
+      }
+
+      console.log('[ChatPage] Sending voice message, URI:', audioUri.substring(0, 50));
+
+      // Add voice message bubble
+      const voiceMessage: Message = {
+        id: Date.now(),
+        text: '🎙️ Обработка голоса...',
+        sender: 'user',
+        timestamp: new Date(),
+        audioUri,
+        isVoiceMessage: true,
+        language: selectedLanguage,
+        isTranscribed: false,
+      };
+      setMessages((prev) => [...prev, voiceMessage]);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Process audio to text for AI response
+      let recognizedText = await voiceMessages.processAudioToText(audioUri);
+      
+      // If transcription failed, send as voice-only and let AI process it
+      if (!recognizedText) {
+        console.warn('[ChatPage] Speech recognition failed, sending as voice-only');
+        
+        // Update message showing transcription failed
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (lastMsg && lastMsg.id === voiceMessage.id) {
+            lastMsg.text = '🎙️ Голосовое сообщение (не распознано)';
+            lastMsg.transcript = undefined;
+            lastMsg.isTranscribed = false;
+          }
+          return updated;
+        });
+
+        // Send voice message without transcript - AI will process the audio directly
+        setTimeout(() => sendMessageInternal('', true, audioUri, selectedLanguage), 100);
+        return;
+      }
+
+      // Update message with recognized text and mark as transcribed
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg && lastMsg.id === voiceMessage.id) {
+          lastMsg.text = recognizedText;
+          lastMsg.transcript = recognizedText;
+          lastMsg.isTranscribed = true;
+        }
+        return updated;
+      });
+
+      // Send to AI with language support
+      setTimeout(() => sendMessageInternal(recognizedText, true, audioUri, selectedLanguage), 100);
+    } catch (error) {
+      console.error('[ChatPage] Error sending voice message:', error);
+    }
+  }, [voiceMessages, sendMessageInternal, selectedLanguage]);
+
+  // Send text message from input field
+  const handleSendMessage = async () => {
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || isLoading) return;
+
+    await sendMessageInternal(trimmedMessage, false);
+  };
 
     const loadChatMessages = async (chatId: number) => {
     try {
@@ -350,15 +660,18 @@ export function ChatPage() {
           id: index + 1,
           text: msg.message,
           sender: msg.sender,
-          timestamp: new Date(msg.senddate)
+          timestamp: new Date(msg.senddate),
+          audioUri: msg.audio_uri,
+          isVoiceMessage: !!msg.audio_uri,
+          language: msg.language,
+          transcript: msg.transcript,
+          isTranscribed: msg.is_transcribed,
+          ttsAudioUri: msg.tts_audio_uri,
+          isVoiceResponse: msg.is_voice_response,
         }));
         
         setMessages(loadedMessages);
         console.log('[Chat] Loaded', loadedMessages.length, 'messages');
-
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: false });
-        }, 50);
       }
     } catch (error) {
       console.error('[Chat] Error loading chat messages:', error);
@@ -491,7 +804,20 @@ export function ChatPage() {
             end={{ x: 1, y: 0 }}
             style={styles.messageUserBubble}
           >
-            <Text style={styles.messageUserText}>{item.text}</Text>
+            {/* Show voice message display if it's a voice message */}
+            {item.isVoiceMessage && item.audioUri ? (
+              <VoiceMessageDisplay
+                audioUri={item.audioUri}
+                transcript={item.transcript}
+                isTranscribed={item.isTranscribed}
+                language={item.language}
+                isUserMessage={true}
+                isDark={isDark}
+                timestamp={item.timestamp}
+              />
+            ) : (
+              <Text style={styles.messageUserText}>{item.text}</Text>
+            )}
           </LinearGradient>
         ) : (
           <View
@@ -507,6 +833,17 @@ export function ChatPage() {
               },
             ]}
           >
+            {/* Show voice response if available */}
+            {item.isVoiceResponse && item.ttsAudioUri ? (
+              <VoiceMessageDisplay
+                audioUri={item.ttsAudioUri}
+                isTranscribed={true}
+                language={item.language}
+                isUserMessage={false}
+                isDark={isDark}
+                timestamp={item.timestamp}
+              />
+            ) : null}
             <Text
               style={[
                 styles.messageAIText,
@@ -597,8 +934,12 @@ export function ChatPage() {
           onNewChat={handleNewChat}
           onDeleteChat={handleDeleteChat}
         />
+        {/* Chat Messages Container - No gesture here, gestures on messages container only */}
+        <View 
+          style={[{ flex: 1 }]}
+        >
 
-        {/* Сообщения или приветствие */}
+        {/* Messages or Welcome State */}
         {messages.length === 0 ? (
           <View style={[
             styles.emptyStateContainer,
@@ -642,81 +983,107 @@ export function ChatPage() {
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item) => item.id.toString()}
-            style={{ flex: 1 }}
+            style={{ flex: 1, width: '100%' }}
             contentContainerStyle={[
               styles.messagesList,
-              { paddingBottom: listPaddingBottom + 20, flexGrow: 1 }
+              { paddingBottom: listPaddingBottom + 40, flexGrow: 1 }
             ]}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="none"
+            showsVerticalScrollIndicator={true}
+            scrollIndicatorInsets={{ right: 1 }}
+            scrollEnabled={true}
+            nestedScrollEnabled={false}
+            scrollEventThrottle={16}
+            decelerationRate="normal"
+            removeClippedSubviews={true}
+            onLayout={() => {
+              // Auto-scroll when FlatList layout is measured
+              if (messages.length > 0) {
+                requestAnimationFrame(() => {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                });
+              }
+            }}
+            onContentSizeChange={() => {
+              // Auto-scroll when content size changes
+              if (messages.length > 0) {
+                flatListRef.current?.scrollToEnd({ animated: false });
+              }
+            }}
           />
         )}
 
-        {/* Input Area */}
+        </View>
+
+        {/* Voice Message Error Indicator */}
+        {voiceMessages.error && (
+          <View
+            style={[
+              styles.errorBanner,
+              { backgroundColor: isDark ? '#7f1d1d' : '#fee2e2' },
+            ]}
+          >
+            <Ionicons
+              name="alert-circle"
+              size={18}
+              color={isDark ? '#fca5a5' : '#dc2626'}
+            />
+            <Text
+              style={[
+                styles.errorText,
+                { color: isDark ? '#fecaca' : '#991b1b' },
+              ]}
+            >
+              {voiceMessages.error}
+            </Text>
+            <TouchableOpacity onPress={voiceMessages.clearError}>
+              <Ionicons
+                name="close"
+                size={18}
+                color={isDark ? '#fca5a5' : '#dc2626'}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input Area with Gesture Support */}
         <Animated.View
           style={[
             styles.inputContainer,
-            inputAnimatedStyle,
             {
               backgroundColor: isDark ? 'rgba(10, 12, 18, 0.85)' : 'rgba(20, 22, 30, 0.85)',
               paddingBottom: insets.bottom + 6,
               marginBottom: isKeyboardVisible
-                ? Math.max(8, keyboardHeight - insets.bottom + 8)
+                ? keyboardHeight - insets.bottom + 8
                 : tabBarOffset + 12,
               borderTopWidth: 1,
               borderTopColor: isDark ? 'rgba(99, 102, 241, 0.15)' : '#e2e8f0',
               shadowColor: isDark ? '#6366f1' : '#8b5cf6',
               shadowOffset: { width: 0, height: -4 },
               shadowOpacity: isDark ? 0.2 : 0.1,
-                shadowRadius: 12,
-                elevation: 8,
-              },
-            ]}>
+              shadowRadius: 12,
+              elevation: 8,
+              transform: [{ translateY: keyboardTranslateY }],
+            },
+          ]}
+          {...(panResponderRef.current?.panHandlers || {})}
+        >
           <View style={styles.inputWrapper}>
-            <View style={[styles.inputRow, { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : '#f1f5f9', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'transparent', borderWidth: 1 }]}>
-              <TouchableOpacity style={styles.attachButton}>
-                <Ionicons name="add" size={22} color={isDark ? '#94a3b8' : '#64748b'} />
-              </TouchableOpacity>
-              <TextInput
-                value={message}
-                onChangeText={setMessage}
-                placeholder="Message Pulsar AI"
-                placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
-                multiline
-                maxLength={500}
-                style={[
-                  styles.input,
-                  { color: isDark ? '#f1f5f9' : '#0f172a' },
-                ]}
-              />
-              <TouchableOpacity style={styles.voiceButton}>
-                <Ionicons name="mic" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={handleSendMessage}
-              disabled={!message.trim() || isLoading}
-              style={styles.sendButtonContainer}
-            >
-              <LinearGradient
-                colors={message.trim() && !isLoading ? ['#6366f1', '#a855f7'] : ['#475569', '#64748b']}
-                style={styles.sendButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons
-                    name="arrow-up"
-                    size={24}
-                    color="#fff"
-                  />
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+            <VoiceRecordingInput
+              message={message}
+              onMessageChange={setMessage}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              onRecordingStart={handleVoiceRecordingStart}
+              onTranscribe={handleTranscribeVoice}
+              onSendVoice={handleSendVoiceMessage}
+              isRecording={voiceMessages.isRecording}
+              isProcessing={voiceMessages.isProcessing}
+              recordingDuration={voiceMessages.recordingDuration}
+              audioLevel={voiceMessages.audioLevel}
+              isDark={isDark}
+            />
           </View>
         </Animated.View>
         <CrisisDetectionModal
@@ -1007,6 +1374,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
 
