@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { voiceRecorder } from '@/services/VoiceRecorder';
 
 interface AudioPlayerProps {
   audioUri: string;
@@ -17,17 +17,54 @@ export function AudioPlayer({ audioUri, isDark }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const scaleAnim = useSharedValue(1);
 
   useEffect(() => {
-    // Get duration of audio
+    // Get duration of audio using Expo AV
     const getDuration = async () => {
       try {
         console.log('[AudioPlayer] Loading audio duration for:', audioUri);
-        const durationMs = await voiceRecorder.getAudioDuration(audioUri);
-        const durationSeconds = Math.floor(durationMs / 1000);
-        setDuration(durationSeconds);
-        console.log('[AudioPlayer] Audio duration:', durationSeconds, 'seconds');
+        
+        // Set audio mode for playback
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+        
+        // Create sound object to get duration
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: audioUri },
+          { shouldPlay: false, volume: 1.0 },
+          (status) => {
+            if (status.isLoaded) {
+              const durationSeconds = Math.floor((status.durationMillis || 0) / 1000);
+              setDuration(durationSeconds);
+              
+              // Update current time during playback
+              if (status.isPlaying) {
+                const currentSeconds = Math.floor((status.positionMillis || 0) / 1000);
+                setCurrentTime(currentSeconds);
+              }
+              
+              // Auto-stop when finished
+              if (status.didJustFinish) {
+                console.log('[AudioPlayer] Playback finished');
+                setIsPlaying(false);
+                setCurrentTime(0);
+                newSound.setPositionAsync(0);
+              }
+              
+              console.log('[AudioPlayer] Audio duration:', durationSeconds, 'seconds');
+            }
+          }
+        );
+        
+        // Store sound for playback
+        setSound(newSound);
+        
       } catch (error) {
         console.error('[AudioPlayer] Error getting duration:', error);
         setDuration(0);
@@ -35,35 +72,51 @@ export function AudioPlayer({ audioUri, isDark }: AudioPlayerProps) {
     };
 
     getDuration();
+    
+    // Cleanup
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(() => {});
+      }
+    };
   }, [audioUri]);
 
   const handlePlayPress = async () => {
+    if (!sound) {
+      console.log('[AudioPlayer] Sound not loaded yet');
+      return;
+    }
+    
     try {
       if (isPlaying) {
         // Stop playing
         console.log('[AudioPlayer] Stopping playback');
+        await sound.pauseAsync();
+        await sound.setPositionAsync(0);
         setIsPlaying(false);
         setCurrentTime(0);
       } else {
+        // Ensure audio mode is set for playback
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+        
         // Play audio
-        console.log('[AudioPlayer] Starting playback from:', audioUri);
+        console.log('[AudioPlayer] Starting playback');
         scaleAnim.value = withTiming(0.95, { duration: 100 });
         setIsPlaying(true);
         
-        try {
-          // Play the audio file
-          await voiceRecorder.playAudio(audioUri);
-          console.log('[AudioPlayer] Audio playback started');
-          
-          scaleAnim.value = withTiming(1, { duration: 100 });
-        } catch (playError) {
-          console.error('[AudioPlayer] Error during playback:', playError);
-          setIsPlaying(false);
-          scaleAnim.value = withTiming(1, { duration: 100 });
-        }
+        // Set volume to maximum
+        await sound.setVolumeAsync(1.0);
+        await sound.playAsync();
+        
+        scaleAnim.value = withTiming(1, { duration: 100 });
       }
     } catch (error) {
-      console.error('[AudioPlayer] Error in handlePlayPress:', error);
+      console.error('[AudioPlayer] Error during playback:', error);
       setIsPlaying(false);
       scaleAnim.value = withTiming(1, { duration: 100 });
     }

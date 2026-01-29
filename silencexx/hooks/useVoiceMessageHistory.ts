@@ -229,6 +229,13 @@ export function useVoiceMessageHistory(userId: number, enableCache: boolean = tr
 
   /**
    * Отправить голосовое сообщение на сервер
+   * 
+   * НОВЫЙ PIPELINE:
+   * 1. Отправляет аудиофайл
+   * 2. Backend транскрибирует в текст (Whisper)
+   * 3. Backend отправляет текст в Ollama
+   * 4. Backend сохраняет оба сообщения в БД
+   * 5. Возвращает результат с обоими сообщениями (пользователя + ИИ)
    */
   const sendMessage = useCallback(
     async (
@@ -242,10 +249,26 @@ export function useVoiceMessageHistory(userId: number, enableCache: boolean = tr
       const messageId = `${Date.now()}_${Math.random()}`;
 
       try {
-        // Добавляем локальное сообщение в историю
+        // Импортируем voiceApi для использования нового endpoint
+        const { voiceApi } = await import('../services/api');
+        const { useAuth } = await import('./useAuthCheck');
+
+        // Получаем userId из localStorage/AsyncStorage
+        let currentUserId = userId;
+        if (!currentUserId) {
+          // Fallback: попробуем получить из токена
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          const userStr = await AsyncStorage.getItem('user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            currentUserId = user.id;
+          }
+        }
+
+        // Добавляем локальное сообщение в историю (оптимистичное обновление)
         const localMessage: VoiceMessageDisplayed = {
           id: messageId,
-          userId,
+          userId: currentUserId,
           chatId,
           audioUri,
           duration,
@@ -265,110 +288,106 @@ export function useVoiceMessageHistory(userId: number, enableCache: boolean = tr
         const updated = [...messages, localMessage];
         updateState(updated);
 
-        // Подготавливаем FormData для загрузки файла
-        const formData = new FormData();
-        formData.append('chatId', chatId.toString());
-        formData.append('audioUri', audioUri);
-        formData.append('duration', duration.toString());
-        formData.append('size', size.toString());
-        formData.append('mimeType', mimeType);
+        console.log(`🎤 Sending voice message to backend... (${size} bytes, ${duration}ms)`);
 
-        if (mood) {
-          formData.append('mood', mood);
-        }
+        // НОВЫЙ PIPELINE: используем processVoiceMessage который делает:
+        // 1. Транскрибирование (Whisper)
+        // 2. Ollama ответ
+        // 3. Сохранение в БД
+        // 4. Возврат результата
+        const response = await voiceApi.processVoiceMessage(
+          chatId,
+          currentUserId,
+          audioUri,
+          duration,
+          size,
+          mimeType,
+          'ru', // language
+          mood
+        );
 
-        // Загружаем с отслеживанием прогресса
-        const xhr = new XMLHttpRequest();
+        console.log('✅ Voice message processed successfully');
+        console.log(`   User transcription: "${response.userMessage.text}"`);
+        console.log(`   AI response: "${response.aiMessage.text.substring(0, 50)}..."`);
 
-        xhr.upload.addEventListener('progress', event => {
-          if (event.lengthComputable) {
-            const percentComplete = Math.round((event.loaded / event.total) * 100);
-            uploadProgressRef.current.set(messageId, percentComplete);
+        if (response.success && response.userMessage && response.aiMessage) {
+          // Создаем сообщение пользователя
+          const userMessage: VoiceMessageDisplayed = {
+            id: response.userMessage.id || messageId,
+            userId: currentUserId,
+            chatId,
+            audioUri: response.userMessage.audioUri,
+            text: response.userMessage.text, // Транскрибирование
+            duration,
+            size,
+            mimeType,
+            isTranscribed: true,
+            createdAt: response.userMessage.createdAt || new Date().toISOString(),
+            isLocal: false,
+            uploadProgress: 100,
+            sender: 'user',
+            isPlaying: false,
+            isPaused: false,
+            currentTime: 0,
+          };
 
-            // Обновляем UI
-            const updatedMsg = { ...localMessage, uploadProgress: percentComplete };
-            messagesRef.current.set(messageId, updatedMsg);
+          // Создаем сообщение ИИ
+          const aiMessage: VoiceMessageDisplayed = {
+            id: response.aiMessage.id?.toString() || `ai_${Date.now()}`,
+            userId: currentUserId,
+            chatId,
+            text: response.aiMessage.text, // Ответ от Ollama
+            duration: 0,
+            size: 0,
+            mimeType: 'text/plain',
+            isTranscribed: false,
+            createdAt: response.aiMessage.createdAt || new Date().toISOString(),
+            isLocal: false,
+            uploadProgress: 100,
+            sender: 'ai',
+            isPlaying: false,
+            isPaused: false,
+            currentTime: 0,
+          };
 
-            if (isMountedRef.current) {
-              const newMessages = messages.map(m =>
-                m.id === messageId ? updatedMsg : m
-              );
-              updateState(newMessages);
+          // Добавляем оба сообщения в историю
+          const newMessages = messages
+            .filter(m => m.id !== messageId) // Удаляем локальное
+            .concat([userMessage, aiMessage]); // Добавляем оба
+
+          messagesRef.current.delete(messageId);
+          messagesRef.current.set(userMessage.id, userMessage);
+          messagesRef.current.set(aiMessage.id, aiMessage);
+
+          updateState(newMessages);
+
+          // Сохраняем в кэш
+          const cacheKey = getCacheKey(chatId);
+          if (cacheKey) {
+            try {
+              const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+              await AsyncStorage.setItem(cacheKey, JSON.stringify(newMessages));
+            } catch (err) {
+              console.warn('Failed to update cache:', err);
             }
           }
-        });
 
-        return new Promise((resolve, reject) => {
-          xhr.onload = () => {
-            if (xhr.status === 200) {
-              try {
-                const response = JSON.parse(xhr.responseText) as SendVoiceMessageResponse;
-
-                if (response.success && response.message) {
-                  const serverMessage: VoiceMessageDisplayed = {
-                    ...response.message,
-                    sender: 'user',
-                    isPlaying: false,
-                    isPaused: false,
-                    currentTime: 0,
-                  };
-
-                  // Заменяем локальное сообщение на серверное
-                  const newMessages = messages.map(m =>
-                    m.id === messageId ? serverMessage : m
-                  );
-
-                  messagesRef.current.delete(messageId);
-                  if (serverMessage.id) {
-                    messagesRef.current.set(serverMessage.id, serverMessage);
-                  }
-
-                  updateState(newMessages);
-                  resolve(response.message);
-                } else {
-                  const error = new VoiceError(
-                    VOICE_ERROR_CODES.UPLOAD_FAILED,
-                    response.error || 'Failed to send message'
-                  );
-                  reject(error);
-                }
-              } catch (err) {
-                reject(new Error('Invalid server response'));
-              }
-            } else {
-              reject(new VoiceError(
-                VOICE_ERROR_CODES.UPLOAD_FAILED,
-                `Upload failed with status ${xhr.status}`
-              ));
-            }
-          };
-
-          xhr.onerror = () => {
-            reject(new VoiceError(
-              VOICE_ERROR_CODES.NETWORK_ERROR,
-              'Network error during upload'
-            ));
-          };
-
-          xhr.ontimeout = () => {
-            reject(new VoiceError(
-              VOICE_ERROR_CODES.TIMEOUT,
-              'Upload timeout'
-            ));
-          };
-
-          xhr.timeout = VOICE_CONSTRAINTS.UPLOAD_TIMEOUT;
-
-          xhr.open('POST', '/api/voice-messages');
-          // Authorization header будет добавлен в API interceptor
-          xhr.send(formData);
-        });
+          return userMessage;
+        } else {
+          const error = new VoiceError(
+            VOICE_ERROR_CODES.UPLOAD_FAILED,
+            response.error || 'Failed to process voice message'
+          );
+          throw error;
+        }
       } catch (err) {
         // Удаляем неудачно отправленное сообщение
         const newMessages = messages.filter(m => m.id !== messageId);
         updateState(newMessages);
 
         const error = err instanceof Error ? err : new Error('Failed to send message');
+        console.error('❌ Error sending voice message:', error);
+
         if (isMountedRef.current) {
           setError(error);
         }
@@ -376,7 +395,7 @@ export function useVoiceMessageHistory(userId: number, enableCache: boolean = tr
         throw error;
       }
     },
-    [userId, messages, updateState]
+    [userId, messages, updateState, getCacheKey]
   );
 
   /**

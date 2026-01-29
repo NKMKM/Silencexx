@@ -20,8 +20,14 @@ export const createChat = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
     }
 
-    const decoded = verifyToken(token);
-    const userId = decoded.userId;
+    let userId: number;
+    try {
+      const decoded = verifyToken(token);
+      userId = decoded.userId;
+    } catch (e) {
+      return res.status(401).json({ success: false, error: 'Невалидный токен' });
+    }
+
     const isTemporary = req.body.isTemporary || false;
     console.log(`👤 Creating chat for user ID: ${userId}, temporary: ${isTemporary}`);
 
@@ -48,11 +54,13 @@ export const createChat = async (req: Request, res: Response) => {
       isFirstMessage,
       createdAt: chatResult.rows[0].created_at,
     });
-  } catch (error) {
-    console.error('❌ Create chat error:', error);
+  } catch (error: any) {
+    console.error('❌ Create chat error:', error?.message || error);
+    console.error('❌ Full error:', JSON.stringify(error, null, 2));
     res.status(500).json({
       success: false,
       error: 'Ошибка при создании чата',
+      details: error?.message || error
     });
   }
 };
@@ -65,13 +73,20 @@ export const getChatList = async (req: Request, res: Response) => {
   try {
     console.log('📋 GET /api/chats/list - Getting chat list');
     const token = req.headers.authorization?.replace('Bearer ', '');
+    // ... verified token exists
     if (!token) {
-      console.warn('⚠️ No token provided for chat list');
-      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+        console.warn('⚠️ No token provided for chat list');
+        return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
     }
 
-    const decoded = verifyToken(token);
-    const userId = decoded.userId;
+    let userId: number;
+    try {
+      const decoded = verifyToken(token);
+      userId = decoded.userId;
+    } catch (e) {
+      return res.status(401).json({ success: false, error: 'Невалидный токен' });
+    }
+    
     console.log(`👤 Getting chats for user ID: ${userId}`);
 
     // Оптимизированный запрос с UNION и подзапросами
@@ -111,18 +126,24 @@ export const getChatList = async (req: Request, res: Response) => {
       LIMIT 50
     `;
 
-    const result = await query(chatsQuery, [userId]);
-    console.log(`✅ Found ${result.rows.length} chats`);
+    try {
+        const result = await query(chatsQuery, [userId]);
+        console.log(`✅ Found ${result.rows.length} chats`);
 
-    res.json({
-      success: true,
-      chats: result.rows,
-    });
-  } catch (error) {
+        res.json({
+          success: true,
+          chats: result.rows,
+        });
+    } catch (dbError: any) {
+        console.error('❌ Database error in getChatList:', dbError.message);
+        throw dbError;
+    }
+  } catch (error: any) {
     console.error('❌ Get chat list error:', error);
     res.status(500).json({
       success: false,
       error: 'Ошибка при получении списка чатов',
+      details: error.message
     });
   }
 };
@@ -147,8 +168,14 @@ export const getChatMessages = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
     }
 
-    const decoded = verifyToken(token);
-    const userId = decoded.userId;
+    let userId: number;
+    try {
+      const decoded = verifyToken(token);
+      userId = decoded.userId;
+    } catch (e) {
+      return res.status(401).json({ success: false, error: 'Невалидный токен' });
+    }
+
     const chatId = parseInt(req.params.chatId);
     console.log(`👤 User ${userId} requesting messages from chat ${chatId}`);
 
@@ -169,57 +196,112 @@ export const getChatMessages = async (req: Request, res: Response) => {
     const chatUserId = chatCheck.rows[0].user_id;
     console.log(`✅ Chat verification passed: chat user_id = ${chatUserId}, request user_id = ${userId}`);
 
-    // ВТОРАЯ ПРОВЕРКА: Получаем сообщения с проверкой user_id в обеих таблицах
-    // Это двойная изоляция - даже если в DB была ошибка, мы не выдадим чужие сообщения
+    // ВТОРАЯ ПРОВЕРКА: Получаем сообщения из ВСЕХ источников
+    // Комбинируем данные из:
+    // 1. messages (новая таблица для голосовых)
+    // 2. user_chat (старая таблица для текстовых сообщений пользователя)
+    // 3. ai_response (старая таблица для ответов AI)
     const messagesQuery = `
-      -- Сообщения пользователя
       SELECT 
-        'user' as sender,
-        message,
-        senddate,
-        audio_uri,
-        language,
-        transcript,
-        is_transcribed,
-        mood
-      FROM user_chat
-      WHERE chat_id = $1 
-        AND user_id = $2
-      
-      UNION ALL
-      
-      -- Ответы AI
-      SELECT 
-        'ai' as sender,
-        message,
-        senddate,
-        tts_audio_uri as audio_uri,
-        language,
-        NULL as transcript,
-        is_voice_response as is_transcribed,
-        mood
-      FROM ai_response
-      WHERE chat_id = $1 
-        AND user_id = $2
-      
-      ORDER BY senddate ASC
+        id::text as id,
+        chat_id,
+        role,
+        type,
+        text,
+        audio_url,
+        status,
+        created_at
+      FROM (
+        -- Новая таблица messages (голосовые и новые текстовые)
+        SELECT 
+          id::text as id,
+          chat_id,
+          role,
+          type,
+          text,
+          audio_url,
+          status,
+          created_at
+        FROM messages
+        WHERE chat_id = $1 AND user_id = $2
+        
+        UNION ALL
+        
+        -- Старые сообщения пользователя (user_chat)
+        SELECT 
+          id::text as id,
+          chat_id,
+          'user' as role,
+          'text' as type,
+          message as text,
+          NULL as audio_url,
+          'ready' as status,
+          senddate as created_at
+        FROM user_chat
+        WHERE chat_id = $1
+        
+        UNION ALL
+        
+        -- Старые ответы AI (ai_response)
+        SELECT 
+          id::text as id,
+          chat_id,
+          'assistant' as role,
+          'text' as type,
+          message as text,
+          NULL as audio_url,
+          'ready' as status,
+          senddate as created_at
+        FROM ai_response
+        WHERE chat_id = $1
+      ) AS all_messages
+      ORDER BY created_at ASC
     `;
 
-    const result = await query(messagesQuery, [chatId, userId]);
-    console.log(`✅ Found ${result.rows.length} messages in chat ${chatId} for user ${userId}`);
-    
-    // Логируем структуру для проверки
-    if (result.rows.length > 0) {
-      console.log(`📋 First message: ${result.rows[0].sender} at ${result.rows[0].senddate}`);
-      console.log(`📋 Last message: ${result.rows[result.rows.length - 1].sender} at ${result.rows[result.rows.length - 1].senddate}`);
+    let result;
+    try {
+      result = await query(messagesQuery, [chatId, userId]);
+    } catch (dbError: any) {
+      console.error('❌ Database query error:', dbError);
+      return res.status(500).json({
+        success: false,
+        error: 'Ошибка базы данных при получении сообщений',
+        details: dbError.message
+      });
     }
-
+    
+    // Map result to match ApiMessage interface expected by frontend
+    const mappedMessages = result.rows.map(row => {
+        // Convert local audio path to full URL if audio_url exists
+        let audioUrl = row.audio_url;
+        if (audioUrl && !audioUrl.startsWith('http')) {
+            // Get base URL from request or environment
+            const protocol = req.protocol;
+            const host = req.get('host');
+            audioUrl = `${protocol}://${host}/${audioUrl.replace(/\\/g, '/')}`;
+        }
+        
+        return {
+            id: row.id,
+            chat_id: row.chat_id,
+            user_id: userId, // Use the userId from the request since it's already verified
+            role: row.role, // 'user' or 'assistant'
+            type: row.type || 'text',
+            text: row.text || '',
+            audio_url: audioUrl,
+            status: row.status || 'ready',
+            created_at: row.created_at
+        };
+    });
+    
+    console.log(`✅ Found ${result.rows.length} messages in chat ${chatId} for user ${userId} (Source: messages table)`);
+    
     res.json({
       success: true,
-      messages: result.rows,
+      messages: mappedMessages,
       chatId,
       userId,
-      messageCount: result.rows.length,
+      messageCount: mappedMessages.length,
     });
   } catch (error) {
     console.error('❌ Get chat messages error:', error);
@@ -248,8 +330,14 @@ export const saveChatMessage = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
     }
 
-    const decoded = verifyToken(token);
-    const userId = decoded.userId;
+    let userId: number;
+    try {
+      const decoded = verifyToken(token);
+      userId = decoded.userId;
+    } catch (e) {
+      return res.status(401).json({ success: false, error: 'Невалидный токен' });
+    }
+
     const chatId = parseInt(req.params.chatId);
     const { message, sender, mood } = req.body;
 
@@ -341,8 +429,14 @@ export const deleteChat = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
     }
 
-    const decoded = verifyToken(token);
-    const userId = decoded.userId;
+    let userId: number;
+    try {
+      const decoded = verifyToken(token);
+      userId = decoded.userId;
+    } catch (e) {
+      return res.status(401).json({ success: false, error: 'Невалидный токен' });
+    }
+
     const chatId = parseInt(req.params.chatId);
     console.log(`👤 User ${userId} deleting chat ${chatId}`);
 

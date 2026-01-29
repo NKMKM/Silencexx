@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { query } from './db';
 import { Request, Response } from 'express';
 
@@ -249,12 +250,12 @@ export const register = async (req: Request, res: Response) => {
     
     const roleId = roleResult.rows[0].id;
 
-    // 3. Создать сессию с паролем
+    // 3. Создать сессию
     const sessionResult = await query(
-      `INSERT INTO session (session_ip, session_key, device_type, password, created_at, last_active, is_active)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
+      `INSERT INTO session (session_ip, session_key, device_type, created_at, last_active, is_active)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
        RETURNING id`,
-      [req.ip || 'unknown', hashedPassword, req.headers['user-agent'] || 'unknown', hashedPassword]
+      [req.ip || 'unknown', crypto.randomUUID(), req.headers['user-agent'] || 'unknown']
     );
     
     const sessionId = sessionResult.rows[0].id;
@@ -273,6 +274,14 @@ export const register = async (req: Request, res: Response) => {
     await query(
       `UPDATE session SET user_id = $1 WHERE id = $2`,
       [userId, sessionId]
+    );
+
+    // 4.2. Сохранить пароль в user_credentials (правильное место!)
+    await query(
+      `INSERT INTO user_credentials (user_id, password_hash)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id) DO UPDATE SET password_hash = $2`,
+      [userId, hashedPassword]
     );
 
     // 5. Создать настройки по умолчанию
@@ -377,10 +386,10 @@ export const login = async (req: Request, res: Response) => {
 
     // Поиск пользователя
     const userQuery = method === 'email'
-      ? `SELECT u.id, ud.name, ud.email as contact, s.password
+      ? `SELECT u.id, ud.name, ud.email as contact, uc.password_hash
          FROM users u
          JOIN user_description ud ON u.user_desc_id = ud.id
-         JOIN session s ON u.session_id = s.id
+         LEFT JOIN user_credentials uc ON u.id = uc.user_id
          WHERE ud.email = $1`
       : `SELECT u.id, ud.name, ud.phone as contact
          FROM users u
@@ -406,7 +415,7 @@ export const login = async (req: Request, res: Response) => {
 
     // Проверка пароля для email
     if (method === 'email') {
-      const isValidPassword = await comparePassword(password, user.password);
+      const isValidPassword = await comparePassword(password, user.password_hash);
       
       if (!isValidPassword) {
         return res.status(401).json({
@@ -417,10 +426,10 @@ export const login = async (req: Request, res: Response) => {
 
       // Создать новую сессию для этого входа
       const newSessionResult = await query(
-        `INSERT INTO session (session_ip, session_key, device_type, password, user_id, created_at, last_active, is_active)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
+        `INSERT INTO session (session_ip, session_key, device_type, user_id, created_at, last_active, is_active)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true)
          RETURNING id`,
-        [req.ip || 'unknown', user.password, req.headers['user-agent'] || 'unknown', user.password, user.id]
+        [req.ip || 'unknown', crypto.randomUUID(), req.headers['user-agent'] || 'unknown', user.id]
       );
       
       const newSessionId = newSessionResult.rows[0].id;

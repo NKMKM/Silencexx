@@ -56,6 +56,7 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem('auth_token');
+    console.log('🔑 Token check:', token ? `Found (${token.substring(0, 20)}...)` : 'NOT FOUND');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -112,11 +113,6 @@ export interface ChatRequest {
   mood?: string;
   conversationHistory?: ChatMessage[];
   chatId?: number;
-  audioUri?: string; // Добавляем URI голосового сообщения
-  isVoiceMessage?: boolean; // Флаг голосового сообщения
-  language?: string; // Язык сообщения
-  transcript?: string; // Транскрипция голоса
-  isTranscribed?: boolean; // Статус транскрипции
 }
 
 export interface ChatResponse {
@@ -138,12 +134,19 @@ export interface ChatHistoryMessage {
   sender: 'user' | 'ai';
   message: string;
   senddate: string;
-  audio_uri?: string;
-  language?: string;
-  transcript?: string;
-  is_transcribed?: boolean;
-  tts_audio_uri?: string;
-  is_voice_response?: boolean;
+}
+
+// New interface for messages from /chats/:chatId/messages endpoint
+export interface ApiMessage {
+  id: number;
+  chat_id: number;
+  user_id: number;
+  role: 'user' | 'assistant';
+  type?: 'text' | 'voice';
+  text?: string;
+  audio_url?: string;
+  status?: 'uploaded' | 'transcribing' | 'ready' | 'error';
+  created_at: string;
 }
 
 export interface CrisisDetectionRequest {
@@ -192,7 +195,39 @@ export interface CanSendResponse {
 }
 
 // API методы
-export const chatApi = {
+const chatApi = {
+  /**
+   * Отправить голосовое сообщение (New Architecture)
+   */
+  sendVoiceMessage: async (chatId: string, audioUri: string) => {
+    const formData = new FormData();
+    formData.append('chatId', chatId);
+    
+    // Determining file name/type
+    const filename = audioUri.split('/').pop() || 'voice.m4a';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `audio/${match[1]}` : 'audio/m4a';
+
+    formData.append('audio', {
+      uri: audioUri,
+      name: filename,
+      type,
+    } as any);
+
+    try {
+        console.log('📤 Sending voice message to:', API_URL + '/messages/voice');
+        const response = await api.post('/messages/voice', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            transformRequest: (data) => data, // Avoid axios messing up FormData
+        });
+        console.log('✅ Voice message sent, received:', response.data);
+        return response.data;
+    } catch (error: any) {
+        console.error('❌ Upload voice error:', error.response?.data || error.message);
+        throw error;
+    }
+  },
+
   /**
    * Отправить сообщение AI и получить ответ
    */
@@ -327,10 +362,14 @@ export const chatApi = {
    */
   getChatList: async (): Promise<{ success: boolean; chats: ChatHistoryItem[] }> => {
     try {
+      console.log('📋 Fetching chat list from:', API_URL + '/chats/list');
       const response = await api.get('/chats/list');
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error getting chat list:', error);
+      console.error('❌ Response data:', error.response?.data);
+      console.error('❌ Response status:', error.response?.status);
+      console.error('❌ Response headers:', error.response?.headers);
       throw error;
     }
   },
@@ -338,7 +377,7 @@ export const chatApi = {
   /**
    * Получить сообщения из чата
    */
-  getChatMessages: async (chatId: number): Promise<{ success: boolean; messages: ChatHistoryMessage[] }> => {
+  getChatMessages: async (chatId: string | number): Promise<{ success: boolean; messages: ApiMessage[] }> => {
     try {
       const response = await api.get(`/chats/${chatId}/messages`);
       return response.data;
@@ -361,9 +400,8 @@ export const chatApi = {
     }
   },
 };
-
 // Authentication API
-export const authApi = {
+const authApi = {
   /**
    * Регистрация нового пользователя
    */
@@ -567,9 +605,8 @@ export const authApi = {
     }
   },
 };
-
 // Inbox API
-export const inboxApi = {
+const inboxApi = {
   /**
    * Отправить анонимное пожелание
    */
@@ -625,70 +662,9 @@ export const inboxApi = {
   },
 };
 
-// Voice Message API
-export interface VoiceMessageRequest {
-  audioBase64: string;
-  recognizedText?: string;
-  conversationHistory?: ChatMessage[];
-  chatId?: number;
-  mimeType?: string;
-}
-
-export interface VoiceMessageResponse {
-  success: boolean;
-  recognizedText: string;
-  response: string;
-  isCrisis?: boolean;
-  audioUrl?: string;
-  requestId?: string;
-}
-
-export const voiceApi = {
-  /**
-   * Отправить голосовое сообщение
-   */
-  sendVoiceMessage: async (request: VoiceMessageRequest): Promise<VoiceMessageResponse> => {
-    try {
-      console.log('🎤 Sending voice message...');
-      const response = await api.post<VoiceMessageResponse>('/chat/voice', request);
-      console.log('✅ Voice message processed:', response.data.recognizedText);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error sending voice message:', error);
-      if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || 
-          'Failed to process voice message. Please try again.';
-        throw new Error(errorMessage);
-      }
-      throw error;
-    }
-  },
-
-  /**
-   * Только распознать речь (без обработки)
-   */
-  recognizeAudio: async (audioBase64: string, language: string = 'en-US'): Promise<{ text: string; confidence: number }> => {
-    try {
-      console.log('🎙️ Recognizing audio...');
-      const response = await api.post<{ text: string; confidence: number }>('/chat/recognize', {
-        audioBase64,
-        language,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error recognizing audio:', error);
-      if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || 
-          'Failed to recognize audio. Please try again.';
-        throw new Error(errorMessage);
-      }
-      throw error;
-    }
-  },
-};
 
 // Journal API (diary)
-export const journalApi = {
+const journalApi = {
   /**
    * Получить запись за дату YYYY-MM-DD
    */
@@ -729,165 +705,6 @@ export const journalApi = {
   },
 };
 
-/**
- * API для голосовых сообщений
- */
-const voiceApi = {
-  /**
-   * Отправить голосовое сообщение
-   */
-  sendVoiceMessage: async (
-    chatId: number,
-    audioUri: string,
-    duration: number,
-    size: number,
-    mimeType: string,
-    mood?: string,
-    transcript?: string
-  ) => {
-    try {
-      const formData = new FormData();
-      formData.append('chatId', chatId.toString());
-      formData.append('duration', duration.toString());
-      formData.append('size', size.toString());
-      formData.append('mimeType', mimeType);
-
-      if (mood) {
-        formData.append('mood', mood);
-      }
-
-      if (transcript) {
-        formData.append('transcript', transcript);
-      }
-
-      // Добавляем аудиофайл
-      const uriParts = audioUri.split('.');
-      const fileExtension = uriParts[uriParts.length - 1];
-
-      formData.append('audio', {
-        uri: audioUri,
-        type: mimeType,
-        name: `voice_${Date.now()}.${fileExtension}`,
-      } as any);
-
-      const response = await api.post('/voice-messages', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      console.log('✅ Voice message sent successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error sending voice message:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Загрузить голосовые сообщения из чата
-   */
-  getVoiceMessages: async (chatId: number, limit: number = 50, offset: number = 0) => {
-    try {
-      const response = await api.get('/voice-messages', {
-        params: {
-          chatId,
-          limit,
-          offset,
-        },
-      });
-
-      console.log(`✅ Loaded ${response.data.messages.length} voice messages`);
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error loading voice messages:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Скачать голосовое сообщение
-   */
-  downloadVoiceMessage: async (messageId: string) => {
-    try {
-      const response = await api.get(`/voice-messages/${messageId}`, {
-        responseType: 'blob',
-      });
-
-      console.log('✅ Voice message downloaded successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error downloading voice message:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Удалить голосовое сообщение
-   */
-  deleteVoiceMessage: async (messageId: string) => {
-    try {
-      const response = await api.delete(`/voice-messages/${messageId}`);
-
-      console.log('✅ Voice message deleted successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error deleting voice message:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Получить метаданные голосового сообщения
-   */
-  getVoiceMessageMetadata: async (messageId: string) => {
-    try {
-      const response = await api.get(`/voice-messages/${messageId}/metadata`);
-
-      console.log('✅ Voice message metadata retrieved successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error getting voice message metadata:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Транскрибировать голосовое сообщение
-   */
-  transcribeVoiceMessage: async (messageId: string) => {
-    try {
-      const response = await api.post(`/voice-messages/${messageId}/transcribe`);
-
-      console.log('✅ Voice message transcribed successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error transcribing voice message:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Синтезировать речь из текста (TTS)
-   */
-  synthesizeSpeech: async (text: string, language: string = 'ru') => {
-    try {
-      const response = await api.post('/voice-messages/synthesize', {
-        text,
-        language,
-      });
-
-      console.log('✅ Speech synthesized successfully');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error synthesizing speech:', error?.response?.data || error.message);
-      throw error;
-    }
-  },
-};
-
+// Экспорт всех API сервисов
+export { chatApi, authApi, inboxApi, journalApi, api };
 export default chatApi;
-export { voiceApi };
-
-// Экспорт axios инстанса для прямого доступа (OAuth, Auth endpoints, VoiceService)
-export { api, api as axiosInstance };

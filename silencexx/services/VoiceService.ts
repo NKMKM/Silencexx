@@ -1,4 +1,5 @@
 import { Audio } from 'expo-av';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import axios from 'axios';
 import { api as axiosInstance } from './api';
@@ -122,7 +123,6 @@ export class VoiceService {
     try {
       console.log(`[VoiceService] Starting recording in ${SUPPORTED_LANGUAGES[this.currentLanguage].nativeName}`);
       
-      // Запросить разрешения
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
         throw new Error('Microphone permission denied');
@@ -130,51 +130,63 @@ export class VoiceService {
 
       this.audioLevelCallback = onAudioLevel || null;
 
-      // Настроить аудио режим
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
         shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false
       });
 
-      // Создать и запустить запись
       this.recording = new Audio.Recording();
       
-      await this.recording.prepareToRecordAsync({
+      const recordingOptions = {
         isMeteringEnabled: true,
         android: {
-          extension: '.wav',
-          outputFormat: Audio.AndroidOutputFormat.DEFAULT,
-          audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
-          sampleRate: 16000,
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
           numberOfChannels: 1,
           bitRate: 128000,
         },
         ios: {
-          extension: '.wav',
+          extension: '.m4a',
           audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 16000,
+          sampleRate: 44100,
           numberOfChannels: 1,
           bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
         },
-      });
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      };
 
+      await this.recording.prepareToRecordAsync(recordingOptions);
       await this.recording.startAsync();
-      console.log('[VoiceService] Recording started');
+      console.log('[VoiceService] Recording started successfully');
 
-      // Установить интервал для отслеживания уровня звука
       this.setupMeteringInterval();
     } catch (error) {
       console.error('[VoiceService] Error starting recording:', error);
-      throw error;
+      throw new Error('Failed to start recording');
     }
   }
 
   /**
-   * Остановить запись
+   * Остановить запись и вернуть URI файла
    */
   async stopRecording(): Promise<string | null> {
     try {
+      if (this.meteringInterval) {
+        clearInterval(this.meteringInterval);
+        this.meteringInterval = null;
+      }
+
       if (!this.recording) {
         console.warn('[VoiceService] No recording in progress');
         return null;
@@ -186,10 +198,12 @@ export class VoiceService {
       const uri = this.recording.getURI();
       console.log('[VoiceService] Recording stopped, URI:', uri);
 
-      if (this.meteringInterval) {
-        clearInterval(this.meteringInterval);
-        this.meteringInterval = null;
-      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false
+      });
 
       this.recording = null;
       return uri;
@@ -200,74 +214,138 @@ export class VoiceService {
   }
 
   /**
-   * Транскрибировать аудиофайл на сервере
+   * Отменить запись
    */
-  async transcribeAudio(audioUri: string, language?: SupportedLanguage): Promise<TranscriptionResult> {
+  async cancelRecording(): Promise<void> {
     try {
-      const lang = language || this.currentLanguage;
-      console.log(`[VoiceService] Transcribing audio in ${SUPPORTED_LANGUAGES[lang].nativeName}`);
+      if (this.recording) {
+        await this.recording.stopAndUnloadAsync();
+        this.recording = null;
+      }
+      if (this.meteringInterval) {
+        clearInterval(this.meteringInterval);
+        this.meteringInterval = null;
+      }
+    } catch (error) {
+      console.error('[VoiceService] Error canceling recording:', error);
+    }
+  }
 
-      const formData = new FormData();
-      formData.append('audioUri', audioUri);
-      formData.append('language', lang);
-
-      const response = await axiosInstance.post(
-        '/transcribe',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+  private setupMeteringInterval() {
+    if (this.meteringInterval) clearInterval(this.meteringInterval);
+    
+    this.meteringInterval = setInterval(async () => {
+      if (this.recording && this.audioLevelCallback) {
+        try {
+          const status = await this.recording.getStatusAsync();
+          if (status.isRecording && status.metering !== undefined) {
+             const minDb = -60;
+             const db = status.metering;
+             const normalized = Math.max(0, Math.min(1, (db - minDb) / (0 - minDb)));
+             this.audioLevelCallback(normalized);
+          }
+        } catch (e) {
+          // ignore status read errors
         }
-      );
+      }
+    }, 100);
+  }
 
-      const result: TranscriptionResult = {
+  /**
+   * Транскрибировать аудио (распознавание речи)
+   */
+  async transcribeAudio(uri: string, language?: SupportedLanguage): Promise<TranscriptionResult> {
+    const targetLanguage = language || this.currentLanguage;
+    console.log(`[VoiceService] Transcribing audio: ${uri}, language: ${targetLanguage}`);
+    
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'recording.m4a';
+      const fileType = 'audio/m4a';
+      
+      // @ts-ignore
+      formData.append('audio', {
+        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+        name: filename,
+        type: fileType,
+      });
+      
+      formData.append('language', targetLanguage);
+      formData.append('task', 'transcribe');
+
+      const response = await axiosInstance.post('/transcribe', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        transformRequest: (data) => data,
+      });
+
+      console.log('[VoiceService] Transcription success:', response.data);
+      
+      return {
         text: response.data.text || '',
-        language: lang,
+        language: response.data.language || this.currentLanguage,
         confidence: response.data.confidence || 0.9,
-        isTranscribed: true,
+        isTranscribed: true
       };
 
-      console.log('[VoiceService] Transcription result:', result);
-      return result;
-    } catch (error) {
-      console.error('[VoiceService] Transcription error:', error);
-      throw error;
+    } catch (error: any) {
+      console.error('[VoiceService] Transcription error:', error?.message);
+      return {
+        text: '',
+        language: this.currentLanguage,
+        confidence: 0,
+        isTranscribed: false
+      };
     }
   }
 
   /**
-   * Синтезировать речь из текста
+   * Отправить голосовое сообщение в чат
    */
-  async synthesizeSpeech(text: string, language?: SupportedLanguage): Promise<string | null> {
+  async sendVoiceMessage(
+    audioUri: string, 
+    chatId: number | null, 
+    conversationHistory: any[] = [],
+    language?: SupportedLanguage
+  ): Promise<any> {
+    const targetLanguage = language || this.currentLanguage;
+    console.log(`[VoiceService] Sending voice message to chat ${chatId}`);
+    
     try {
-      const lang = language || this.currentLanguage;
-      console.log(`[VoiceService] Synthesizing speech in ${SUPPORTED_LANGUAGES[lang].nativeName}`);
+      const formData = new FormData();
+      const filename = audioUri.split('/').pop() || 'voice_message.m4a';
+      const fileType = 'audio/m4a';
 
-      const response = await axiosInstance.post(
-        '/synthesize',
-        {
-          text,
-          language: lang,
-        },
-        {
-          responseType: 'arraybuffer',
-        }
-      );
-
-      // Сохранить синтезированный файл
-      const filename = `tts-${Date.now()}.wav`;
-      const filepath = `${FileSystem.cacheDirectory}${filename}`;
-
-      await FileSystem.writeAsStringAsync(filepath, response.data, {
-        encoding: FileSystem.EncodingType.Base64,
+      // @ts-ignore
+      formData.append('audio', {
+        uri: Platform.OS === 'ios' ? audioUri.replace('file://', '') : audioUri,
+        name: filename,
+        type: fileType,
       });
 
-      console.log('[VoiceService] TTS audio saved:', filepath);
-      return filepath;
-    } catch (error) {
-      console.error('[VoiceService] TTS error:', error);
-      return null;
+      formData.append('language', targetLanguage);
+      if (chatId) formData.append('chatId', String(chatId));
+      
+      if (conversationHistory && conversationHistory.length > 0) {
+        formData.append('conversationHistory', JSON.stringify(conversationHistory));
+      }
+
+      console.log('[VoiceService] Uploading to /chat-with-voice...');
+
+      const response = await axiosInstance.post('/chat-with-voice', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        transformRequest: (data) => data,
+      });
+
+      console.log('[VoiceService] Process response:', response.data);
+      return response.data;
+
+    } catch (error: any) {
+      console.error('[VoiceService] Send voice message error:', error?.response?.data || error.message);
+      throw new Error(error?.response?.data?.error || 'Failed to process voice message');
     }
   }
 
@@ -285,7 +363,6 @@ export class VoiceService {
       this.sound = new Audio.Sound();
       await this.sound.loadAsync({ uri });
       
-      // Настроить режим воспроизведения
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
@@ -316,81 +393,22 @@ export class VoiceService {
     }
   }
 
-  /**
-   * Получить длительность аудиофайла
-   */
-  async getAudioDuration(uri: string): Promise<number> {
-    try {
-      const sound = new Audio.Sound();
-      await sound.loadAsync({ uri });
-      const status = await sound.getStatusAsync();
-      await sound.unloadAsync();
-      return status.durationMillis || 0;
-    } catch (error) {
-      console.error('[VoiceService] Error getting duration:', error);
-      return 0;
-    }
-  }
-
-  /**
-   * Удалить аудиофайл
-   */
-  async deleteAudio(uri: string): Promise<void> {
-    try {
-      if (uri && uri.startsWith('file://')) {
-        await FileSystem.deleteAsync(uri);
-        console.log('[VoiceService] Audio file deleted:', uri);
-      }
-    } catch (error) {
-      console.error('[VoiceService] Error deleting audio:', error);
-    }
-  }
-
-  /**
-   * Очистить ресурсы
-   */
   async cleanup(): Promise<void> {
     try {
       if (this.meteringInterval) {
         clearInterval(this.meteringInterval);
         this.meteringInterval = null;
       }
-
       if (this.recording) {
         await this.stopRecording();
       }
-
       if (this.sound) {
         await this.stopPlayback();
       }
-
       console.log('[VoiceService] Resources cleaned up');
     } catch (error) {
       console.error('[VoiceService] Cleanup error:', error);
     }
-  }
-
-  /**
-   * Настроить интервал для отслеживания уровня звука
-   */
-  private setupMeteringInterval(): void {
-    if (this.meteringInterval) {
-      clearInterval(this.meteringInterval);
-    }
-
-    this.meteringInterval = setInterval(async () => {
-      if (!this.recording) return;
-
-      try {
-        const status = await this.recording.getStatusAsync();
-        if (status.metering !== undefined && this.audioLevelCallback) {
-          const level = Math.max(0, (status.metering + 160) / 160);
-          this.audioLevelCallback(Math.min(1, level));
-        }
-      } catch (error) {
-        // Игнорировать ошибки чтения уровня звука
-      }
-    }, 100);
   }
 }
 

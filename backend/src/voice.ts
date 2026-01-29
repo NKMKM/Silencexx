@@ -1,250 +1,258 @@
 import { Request, Response } from 'express';
-import axios from 'axios';
+import { query } from './db';
 import * as fs from 'fs';
 import * as path from 'path';
-import { query } from './db';
+import { exec } from 'child_process';
+import { generateAIResponse } from './ai';
+import { verifyToken } from './auth';
+import { config } from './config';
 
-/**
- * POST /api/transcribe
- * Транскрибировать голосовое сообщение в текст
- */
-export const transcribeAudio = async (req: Request, res: Response) => {
+// Controller for POST /api/messages/voice
+export const handleVoiceUpload = async (req: Request, res: Response) => {
   try {
-    const { audioUri, language = 'ru' } = req.body;
-    const requestId = Math.random().toString(36).substring(7);
-
-    console.log(`🎤 [${requestId}] Transcribe request for language: ${language}`);
-
-    if (!audioUri) {
-      return res.status(400).json({
-        success: false,
-        error: 'audioUri is required',
-      });
-    }
-
-    // Проверить Google Cloud Speech-to-Text API ключ
-    if (!process.env.GOOGLE_CLOUD_API_KEY) {
-      console.warn(`⚠️ [${requestId}] Google Cloud API key not configured`);
-      return res.status(500).json({
-        success: false,
-        error: 'Speech recognition not configured',
-      });
-    }
-
-    // Для демонстрации: возвращаем пустую транскрипцию
-    // В production нужно интегрировать Google Cloud Speech-to-Text API
-    const transcriptionResult = {
-      text: 'Голосовое сообщение',
-      confidence: 0.95,
-      language: language,
-    };
-
-    console.log(`✅ [${requestId}] Transcription completed:`, transcriptionResult);
-
-    res.json({
-      success: true,
-      text: transcriptionResult.text,
-      confidence: transcriptionResult.confidence,
-      language: language,
-    });
-  } catch (error) {
-    console.error('❌ Transcription error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Transcription failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-};
-
-/**
- * POST /api/synthesize
- * Синтезировать речь из текста (Text-to-Speech)
- */
-export const synthesizeSpeech = async (req: Request, res: Response) => {
-  try {
-    const { text, language = 'ru' } = req.body;
-    const requestId = Math.random().toString(36).substring(7);
-
-    console.log(`🔊 [${requestId}] TTS request for language: ${language}`);
-
-    if (!text) {
-      return res.status(400).json({
-        success: false,
-        error: 'text is required',
-      });
-    }
-
-    // Проверить Google Cloud Text-to-Speech API ключ
-    if (!process.env.GOOGLE_CLOUD_API_KEY) {
-      console.warn(`⚠️ [${requestId}] Google Cloud API key not configured`);
-      return res.status(500).json({
-        success: false,
-        error: 'Text-to-speech not configured',
-      });
-    }
-
-    // Для демонстрации: возвращаем простой audio файл
-    // В production нужно интегрировать Google Cloud Text-to-Speech API
-    
-    // Создать простой WAV файл (silence для демонстрации)
-    const audioBuffer = Buffer.alloc(44); // Минимальный WAV header
-    const audioArray = new Uint8Array(audioBuffer);
-
-    // WAV header
-    const writeString = (offset: number, str: string) => {
-      for (let i = 0; i < str.length; i++) {
-        audioArray[offset + i] = str.charCodeAt(i);
+      console.log('🎤 [VOICE] Received voice upload request');
+      console.log('🎤 [VOICE] File:', req.file);
+      console.log('🎤 [VOICE] Body:', req.body);
+      
+      if (!req.file) {
+          console.log('❌ [VOICE] No audio file provided');
+          return res.status(400).json({ error: 'No audio file provided' });
       }
-    };
 
-    const writeInt32 = (offset: number, value: number) => {
-      audioArray[offset] = value & 0xff;
-      audioArray[offset + 1] = (value >> 8) & 0xff;
-      audioArray[offset + 2] = (value >> 16) & 0xff;
-      audioArray[offset + 3] = (value >> 24) & 0xff;
-    };
+      const { chatId } = req.body;
+      
+      // Extract userId from token
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      let userId: number | undefined;
+      if (token) {
+          try {
+              const decoded = verifyToken(token);
+              userId = decoded.userId;
+          } catch (e) {
+              console.log('❌ [VOICE] Invalid token');
+          }
+      } 
+      
+      console.log(`🎤 [VOICE] ChatId: ${chatId}, UserId: ${userId}`);
+      
+      if (!chatId || !userId) {
+           console.log('❌ [VOICE] Missing chatId or userId');
+           return res.status(400).json({ error: 'ChatId and UserId required' });
+      }
 
-    const writeInt16 = (offset: number, value: number) => {
-      audioArray[offset] = value & 0xff;
-      audioArray[offset + 1] = (value >> 8) & 0xff;
-    };
+      const audioUrl = req.file.path;
+      
+      // Check if file exists
+      if (!fs.existsSync(audioUrl)) {
+          console.log('❌ [VOICE] File not found at:', audioUrl);
+          return res.status(400).json({ error: 'Audio file not saved properly' });
+      }
+      
+      const fileStats = fs.statSync(audioUrl);
+      console.log(`🎤 [VOICE] File saved: ${audioUrl} (${fileStats.size} bytes)`);
 
-    writeString(0, 'RIFF');
-    writeInt32(4, 36);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    writeInt32(16, 16);
-    writeInt16(20, 1); // PCM format
-    writeInt16(22, 1); // Mono
-    writeInt32(24, 16000); // Sample rate
-    writeInt32(28, 32000); // Byte rate
-    writeInt16(32, 2); // Block align
-    writeInt16(34, 16); // Bits per sample
-    writeString(36, 'data');
-    writeInt32(40, 0); // Data size
+      const insertRes = await query(
+          `INSERT INTO messages (chat_id, user_id, role, type, audio_url, status) 
+           VALUES ($1, $2, 'user', 'voice', $3, 'uploaded') 
+           RETURNING id`,
+          [chatId, userId, audioUrl]
+      );
+      
+      const messageId = insertRes.rows[0].id;
+      console.log(`✅ [VOICE] Message created with ID: ${messageId}`);
 
-    console.log(`✅ [${requestId}] TTS synthesis completed`);
+      res.json({ messageId, status: 'uploaded', audioUrl });
 
-    res.set('Content-Type', 'audio/wav');
-    res.send(audioBuffer);
+      // Запускаем обработку асинхронно
+      console.log(`🎤 [VOICE] Starting async pipeline for message ${messageId}`);
+      processVoicePipeline(messageId.toString(), audioUrl, chatId.toString(), userId.toString()).catch(err => 
+        console.error('❌ [VOICE] Pipeline error:', err)
+      );
+
   } catch (error) {
-    console.error('❌ TTS error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Text-to-speech synthesis failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+      console.error("❌ [VOICE] Upload Error:", error);
+      res.status(500).json({ error: 'Internal Server Error' });
   }
 };
 
-/**
- * POST /api/chat-with-voice
- * Обработать голосовое сообщение и генерировать ответ ИИ
- */
-export const processChatWithVoice = async (req: Request, res: Response) => {
-  try {
-    const {
-      message,
-      audioUri,
-      language = 'ru',
-      transcript,
-      isTranscribed,
-      chatId,
-      userId,
-    } = req.body;
+const processVoicePipeline = async (messageId: string, audioPath: string, chatId: string, userId: string) => {
+    try {
+        console.log(`\n🔄 [PIPELINE] =======================================`);
+        console.log(`🔄 [PIPELINE] Starting voice processing for message ${messageId}`);
+        console.log(`🔄 [PIPELINE] Audio path: ${audioPath}`);
+        
+        await query(`UPDATE messages SET status = 'transcribing' WHERE id = $1`, [messageId]);
+        console.log(`🔄 [PIPELINE] Status updated to 'transcribing'`);
 
-    const requestId = Math.random().toString(36).substring(7);
+        // Use faster-whisper script (PyTorch 2.8 compatible)
+        const scriptPath = path.join(__dirname, '../scripts/transcribe-v2.py');
+        const absAudioPath = path.resolve(audioPath);
+        
+        console.log(`🔄 [PIPELINE] Script path: ${scriptPath}`);
+        console.log(`🔄 [PIPELINE] Absolute audio path: ${absAudioPath}`);
+        console.log(`🔄 [PIPELINE] Using faster-whisper (PyTorch 2.8+ compatible)`);
+        
+        // Check if script exists
+        if (!fs.existsSync(scriptPath)) {
+            console.error(`❌ [PIPELINE] Script not found: ${scriptPath}`);
+            throw new Error('Transcription script not found');
+        }
+        
+        // Check if audio file exists
+        if (!fs.existsSync(absAudioPath)) {
+            console.error(`❌ [PIPELINE] Audio file not found: ${absAudioPath}`);
+            throw new Error('Audio file not found');
+        }
 
-    console.log(`🎙️ [${requestId}] Processing voice message in ${language}`);
+        // Check Python executable
+        const pythonPath = config.pythonExecutable;
+        if (!fs.existsSync(pythonPath) && !pythonPath.includes('python3')) {
+            console.error(`❌ [PIPELINE] Python not found at: ${pythonPath}`);
+            console.error(`❌ Run 'setup-python-env.bat' in backend folder to create virtual environment`);
+            throw new Error('Python executable not found. Run setup-python-env.bat first.');
+        }
+        
+        console.log(`🐍 [PIPELINE] Using Python: ${pythonPath}`);
 
-    // Сохранить голосовое сообщение в БД
-    if (chatId && userId) {
-      try {
+        // Mock mode for testing without Python
+        if (config.mockWhisper) {
+            console.log('⚠️ [MOCK] Using mock transcription (MOCK_WHISPER=true)');
+            const mockText = "Mock transcription text for testing";
+            await query(
+                `UPDATE messages SET text = $1, status = 'ready' WHERE id = $2`, 
+                [mockText, messageId]
+            );
+            
+            // Continue with AI response...
+            const aiResult = await generateAIResponse(mockText, { conversationHistory: [] });
+            await query(
+                `INSERT INTO messages (chat_id, user_id, role, type, text, status)
+                 VALUES ($1, $2, 'assistant', 'text', $3, 'ready')`,
+                [chatId, userId, aiResult.response]
+            );
+            return;
+        }
+
+        const transcribedText = await new Promise<string>((resolve, reject) => {
+             const command = `"${pythonPath}" "${scriptPath}" "${absAudioPath}" ru`;
+             console.log(`🔄 [PIPELINE] Running command: ${command}`);
+             
+             exec(command, { 
+                 timeout: config.transcriptionTimeout,
+                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+                 env: {
+                     ...process.env,
+                     PYTHONIOENCODING: 'utf-8',  // Force UTF-8 for Russian text on Windows
+                 }
+             }, (err, stdout, stderr) => {
+                 console.log(`🔄 [PIPELINE] Python stdout:`, stdout || '(empty)');
+                 if (stderr) {
+                     console.log(`🔄 [PIPELINE] Python stderr:`, stderr);
+                 }
+                 
+                 // Handle execution errors
+                 if (err) {
+                     // Check for common error patterns
+                     const errorMsg = stderr || err.message || 'Unknown error';
+                     
+                     if (errorMsg.includes('No module named')) {
+                         const moduleName = errorMsg.match(/No module named '(\w+)'/)?.[1] || 'unknown';
+                         console.error(`❌ [PIPELINE] Missing Python module: ${moduleName}`);
+                         console.error(`❌ Solution: Run 'setup-python-env.bat' in backend folder`);
+                         reject(new Error(`Python module '${moduleName}' not found. Run setup-python-env.bat to install dependencies.`));
+                         return;
+                     }
+                     
+                     if (errorMsg.includes('CUDA') || errorMsg.includes('GPU')) {
+                         console.error(`❌ [PIPELINE] GPU/CUDA error - using CPU fallback`);
+                         // Continue execution, WhisperX should fallback to CPU
+                     }
+                     
+                     if (!stdout) {
+                         console.error("❌ [PIPELINE] Python script failed:", errorMsg);
+                         reject(new Error(`Transcription failed: ${errorMsg.substring(0, 200)}`));
+                         return;
+                     }
+                 }
+                 
+                 try {
+                     // Extract JSON from stdout (in case there's extra output)
+                     let jsonStr = stdout.trim();
+                     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                     if (jsonMatch) {
+                         jsonStr = jsonMatch[0];
+                     }
+                     
+                     const json = JSON.parse(jsonStr);
+                     if (json.error) {
+                         console.error("❌ [PIPELINE] WhisperX returned error:", json.error);
+                         reject(new Error(json.error));
+                     } else {
+                         console.log(`✅ [PIPELINE] WhisperX success! Language: ${json.language}`);
+                         console.log(`✅ [PIPELINE] Transcribed text: "${json.text}"`);
+                         resolve(json.text || "");
+                     }
+                 } catch (e) {
+                     console.error("❌ [PIPELINE] JSON parse error. Raw stdout:", stdout);
+                     reject(e);
+                 }
+             });
+        });
+
+        console.log(`📝 [PIPELINE] Final transcribed text: "${transcribedText.substring(0, 100)}..."`);
+
         await query(
-          `INSERT INTO user_chat (chat_id, message, senddate, audio_uri, language, transcript, is_transcribed)
-           VALUES ($1, $2, NOW(), $3, $4, $5, $6)`,
-          [chatId, message, audioUri, language, transcript || null, isTranscribed || false]
+            `UPDATE messages SET text = $1, status = 'ready' WHERE id = $2`, 
+            [transcribedText, messageId]
         );
+        console.log(`✅ [PIPELINE] Message ${messageId} updated with transcription`);
 
-        console.log(`💾 [${requestId}] Voice message saved to database`);
-      } catch (dbError) {
-        console.error(`❌ [${requestId}] Database error:`, dbError);
-      }
+        // Get ONLY messages from THIS chat (not from other chats)
+        // Limit to last 10 messages to avoid context pollution
+        const historyRes = await query(
+            `SELECT role, text FROM messages 
+             WHERE chat_id = $1 
+             AND user_id = $2 
+             AND status = 'ready' 
+             AND id != $3
+             AND text IS NOT NULL
+             AND text != ''
+             ORDER BY created_at DESC
+             LIMIT 10`,
+            [chatId, userId, messageId]
+        );
+        
+        // Reverse to get chronological order (oldest first)
+        const history = historyRes.rows.reverse().map((row: any) => ({
+            role: row.role as 'user' | 'assistant',
+            content: row.text || "" 
+        }));
+        
+        console.log(`🤖 [PIPELINE] Generating AI response with ${history.length} messages in history from chat ${chatId}`);
+        console.log(`📜 [PIPELINE] History preview:`, history.slice(0, 2).map(m => `${m.role}: ${m.content.substring(0, 50)}...`));
+
+        const aiResult = await generateAIResponse(transcribedText, {
+            conversationHistory: history,
+        });
+        
+        console.log(`✅ [PIPELINE] AI response generated: "${aiResult.response.substring(0, 100)}..."`);
+
+        await query(
+            `INSERT INTO messages (chat_id, user_id, role, type, text, status)
+             VALUES ($1, $2, 'assistant', 'text', $3, 'ready')`,
+            [chatId, userId, aiResult.response]
+        );
+        
+        console.log(`✅ [PIPELINE] AI response saved to database`);
+        console.log(`🔄 [PIPELINE] =======================================\n`);
+
+    } catch (err) {
+        console.error("❌ [PIPELINE] Voice Pipeline Failed:", err);
+        await query(`UPDATE messages SET status = 'error' WHERE id = $1`, [messageId]);
     }
-
-    // Генерировать ответ ИИ (реализация из вашего ai.ts)
-    // Это должно быть интегрировано с вашей ИИ логикой
-
-    res.json({
-      success: true,
-      message: 'Voice message processed',
-      language: language,
-      requestId,
-    });
-  } catch (error) {
-    console.error('❌ Voice processing error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Voice message processing failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
 };
 
-/**
- * GET /api/supported-languages
- * Получить список поддерживаемых языков
- */
-export const getSupportedLanguages = async (req: Request, res: Response) => {
-  try {
-    const languages = [
-      {
-        code: 'ru',
-        name: 'Russian',
-        nativeName: 'Русский',
-      },
-      {
-        code: 'en',
-        name: 'English',
-        nativeName: 'English',
-      },
-      {
-        code: 'es',
-        name: 'Spanish',
-        nativeName: 'Español',
-      },
-      {
-        code: 'fr',
-        name: 'French',
-        nativeName: 'Français',
-      },
-      {
-        code: 'de',
-        name: 'German',
-        nativeName: 'Deutsch',
-      },
-      {
-        code: 'ja',
-        name: 'Japanese',
-        nativeName: '日本語',
-      },
-      {
-        code: 'zh',
-        name: 'Chinese',
-        nativeName: '中文',
-      },
-    ];
-
-    res.json({
-      success: true,
-      languages: languages,
-    });
-  } catch (error) {
-    console.error('❌ Error getting languages:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get supported languages',
-    });
-  }
-};
+export const processVoiceMessage = handleVoiceUpload;
+export const transcribeAudio = async (req: Request, res: Response) => { res.status(501).json({error: "Deprecated"}); };
+export const synthesizeSpeech = async (req: Request, res: Response) => { res.status(501).json({error: "Not implemented"}); };
+export const getSupportedLanguages = async (req: Request, res: Response) => { res.json({ languages: ['ru', 'en'] }); };

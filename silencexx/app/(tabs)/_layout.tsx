@@ -122,6 +122,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tasks"
+        options={{
+          title: 'Задания',
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon
+              name="checkbox"
+              outlineName="checkbox-outline"
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: 'Дневник',

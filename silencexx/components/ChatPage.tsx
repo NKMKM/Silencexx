@@ -13,39 +13,31 @@ import {
   PanResponder,
   GestureResponderEvent,
   PanResponderGestureState,
+  Alert, // added
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeInLeft, FadeInRight, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { Audio } from 'expo-av'; // Added Audio
+import Animated, { FadeInDown, FadeInLeft, FadeInRight, useSharedValue, useAnimatedStyle, withTiming, FadeOutRight, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AudioPlayer } from './AudioPlayer';
-import { VoiceMessageDisplay } from './VoiceMessageDisplay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/utils/ThemeContext';
-import { VoiceAssistant } from './VoiceAssistant';
 import { ChatSidebar } from './ChatSidebar';
 import { CrisisDetectionModal } from './CrisisDetectionModal';
 import { DisclaimerModal } from './DisclaimerModal';
-import { VoiceRecordingInput } from './VoiceRecordingInput';
-import chatApi, { ChatMessage, voiceApi } from '@/services/api';
+import chatApi, { ChatMessage } from '@/services/api';
 import { useCrisisDetection } from '@/hooks/useCrisisDetection';
 import { useDisclaimerState } from '@/hooks/useDisclaimerState';
-import { useVoiceMessages } from '@/hooks/useVoiceMessages';
-import { useVoiceMessagesWithLanguage } from '@/hooks/useVoiceMessagesWithLanguage';
-import { SupportedLanguage } from '@/services/VoiceService';
+import { AudioPlayer } from './AudioPlayer';
 
 interface Message {
-  id: number;
+  id: number | string; // Changed to support string IDs from voice upload
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
   isTyping?: boolean;
-  audioUri?: string; // Для голосовых сообщений
-  isVoiceMessage?: boolean; // Флаг что это голосовое сообщение
-  language?: string; // Язык сообщения
-  transcript?: string; // Транскрипция
-  isTranscribed?: boolean; // Статус транскрипции
-  ttsAudioUri?: string; // TTS аудиоответ ИИ
-  isVoiceResponse?: boolean; // ИИ голосовой ответ
+  type?: 'text' | 'voice';
+  audioUrl?: string;
+  status?: 'uploaded' | 'transcribing' | 'ready' | 'error';
 }
 
 interface Chat {
@@ -55,51 +47,12 @@ interface Chat {
   timestamp: Date;
 }
 
-/**
- * Автоматически определяет язык текста
- */
-function detectLanguageFromText(text: string): SupportedLanguage {
-  if (!text || text.trim().length === 0) return 'ru'; // По умолчанию русский
-  
-  const sample = text.substring(0, 50).toLowerCase();
-  
-  // Русский: кириллица
-  if (/[а-яё]/i.test(sample)) return 'ru';
-  
-  // Китайский: иероглифы
-  if (/[\u4e00-\u9fff]/i.test(sample)) return 'zh';
-  
-  // Японский: хирагана, катакана
-  if (/[\u3040-\u309f\u30a0-\u30ff]/i.test(sample)) return 'ja';
-  
-  // Английский: распространенные англ. слова или много букв a-z
-  if (sample.includes('the ') || sample.includes('a ') || sample.includes('is ') || /[a-z]{5,}/i.test(sample)) {
-    // Если нет других признаков - это английский
-    if (!/[а-яё]/i.test(sample) && !/[\u4e00-\u9fff]/i.test(sample)) return 'en';
-  }
-  
-  // Испанский/Французский: специфичные буквы
-  if (/[àáâãäèéêëìíîïòóôõöùúûüñ]/i.test(sample)) {
-    // Французский буквы
-    if (/[àâäèêëîïôöûüœæ]/i.test(sample)) return 'fr';
-    // Испанский буквы
-    if (/[áéíóúñü¿¡]/i.test(sample)) return 'es';
-  }
-  
-  // Немецкий: умляуты
-  if (/[äöüßÄÖÜẞ]/i.test(sample)) return 'de';
-  
-  // По умолчанию русский
-  return 'ru';
-}
-
 export function ChatPage() {
   const { activeTheme } = useTheme();
   const isDark = activeTheme === 'dark';
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showVoiceAssistant, setShowVoiceAssistant] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
@@ -112,7 +65,6 @@ export function ChatPage() {
   const [crisisMessage, setCrisisMessage] = useState('');
   const [isCrisis, setIsCrisis] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('ru');
   const flatListRef = useRef<FlatList>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIndexRef = useRef(0);
@@ -124,9 +76,145 @@ export function ChatPage() {
   const keyboardDismissThresholdRef = useRef<number>(50);
   const { detectCrisis } = useCrisisDetection();
   const { shouldShowDisclaimer, setShouldShowDisclaimer } = useDisclaimerState();
-  
-  // Voice message hooks with language support
-  const voiceMessages = useVoiceMessagesWithLanguage();
+
+  // Voice Logic
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function startRecording() {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status === 'granted') {
+        // Set audio mode BEFORE creating recording
+        await Audio.setAudioModeAsync({ 
+          allowsRecordingIOS: true, 
+          playsInSilentModeIOS: true 
+        });
+        
+        // Production-ready recording options for iOS + Android
+        const { recording } = await Audio.Recording.createAsync({
+            android: {
+                extension: '.m4a',
+                outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+                audioEncoder: Audio.AndroidAudioEncoder.AAC,
+                sampleRate: 44100,
+                numberOfChannels: 2,  // Stereo для лучшего качества
+                bitRate: 256000,  // Увеличен до 256kbps
+            },
+            ios: {
+                extension: '.m4a',
+                outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+                audioQuality: Audio.IOSAudioQuality.MAX,  // Максимальное качество
+                sampleRate: 44100,
+                numberOfChannels: 2,  // Stereo
+                bitRate: 256000,  // Увеличен до 256kbps
+                linearPCMBitDepth: 16,
+                linearPCMIsBigEndian: false,
+                linearPCMIsFloat: false,
+            },
+            web: {
+                mimeType: 'audio/webm',
+                bitsPerSecond: 128000,
+            }
+        });
+        
+        setRecording(recording);
+        setIsRecording(true);
+        setRecordingTime(0);
+        
+        // Start timer
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingTime(prev => prev + 1);
+        }, 1000);
+      } else {
+        Alert.alert("Требуется разрешение на микрофон");
+      }
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      Alert.alert("Ошибка", "Не удалось начать запись");
+    }
+  }
+
+  async function stopRecording() {
+    if (!recording) return;
+    
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+    }
+    
+    setIsRecording(false);
+    
+    try {
+        // ВАЖНО: Сначала останавливаем и выгружаем
+        await recording.stopAndUnloadAsync();
+        
+        // Restore audio mode
+        await Audio.setAudioModeAsync({ 
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true 
+        });
+    } catch(e) {
+      console.error('Error stopping recording:', e);
+    }
+    
+    // ТОЛЬКО ПОСЛЕ stopAndUnloadAsync получаем URI
+    const uri = recording.getURI(); 
+    
+    // Clear recording state
+    setRecording(null);
+    setRecordingTime(0);
+    
+    // Only send if valid chat and URI
+    if (uri && activeChatId) {
+        // Optimistic UI
+        const tempId = `temp-${Date.now()}`;
+        const newMessage: Message = {
+           id: tempId,
+           text: '',
+           sender: 'user',
+           timestamp: new Date(),
+           type: 'voice',
+           status: 'uploaded',
+           audioUrl: uri
+        };
+        setMessages(prev => [...prev, newMessage]);
+
+        try {
+           const result = await chatApi.sendVoiceMessage(activeChatId.toString(), uri);
+           setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: result.messageId, status: 'uploaded' } : m));
+           
+           // Poll for updates
+           const interval = setInterval(async () => {
+                if (activeChatId) {
+                  try {
+                    const data = await chatApi.getChatMessages(activeChatId);
+                    if (data.success && data.messages) {
+                      setMessages(data.messages.map(m => ({
+                        id: m.id.toString(),
+                        text: m.text || '',
+                        sender: m.role === 'assistant' ? 'ai' : 'user', // Fixed: assistant -> ai
+                        timestamp: new Date(m.created_at),
+                        type: m.type || 'text',
+                        status: m.status || 'ready',
+                        audioUrl: m.audio_url
+                      })));
+                    }
+                  } catch (err) {
+                    console.log('Polling error:', err);
+                  }
+                }
+           }, 2000);
+           setTimeout(() => clearInterval(interval), 30000);
+
+        } catch (e) {
+           setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'error' } : m));
+           Alert.alert("Ошибка", "Не удалось отправить голосовое сообщение");
+        }
+    }
+    setRecordingTime(0);
+  }
 
   const keyboardTranslateY = useSharedValue(0);
 
@@ -295,60 +383,21 @@ export function ChatPage() {
     panResponderRef.current = panResponder;
   }, [isKeyboardVisible, keyboardHeight]);
 
-  useEffect(() => {
-    return () => {
-      if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current);
-      }
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-      // Cleanup voice recorder on unmount only
-      console.log('[ChatPage] Component unmounting - calling cleanup');
-      voiceMessages.cleanup();
-    };
-  }, []); // ВАЖНО: Empty dependency array - cleanup вызывается ТОЛЬКО при размонтировании
-
-  // Handle voice recording start
-  const handleVoiceRecordingStart = useCallback(async () => {
-    console.log('[ChatPage] handleVoiceRecordingStart called');
-    try {
-      await voiceMessages.startRecording();
-      console.log('[ChatPage] Recording started successfully');
-    } catch (error) {
-      console.error('[ChatPage] Error starting voice recording:', error);
-    }
-  }, [voiceMessages]);
-
-  // Helper function to send any message (text or voice)
+  // Helper function to send any message (text only)
   const sendMessageInternal = useCallback(
-    async (text: string, isVoiceMessage: boolean = false, audioUri?: string, language?: SupportedLanguage) => {
+    async (text: string) => {
       if (!text.trim() || isLoading) return;
-
-      // Автоматически определяем язык если не указан
-      const detectedLanguage = language || detectLanguageFromText(text);
-      
-      // Обновляем выбранный язык если он был определен автоматически
-      if (!language && detectedLanguage !== selectedLanguage) {
-        setSelectedLanguage(detectedLanguage);
-        voiceMessages.setLanguage(detectedLanguage);
-      }
 
       const newUserMessage: Message = {
         id: Date.now(),
         text,
         sender: 'user',
         timestamp: new Date(),
-        audioUri,
-        isVoiceMessage,
-        language: detectedLanguage,
       };
 
       const updatedMessages = [...messages, newUserMessage];
       setMessages(updatedMessages);
-      if (!isVoiceMessage) {
-        setMessage('');
-      }
+      setMessage('');
       setIsLoading(true);
 
       setTimeout(() => {
@@ -380,10 +429,6 @@ export function ChatPage() {
           message: text,
           conversationHistory,
           chatId: chatIdToUse || undefined,
-          audioUri: audioUri,
-          isVoiceMessage: isVoiceMessage,
-          language: detectedLanguage,
-          isTranscribed: isVoiceMessage,
         });
 
         const aiResponse: Message = {
@@ -392,7 +437,6 @@ export function ChatPage() {
           sender: 'ai',
           timestamp: new Date(),
           isTyping: true,
-          language: detectedLanguage,
         };
 
         setMessages((prev) => [...prev, aiResponse]);
@@ -429,10 +473,6 @@ export function ChatPage() {
               const lastMsg = updated[updated.length - 1];
               if (lastMsg) {
                 lastMsg.isTyping = false;
-                // Auto-speak AI response on voice input
-                if (isVoiceMessage) {
-                  voiceMessages.speakText(lastMsg.text, 'en');
-                }
               }
               return updated;
             });
@@ -476,179 +516,27 @@ export function ChatPage() {
         setIsLoading(false);
       }
     },
-    [messages, activeChatId, isTemporaryChat, isLoading, voiceMessages]
+    [messages, activeChatId, isTemporaryChat, isLoading]
   );
-
-  // Handle voice recording stop and process
-  const handleVoiceRecordingStop = useCallback(async () => {
-    try {
-      const audioUri = await voiceMessages.stopRecording();
-      if (!audioUri) {
-        console.warn('[ChatPage] No audio recorded');
-        return;
-      }
-
-      console.log('[ChatPage] Audio recorded, URI:', audioUri.substring(0, 50));
-
-      // Add voice message bubble immediately (before text recognition)
-      const voiceMessage: Message = {
-        id: Date.now(),
-        text: '🎙️ Обработка голоса...',
-        sender: 'user',
-        timestamp: new Date(),
-        audioUri,
-        isVoiceMessage: true,
-      };
-      setMessages((prev) => [...prev, voiceMessage]);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      // Process audio to text
-      const recognizedText = await voiceMessages.processAudioToText(audioUri);
-      if (!recognizedText) {
-        console.warn('[ChatPage] Could not recognize speech');
-        // Update message to show error
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastMsg = updated[updated.length - 1];
-          if (lastMsg && lastMsg.id === voiceMessage.id) {
-            lastMsg.text = '❌ Не удалось распознать речь';
-          }
-          return updated;
-        });
-        return;
-      }
-
-      // Update message text with recognized text
-      setMessages((prev) => {
-        const updated = [...prev];
-        const lastMsg = updated[updated.length - 1];
-        if (lastMsg && lastMsg.id === voiceMessage.id) {
-          lastMsg.text = recognizedText;
-        }
-        return updated;
-      });
-
-      // Auto-send voice message with TTS response
-      setTimeout(() => sendMessageInternal(recognizedText, true, audioUri), 100);
-    } catch (error) {
-      console.error('[ChatPage] Error processing voice message:', error);
-      setMessages((prev) => {
-        const updated = [...prev];
-        const lastMsg = updated[updated.length - 1];
-        if (lastMsg?.isVoiceMessage) {
-          lastMsg.text = '❌ Ошибка обработки голоса';
-        }
-        return updated;
-      });
-    }
-  }, [voiceMessages, sendMessageInternal]);
-
-  // Transcribe voice to text and insert into input field
-  const handleTranscribeVoice = useCallback(async () => {
-    console.log('[ChatPage] handleTranscribeVoice called');
-    try {
-      const audioUri = await voiceMessages.stopRecording();
-      if (!audioUri) {
-        console.warn('[ChatPage] No audio recorded for transcription');
-        return;
-      }
-
-      console.log('[ChatPage] Transcribing audio...');
-      const recognizedText = await voiceMessages.processAudioToText(audioUri);
-      
-      if (recognizedText) {
-        setMessage(recognizedText); // Insert transcribed text into input
-        console.log('[ChatPage] Text inserted into input:', recognizedText);
-      } else {
-        console.warn('[ChatPage] Could not transcribe speech');
-      }
-    } catch (error) {
-      console.error('[ChatPage] Error transcribing voice:', error);
-    }
-  }, [voiceMessages]);
-
-  // Send voice message directly without transcription
-  const handleSendVoiceMessage = useCallback(async () => {
-    console.log('[ChatPage] handleSendVoiceMessage called');
-    try {
-      const audioUri = await voiceMessages.stopRecording();
-      if (!audioUri) {
-        console.warn('[ChatPage] No audio recorded to send');
-        return;
-      }
-
-      console.log('[ChatPage] Sending voice message, URI:', audioUri.substring(0, 50));
-
-      // Add voice message bubble
-      const voiceMessage: Message = {
-        id: Date.now(),
-        text: '🎙️ Обработка голоса...',
-        sender: 'user',
-        timestamp: new Date(),
-        audioUri,
-        isVoiceMessage: true,
-        language: selectedLanguage,
-        isTranscribed: false,
-      };
-      setMessages((prev) => [...prev, voiceMessage]);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      // Process audio to text for AI response
-      let recognizedText = await voiceMessages.processAudioToText(audioUri);
-      
-      // If transcription failed, send as voice-only and let AI process it
-      if (!recognizedText) {
-        console.warn('[ChatPage] Speech recognition failed, sending as voice-only');
-        
-        // Update message showing transcription failed
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastMsg = updated[updated.length - 1];
-          if (lastMsg && lastMsg.id === voiceMessage.id) {
-            lastMsg.text = '🎙️ Голосовое сообщение (не распознано)';
-            lastMsg.transcript = undefined;
-            lastMsg.isTranscribed = false;
-          }
-          return updated;
-        });
-
-        // Send voice message without transcript - AI will process the audio directly
-        setTimeout(() => sendMessageInternal('', true, audioUri, selectedLanguage), 100);
-        return;
-      }
-
-      // Update message with recognized text and mark as transcribed
-      setMessages((prev) => {
-        const updated = [...prev];
-        const lastMsg = updated[updated.length - 1];
-        if (lastMsg && lastMsg.id === voiceMessage.id) {
-          lastMsg.text = recognizedText;
-          lastMsg.transcript = recognizedText;
-          lastMsg.isTranscribed = true;
-        }
-        return updated;
-      });
-
-      // Send to AI with language support
-      setTimeout(() => sendMessageInternal(recognizedText, true, audioUri, selectedLanguage), 100);
-    } catch (error) {
-      console.error('[ChatPage] Error sending voice message:', error);
-    }
-  }, [voiceMessages, sendMessageInternal, selectedLanguage]);
-
+  
   // Send text message from input field
   const handleSendMessage = async () => {
     const trimmedMessage = message.trim();
     if (!trimmedMessage || isLoading) return;
 
-    await sendMessageInternal(trimmedMessage, false);
+    await sendMessageInternal(trimmedMessage);
   };
+    
+  useEffect(() => {
+    return () => {
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+      }
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
     const loadChatMessages = async (chatId: number) => {
     try {
@@ -656,18 +544,14 @@ export function ChatPage() {
       const response = await chatApi.getChatMessages(chatId);
       
       if (response.success && response.messages) {
-        const loadedMessages: Message[] = response.messages.map((msg, index) => ({
-          id: index + 1,
-          text: msg.message,
-          sender: msg.sender,
-          timestamp: new Date(msg.senddate),
-          audioUri: msg.audio_uri,
-          isVoiceMessage: !!msg.audio_uri,
-          language: msg.language,
-          transcript: msg.transcript,
-          isTranscribed: msg.is_transcribed,
-          ttsAudioUri: msg.tts_audio_uri,
-          isVoiceResponse: msg.is_voice_response,
+        const loadedMessages: Message[] = response.messages.map((msg) => ({
+          id: msg.id.toString(),
+          text: msg.text || '',
+          sender: msg.role === 'assistant' ? 'ai' : 'user', // Convert 'assistant' to 'ai'
+          timestamp: new Date(msg.created_at),
+          type: msg.type || 'text',
+          status: msg.status || 'ready',
+          audioUrl: msg.audio_url
         }));
         
         setMessages(loadedMessages);
@@ -789,6 +673,64 @@ export function ChatPage() {
     const isUser = item.sender === 'user';
     const isLastMessage = index === messages.length - 1;
     
+    if (item.type === 'voice') {
+         const getStatusText = () => {
+             switch(item.status) {
+                 case 'uploaded': return 'Обработка...';
+                 case 'transcribing': return 'Расшифровка...';
+                 case 'ready': return item.text || 'Голосовое сообщение';
+                 case 'error': return 'Ошибка';
+                 default: return item.text || 'Голосовое сообщение';
+             }
+         };
+         
+         const isLoading = item.status === 'uploaded' || item.status === 'transcribing';
+         
+         return (
+             <Animated.View
+                entering={isLastMessage ? FadeInRight.springify() : undefined}
+                style={[styles.messageContainer, styles.messageContainerUser]}
+              >
+                  <View style={styles.voiceMessageBubble}>
+                    {/* Voice Message Header with Gradient */}
+                    <LinearGradient
+                      colors={['#3b82f6', '#8b5cf6']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.voiceMessageHeader}
+                    >
+                      {/* Player or Loading */}
+                      {isLoading ? (
+                        <View style={styles.voiceLoadingContainer}>
+                          <ActivityIndicator size="small" color="white" />
+                          <Text style={styles.voiceLoadingText}>{getStatusText()}</Text>
+                        </View>
+                      ) : item.audioUrl ? (
+                        <View style={styles.voicePlayerWrapper}>
+                          <AudioPlayer audioUri={item.audioUrl} isDark={true} />
+                        </View>
+                      ) : (
+                        <View style={styles.voiceLoadingContainer}>
+                          <Ionicons name="mic" size={16} color="rgba(255,255,255,0.8)" />
+                          <Text style={styles.voiceLoadingText}>Голосовое</Text>
+                        </View>
+                      )}
+                    </LinearGradient>
+                    
+                    {/* Transcription Text (if ready) */}
+                    {!isLoading && item.text && (
+                      <View style={[styles.voiceTranscription, { backgroundColor: isDark ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.95)' }]}>
+                        <Ionicons name="document-text-outline" size={12} color={isDark ? '#94a3b8' : '#64748b'} style={{ marginRight: 6 }} />
+                        <Text style={[styles.voiceTranscriptionText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>
+                          {item.text}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+              </Animated.View>
+         );
+    }
+
     return (
       <Animated.View
         entering={isLastMessage ? (isUser ? FadeInRight.springify() : FadeInLeft.springify()) : undefined}
@@ -804,20 +746,7 @@ export function ChatPage() {
             end={{ x: 1, y: 0 }}
             style={styles.messageUserBubble}
           >
-            {/* Show voice message display if it's a voice message */}
-            {item.isVoiceMessage && item.audioUri ? (
-              <VoiceMessageDisplay
-                audioUri={item.audioUri}
-                transcript={item.transcript}
-                isTranscribed={item.isTranscribed}
-                language={item.language}
-                isUserMessage={true}
-                isDark={isDark}
-                timestamp={item.timestamp}
-              />
-            ) : (
-              <Text style={styles.messageUserText}>{item.text}</Text>
-            )}
+            <Text style={styles.messageUserText}>{item.text}</Text>
           </LinearGradient>
         ) : (
           <View
@@ -833,17 +762,6 @@ export function ChatPage() {
               },
             ]}
           >
-            {/* Show voice response if available */}
-            {item.isVoiceResponse && item.ttsAudioUri ? (
-              <VoiceMessageDisplay
-                audioUri={item.ttsAudioUri}
-                isTranscribed={true}
-                language={item.language}
-                isUserMessage={false}
-                isDark={isDark}
-                timestamp={item.timestamp}
-              />
-            ) : null}
             <Text
               style={[
                 styles.messageAIText,
@@ -907,22 +825,16 @@ export function ChatPage() {
             </Text>
             <TouchableOpacity 
               style={styles.menuButton}
-              onPress={() => setShowVoiceAssistant(true)}
+              onPress={() => {}}
             >
-              <Ionicons
+              {/* <Ionicons
                 name="ellipsis-vertical"
                 size={20}
                 color={isDark ? '#e2e8f0' : '#1e293b'}
-              />
+              /> */}
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Voice Assistant Modal */}
-        <VoiceAssistant
-          visible={showVoiceAssistant}
-          onClose={() => setShowVoiceAssistant(false)}
-        />
 
         {/* Chat Sidebar */}
         <ChatSidebar
@@ -1016,75 +928,167 @@ export function ChatPage() {
 
         </View>
 
-        {/* Voice Message Error Indicator */}
-        {voiceMessages.error && (
-          <View
-            style={[
-              styles.errorBanner,
-              { backgroundColor: isDark ? '#7f1d1d' : '#fee2e2' },
-            ]}
-          >
-            <Ionicons
-              name="alert-circle"
-              size={18}
-              color={isDark ? '#fca5a5' : '#dc2626'}
-            />
-            <Text
-              style={[
-                styles.errorText,
-                { color: isDark ? '#fecaca' : '#991b1b' },
-              ]}
-            >
-              {voiceMessages.error}
-            </Text>
-            <TouchableOpacity onPress={voiceMessages.clearError}>
-              <Ionicons
-                name="close"
-                size={18}
-                color={isDark ? '#fca5a5' : '#dc2626'}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Input Area with Gesture Support */}
         <Animated.View
           style={[
             styles.inputContainer,
             {
-              backgroundColor: isDark ? 'rgba(10, 12, 18, 0.85)' : 'rgba(20, 22, 30, 0.85)',
-              paddingBottom: insets.bottom + 6,
+              backgroundColor: isDark ? 'rgba(10, 12, 18, 0.98)' : 'rgba(248, 250, 252, 0.98)',
+              paddingBottom: insets.bottom + 8,
               marginBottom: isKeyboardVisible
                 ? keyboardHeight - insets.bottom + 8
                 : tabBarOffset + 12,
               borderTopWidth: 1,
-              borderTopColor: isDark ? 'rgba(99, 102, 241, 0.15)' : '#e2e8f0',
+              borderTopColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)',
               shadowColor: isDark ? '#6366f1' : '#8b5cf6',
               shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: isDark ? 0.2 : 0.1,
-              shadowRadius: 12,
-              elevation: 8,
+              shadowOpacity: isDark ? 0.15 : 0.08,
+              shadowRadius: 16,
+              elevation: 12,
               transform: [{ translateY: keyboardTranslateY }],
             },
           ]}
           {...(panResponderRef.current?.panHandlers || {})}
         >
-          <View style={styles.inputWrapper}>
-            <VoiceRecordingInput
-              message={message}
-              onMessageChange={setMessage}
-              onSendMessage={handleSendMessage}
-              isLoading={isLoading}
-              onRecordingStart={handleVoiceRecordingStart}
-              onTranscribe={handleTranscribeVoice}
-              onSendVoice={handleSendVoiceMessage}
-              isRecording={voiceMessages.isRecording}
-              isProcessing={voiceMessages.isProcessing}
-              recordingDuration={voiceMessages.recordingDuration}
-              audioLevel={voiceMessages.audioLevel}
-              isDark={isDark}
-            />
-          </View>
+          {/* Recording Mode - Full Width Recording UI */}
+          {isRecording ? (
+            <Animated.View entering={FadeInDown} style={styles.recordingContainer}>
+              <LinearGradient
+                colors={isDark ? ['rgba(239, 68, 68, 0.15)', 'rgba(220, 38, 38, 0.1)'] : ['rgba(239, 68, 68, 0.1)', 'rgba(220, 38, 38, 0.05)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.recordingBox}
+              >
+                {/* Recording Indicator */}
+                <View style={styles.recordingInfo}>
+                  <Animated.View 
+                    entering={ZoomIn}
+                    style={styles.recordingPulseOuter}
+                  >
+                    <View style={styles.recordingPulseInner}>
+                      <View style={styles.recordingDotLarge} />
+                    </View>
+                  </Animated.View>
+                  <View style={styles.recordingTextBox}>
+                    <Text style={[styles.recordingLabel, { color: isDark ? '#fca5a5' : '#dc2626' }]}>
+                      Запись аудио
+                    </Text>
+                    <Text style={[styles.recordingTimer, { color: isDark ? '#f87171' : '#b91c1c' }]}>
+                      {String(Math.floor(recordingTime / 60)).padStart(2, '0')}:{String(recordingTime % 60).padStart(2, '0')}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Recording Actions */}
+                <View style={styles.recordingActions}>
+                  {/* Cancel Button */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (recordingIntervalRef.current) {
+                        clearInterval(recordingIntervalRef.current);
+                      }
+                      setIsRecording(false);
+                      if (recording) {
+                        recording.stopAndUnloadAsync().catch(() => {});
+                      }
+                      setRecording(null);
+                      setRecordingTime(0);
+                    }}
+                    style={[styles.recordingCancelBtn, { backgroundColor: isDark ? 'rgba(75, 85, 99, 0.3)' : 'rgba(107, 114, 128, 0.15)' }]}
+                  >
+                    <Ionicons name="close" size={20} color={isDark ? '#9ca3af' : '#6b7280'} />
+                  </TouchableOpacity>
+
+                  {/* Send/Stop Button */}
+                  <TouchableOpacity
+                    onPress={stopRecording}
+                    style={styles.recordingStopBtn}
+                  >
+                    <LinearGradient
+                      colors={['#ef4444', '#dc2626']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.recordingStopGradient}
+                    >
+                      <Ionicons name="send" size={22} color="#fff" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+          ) : (
+            /* Normal Input Mode */
+            <View style={styles.inputWrapper}>
+              {/* Mic Button (Left) */}
+              <TouchableOpacity
+                onPress={startRecording}
+                disabled={!activeChatId || isLoading}
+                style={[
+                  styles.micButton,
+                  {
+                    backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(139, 92, 246, 0.1)',
+                    borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(139, 92, 246, 0.25)',
+                    opacity: !activeChatId ? 0.5 : 1,
+                  }
+                ]}
+              >
+                <Ionicons 
+                  name="mic" 
+                  size={22} 
+                  color={isDark ? '#818cf8' : '#8b5cf6'} 
+                />
+              </TouchableOpacity>
+
+              {/* Text Input */}
+              <View
+                style={[
+                  styles.inputFieldBox,
+                  {
+                    borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.8)',
+                    backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+                  }
+                ]}
+              >
+                <TextInput
+                  ref={textInputRef}
+                  style={[
+                    styles.input,
+                    { color: isDark ? '#f1f5f9' : '#1e293b' }
+                  ]}
+                  placeholder="Напишите сообщение..."
+                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                  multiline
+                  value={message}
+                  onChangeText={setMessage}
+                  maxLength={1000}
+                />
+              </View>
+
+              {/* Send Button (Right) */}
+              {(message.trim().length > 0 || isLoading) && (
+                <Animated.View entering={FadeInRight} exiting={FadeOutRight}>
+                  <TouchableOpacity
+                    onPress={handleSendMessage}
+                    disabled={isLoading || !message.trim()}
+                    style={styles.sendBtnWrapper}
+                  >
+                    <LinearGradient
+                      colors={isLoading ? ['#6b7280', '#4b5563'] : (isDark ? ['#6366f1', '#4f46e5'] : ['#8b5cf6', '#7c3aed'])}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.sendBtn}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Ionicons name="send" size={18} color="#fff" />
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+            </View>
+          )}
         </Animated.View>
         <CrisisDetectionModal
           visible={showCrisisModal}
@@ -1389,6 +1393,205 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '500',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  recordingPulse: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  recordingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  // New Recording Styles
+  recordingContainer: {
+    width: '100%',
+  },
+  recordingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  recordingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  recordingPulseOuter: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingPulseInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingDotLarge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ef4444',
+  },
+  recordingTextBox: {
+    gap: 2,
+  },
+  recordingLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  recordingTimer: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+  },
+  recordingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  recordingCancelBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingStopBtn: {
+    overflow: 'hidden',
+    borderRadius: 24,
+  },
+  recordingStopGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Mic Button
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  // Input Field
+  inputFieldBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    minHeight: 44,
+    maxHeight: 120,
+  },
+  // Send Button
+  sendBtnWrapper: {
+    overflow: 'hidden',
+    borderRadius: 22,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputField: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    paddingLeft: 4,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  // Voice Message Styles
+  voiceMessageBubble: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    minWidth: 200,
+    maxWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  voiceMessageHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  voiceLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  voiceLoadingText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  voicePlayerWrapper: {
+    marginVertical: 2,
+  },
+  voiceTranscription: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  voiceTranscriptionText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
 

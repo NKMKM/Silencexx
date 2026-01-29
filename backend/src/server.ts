@@ -1,5 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import multer from 'multer'; // New architecture requirement
+import path from 'path';
 import { config } from './config';
 import { generateAIResponse, detectCrisisKeywords, analyzeMood, aiTranscribeVoice } from './ai';
 import { 
@@ -32,9 +34,14 @@ import {
 import {
   transcribeAudio,
   synthesizeSpeech,
-  processChatWithVoice,
-  getSupportedLanguages
+  getSupportedLanguages,
+  processVoiceMessage
 } from './voice';
+import { 
+  getDailyTask, 
+  openDailyTask, 
+  completeDailyTask 
+} from './dailyTasks';
 import { query } from './db'; // Добавляем импорт query
 import './db'; // Initialize database connection
 import {
@@ -46,9 +53,16 @@ import {
 
 const app = express();
 
+// Voice Architecture: Multer setup
+const upload = multer({ dest: 'uploads/' });
+
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Логирование запросов
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -84,15 +98,84 @@ app.get('/api/chats/list', checkSessionActive, getChatList);
 app.get('/api/chats/:chatId/messages', checkSessionActive, getChatMessages);
 
 // Voice routes
-app.post('/api/transcribe', transcribeAudio);
-app.post('/api/synthesize', synthesizeSpeech);
-app.post('/api/chat-with-voice', checkSessionActive, processChatWithVoice);
+// New Architecture: Voice Messages
+app.post('/api/messages/voice', checkSessionActive, upload.single('audio') as any, processVoiceMessage);
+
+// Test endpoint for WhisperX
+app.post('/api/test/voice', upload.single('audio') as any, async (req: Request, res: Response) => {
+  try {
+    console.log('\n🧪 [TEST] =======================================');
+    console.log('🧪 [TEST] Voice upload test endpoint hit');
+    console.log('🧪 [TEST] File:', req.file);
+    console.log('🧪 [TEST] Body:', req.body);
+    
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No audio file received' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const { exec } = require('child_process');
+
+    const audioPath = req.file.path;
+    console.log('🧪 [TEST] Audio path:', audioPath);
+    console.log('🧪 [TEST] File exists:', fs.existsSync(audioPath));
+    console.log('🧪 [TEST] File size:', fs.statSync(audioPath).size, 'bytes');
+
+    const scriptPath = path.join(__dirname, '../scripts/transcribe.py');
+    console.log('🧪 [TEST] Script path:', scriptPath);
+    console.log('🧪 [TEST] Script exists:', fs.existsSync(scriptPath));
+
+    // Use full path to Python 3.13 where WhisperX is installed
+    const pythonPath = process.platform === 'win32' 
+        ? 'C:\\Users\\artem\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
+        : 'python';
+
+    const result: any = await new Promise((resolve, reject) => {
+      const command = `"${pythonPath}" "${scriptPath}" "${audioPath}" ru`;
+      console.log('🧪 [TEST] Running command:', command);
+      
+      exec(command, { timeout: 120000 }, (err: any, stdout: string, stderr: string) => {
+        console.log('🧪 [TEST] stdout:', stdout);
+        console.log('🧪 [TEST] stderr:', stderr);
+        
+        if (err && !stdout) {
+          console.error('🧪 [TEST] Exec error:', err);
+          reject(new Error(stderr || err.message));
+          return;
+        }
+        
+        try {
+          const json = JSON.parse(stdout);
+          resolve(json);
+        } catch (e) {
+          console.error('🧪 [TEST] JSON parse error');
+          reject(e);
+        }
+      });
+    });
+
+    console.log('🧪 [TEST] Result:', result);
+    console.log('🧪 [TEST] =======================================\n');
+
+    res.json({ success: true, result });
+  } catch (error: any) {
+    console.error('🧪 [TEST] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/supported-languages', getSupportedLanguages);
 
 // Inbox
 app.post('/api/anonymous-message', canSendMessage, sendAnonymousMessage);
 app.get('/api/inbox/received', checkSessionActive, getReceivedMessages);
 app.patch('/api/inbox/messages/:messageId/read', checkSessionActive, markMessageAsRead);
+
+// Daily Tasks
+app.get('/api/daily-task', checkSessionActive, getDailyTask);
+app.put('/api/daily-task/open', checkSessionActive, openDailyTask);
+app.put('/api/daily-task/complete', checkSessionActive, completeDailyTask);
 
 // Server info and startup logs
 const startupMessage = () => {
@@ -318,11 +401,23 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
                VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)`,
               [chatId, userId, processedMessage, audioUri, language, transcript || processedMessage, isTranscribed || true, validatedMood || null]
             );
+            // Sync to new messages table
+            await query(
+                `INSERT INTO messages (chat_id, user_id, role, type, text, audio_url, status, created_at)
+                 VALUES ($1, $2, 'user', 'voice', $3, $4, 'ready', NOW())`,
+                [chatId, userId, processedMessage, audioUri]
+            );
           } else {
             await query(
               `INSERT INTO user_chat (chat_id, user_id, message, senddate, language, mood) 
                VALUES ($1, $2, $3, NOW(), $4, $5)`,
               [chatId, userId, processedMessage, language, validatedMood || null]
+            );
+            // Sync to new messages table
+             await query(
+                `INSERT INTO messages (chat_id, user_id, role, type, text, status, created_at)
+                 VALUES ($1, $2, 'user', 'text', $3, 'ready', NOW())`,
+                [chatId, userId, processedMessage]
             );
           }
           
@@ -332,6 +427,12 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
              VALUES ($1, $2, $3, NOW(), $4, $5)`,
             [chatId, userId, response.response, language, validatedMood || null]
           );
+           // Sync to new messages table
+           await query(
+                `INSERT INTO messages (chat_id, user_id, role, type, text, status, created_at)
+                 VALUES ($1, $2, 'assistant', 'text', $3, 'ready', NOW())`,
+                [chatId, userId, response.response]
+            );
           
           // Обновляем is_first_message флаг если это первое сообщение
           if (isFirstMessage) {

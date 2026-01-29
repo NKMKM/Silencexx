@@ -75,6 +75,24 @@ async function runMigration() {
     await client.query(voiceTranscriptionSQL);
     console.log('✅ Voice transcription and language support added\n');
     
+    // 7. Daily Tasks and Mood Fix
+    console.log('7️⃣ Adding Daily Tasks and Mood Fix...');
+    const dailyTasksSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'add_daily_tasks_fix.sql'),
+      'utf8'
+    );
+    await client.query(dailyTasksSQL);
+    console.log('✅ Daily Tasks and Mood Fix added\n');
+
+    // 8. New Voice Architecture (Unified Messages)
+    console.log('8️⃣  Applying new voice architecture (messages table)...');
+    const newVoiceSQL = fs.readFileSync(
+      path.join(__dirname, 'migrations', 'update_voice_architecture.sql'),
+      'utf8'
+    );
+    await client.query(newVoiceSQL);
+    console.log('✅ New voice architecture applied\n');
+    
     console.log('✅ All migrations completed successfully!\n');
     
   } catch (error) {
