@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,14 +20,16 @@ import { Audio } from 'expo-av'; // Added Audio
 import Animated, { FadeInDown, FadeInLeft, FadeInRight, useSharedValue, useAnimatedStyle, withTiming, FadeOutRight, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
 import { ChatSidebar } from './ChatSidebar';
 import { CrisisDetectionModal } from './CrisisDetectionModal';
 import { DisclaimerModal } from './DisclaimerModal';
 import chatApi, { ChatMessage } from '@/services/api';
 import { useCrisisDetection } from '@/hooks/useCrisisDetection';
 import { useDisclaimerState } from '@/hooks/useDisclaimerState';
+import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
 import { AudioPlayer } from './AudioPlayer';
+import { useRouter } from 'expo-router';
+import { Theme } from '@/constants/theme';
 
 interface Message {
   id: number | string; // Changed to support string IDs from voice upload
@@ -48,9 +50,9 @@ interface Chat {
 }
 
 export function ChatPage() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -76,6 +78,7 @@ export function ChatPage() {
   const keyboardDismissThresholdRef = useRef<number>(50);
   const { detectCrisis } = useCrisisDetection();
   const { shouldShowDisclaimer, setShouldShowDisclaimer } = useDisclaimerState();
+  const { limits, canSendMessage, getRemainingMessages, refreshLimits } = useSubscriptionLimits();
 
   // Voice Logic
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -101,7 +104,7 @@ export function ChatPage() {
                 audioEncoder: Audio.AndroidAudioEncoder.AAC,
                 sampleRate: 44100,
                 numberOfChannels: 2,  // Stereo для лучшего качества
-                bitRate: 256000,  // Увеличен до 256kbps
+                bitRate: 256000,  // Повышено до 256kbps
             },
             ios: {
                 extension: '.m4a',
@@ -109,7 +112,7 @@ export function ChatPage() {
                 audioQuality: Audio.IOSAudioQuality.MAX,  // Максимальное качество
                 sampleRate: 44100,
                 numberOfChannels: 2,  // Stereo
-                bitRate: 256000,  // Увеличен до 256kbps
+                bitRate: 256000,  // Повышено до 256kbps
                 linearPCMBitDepth: 16,
                 linearPCMIsBigEndian: false,
                 linearPCMIsFloat: false,
@@ -147,7 +150,7 @@ export function ChatPage() {
     setIsRecording(false);
     
     try {
-        // ВАЖНО: Сначала останавливаем и выгружаем
+        // Важно: сначала остановить и выгрузить
         await recording.stopAndUnloadAsync();
         
         // Restore audio mode
@@ -159,7 +162,7 @@ export function ChatPage() {
       console.error('Error stopping recording:', e);
     }
     
-    // ТОЛЬКО ПОСЛЕ stopAndUnloadAsync получаем URI
+    // Только после stopAndUnloadAsync получаем URI
     const uri = recording.getURI(); 
     
     // Clear recording state
@@ -524,6 +527,25 @@ export function ChatPage() {
     const trimmedMessage = message.trim();
     if (!trimmedMessage || isLoading) return;
 
+    // Check subscription limits
+    if (!canSendMessage()) {
+      const remaining = getRemainingMessages();
+      Alert.alert(
+        '?? Daily Limit Reached',
+        `You've reached your daily chat limit. Upgrade your subscription for unlimited access.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upgrade',
+            onPress: () => {
+              router.push('/billing');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     await sendMessageInternal(trimmedMessage);
   };
     
@@ -676,8 +698,8 @@ export function ChatPage() {
     if (item.type === 'voice') {
          const getStatusText = () => {
              switch(item.status) {
-                 case 'uploaded': return 'Обработка...';
-                 case 'transcribing': return 'Расшифровка...';
+                 case 'uploaded': return 'Загрузка...';
+                 case 'transcribing': return 'Распознаём...';
                  case 'ready': return item.text || 'Голосовое сообщение';
                  case 'error': return 'Ошибка';
                  default: return item.text || 'Голосовое сообщение';
@@ -694,7 +716,7 @@ export function ChatPage() {
                   <View style={styles.voiceMessageBubble}>
                     {/* Voice Message Header with Gradient */}
                     <LinearGradient
-                      colors={['#3b82f6', '#8b5cf6']}
+                      colors={Theme.accent.gradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.voiceMessageHeader}
@@ -712,7 +734,7 @@ export function ChatPage() {
                       ) : (
                         <View style={styles.voiceLoadingContainer}>
                           <Ionicons name="mic" size={16} color="rgba(255,255,255,0.8)" />
-                          <Text style={styles.voiceLoadingText}>Голосовое</Text>
+                          <Text style={styles.voiceLoadingText}>Загрузка</Text>
                         </View>
                       )}
                     </LinearGradient>
@@ -741,7 +763,7 @@ export function ChatPage() {
       >
         {isUser ? (
           <LinearGradient
-            colors={['#3b82f6', '#8b5cf6']}
+            colors={[Theme.accent.primary, Theme.accent.primaryLight]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.messageUserBubble}
@@ -749,30 +771,40 @@ export function ChatPage() {
             <Text style={styles.messageUserText}>{item.text}</Text>
           </LinearGradient>
         ) : (
-          <View
-            style={[
-              styles.messageAIBubble,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(30, 41, 59, 0.8)'
-                  : 'rgba(255, 255, 255, 0.8)',
-                borderColor: isDark
-                  ? 'rgba(71, 85, 105, 0.3)'
-                  : 'rgba(226, 232, 240, 0.3)',
-              },
-            ]}
-          >
-            <Text
+          <View style={styles.aiMessageRow}>
+            {/* AI Avatar */}
+            <View style={styles.aiAvatarContainer}>
+              <LinearGradient
+                colors={[Theme.accent.primary, Theme.accent.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.aiAvatar}
+              >
+                <Ionicons name="sparkles" size={14} color="#FFF" />
+              </LinearGradient>
+            </View>
+            {/* AI Message Bubble */}
+            <View
               style={[
-                styles.messageAIText,
-                { color: isDark ? '#e2e8f0' : '#1e293b' },
+                styles.messageAIBubble,
+                {
+                  backgroundColor: Theme.background.card,
+                  borderColor: Theme.border.default,
+                },
               ]}
             >
-              {item.text}
-              {item.isTyping && (
-                <Text style={{ color: isDark ? '#a78bfa' : '#8b5cf6' }}>...</Text>
-              )}
-            </Text>
+              <Text
+                style={[
+                  styles.messageAIText,
+                  { color: Theme.text.primary },
+                ]}
+              >
+                {item.text}
+                {item.isTyping && (
+                  <Text style={{ color: Theme.accent.primary }}>...</Text>
+                )}
+              </Text>
+            </View>
           </View>
         )}
       </Animated.View>
@@ -784,22 +816,18 @@ export function ChatPage() {
       <View style={styles.mainContainer}>
         <View style={styles.container}>
           <LinearGradient
-            colors={
-              isDark
-                ? ['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']
-                : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
-            }
+            colors={Theme.gradients.backgroundDeep}
             style={StyleSheet.absoluteFillObject}
           />
 
           <View style={{ flex: 1 }}>
-            {/* Header */}
+            {/* Aurora Header - Minimal floating */}
             <View
           style={[
             styles.header,
             {
-              paddingTop: insets.top + 12,
-              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.95)' : '#ffffff',
+              paddingTop: insets.top + 8,
+              backgroundColor: 'transparent',
               borderBottomWidth: 0,
             },
           ]}
@@ -807,31 +835,49 @@ export function ChatPage() {
           <View style={styles.headerContent}>
             <TouchableOpacity 
               onPress={() => setShowSidebar(true)}
-              style={styles.backButton}
+              style={[styles.backButton, { backgroundColor: Theme.glass.background, borderColor: Theme.glass.border }]}
             >
               <Ionicons
-                name="chevron-back"
-                size={24}
-                color={isDark ? '#e2e8f0' : '#1e293b'}
+                name="grid-outline"
+                size={20}
+                color={Theme.text.secondary}
               />
             </TouchableOpacity>
-            <Text
-              style={[
-                styles.headerTitle,
-                { color: isDark ? '#e2e8f0' : '#1e293b' },
-              ]}
-            >
-              CloudMind
-            </Text>
+            <View style={styles.headerCenter}>
+              <View style={styles.headerOrb}>
+                <LinearGradient
+                  colors={[Theme.accent.primary, Theme.accent.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.headerOrbGradient}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.headerTitle,
+                  { color: Theme.text.primary },
+                ]}
+              >
+                Aurora
+              </Text>
+            </View>
             <TouchableOpacity 
-              style={styles.menuButton}
-              onPress={() => {}}
+              style={styles.panicButtonEnhanced}
+              onPress={() => router.push('/panic')}
+              activeOpacity={0.7}
             >
-              {/* <Ionicons
-                name="ellipsis-vertical"
-                size={20}
-                color={isDark ? '#e2e8f0' : '#1e293b'}
-              /> */}
+              <LinearGradient
+                colors={['rgba(239, 68, 68, 0.2)', 'rgba(220, 38, 38, 0.15)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.panicButtonGradient}
+              >
+                <Ionicons
+                  name="warning"
+                  size={20}
+                  color="#EF4444"
+                />
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -856,35 +902,42 @@ export function ChatPage() {
           <View style={[
             styles.emptyStateContainer,
             { 
-              paddingTop: insets.top + 100,
+              paddingTop: insets.top + 60,
               paddingBottom: listPaddingBottom
             }
           ]}>
             <View style={styles.welcomeCard}>
-              <View style={styles.welcomeIconContainer}>
-                <LinearGradient
-                  colors={isDark ? ['#6366f1', '#a855f7'] : ['#8b5cf6', '#ec4899']}
-                  style={styles.welcomeIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="sparkles" size={48} color="#fff" />
-                </LinearGradient>
+              {/* Floating Orb with aurora glow */}
+              <View style={styles.orbContainer}>
+                <View style={styles.orbGlowOuter}>
+                  <View style={styles.orbGlowMiddle}>
+                    <LinearGradient
+                      colors={[Theme.accent.primaryLight, Theme.accent.primary, Theme.accent.secondary]}
+                      style={styles.orbCore}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+                  </View>
+                </View>
               </View>
-              <Text style={[styles.welcomeTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
-                Привет!
+              
+              <Text style={[styles.welcomeTitle, { color: Theme.text.primary }]}>
+                Чем могу помочь?
               </Text>
-              <Text style={[styles.welcomeSubtitle, { color: isDark ? '#cbd5e1' : '#475569' }]}>
-                Как я могу помочь тебе сегодня?
+              <Text style={[styles.welcomeSubtitle, { color: Theme.text.tertiary }]}>
+                Голосом или текстом — я здесь для вас
               </Text>
-              <View style={styles.quickActions}>
-                <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(139, 92, 246, 0.1)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(139, 92, 246, 0.2)' }]}>
-                  <Ionicons name="chatbubble" size={20} color={isDark ? '#818cf8' : '#8b5cf6'} />
-                  <Text style={[styles.actionText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Поговорить</Text>
+              
+              {/* Suggestion pills */}
+              <View style={styles.suggestionContainer}>
+                <TouchableOpacity style={styles.suggestionPill}>
+                  <Text style={styles.suggestionText}>💭 Хочу поговорить</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(236, 72, 153, 0.1)', borderColor: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(236, 72, 153, 0.2)' }]}>
-                  <Ionicons name="heart" size={20} color={isDark ? '#c084fc' : '#ec4899'} />
-                  <Text style={[styles.actionText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Поддержка</Text>
+                <TouchableOpacity style={styles.suggestionPill}>
+                  <Text style={styles.suggestionText}>🌿 Помоги расслабиться</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.suggestionPill}>
+                  <Text style={styles.suggestionText}>✨ Вдохнови меня</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -933,17 +986,17 @@ export function ChatPage() {
           style={[
             styles.inputContainer,
             {
-              backgroundColor: isDark ? 'rgba(10, 12, 18, 0.98)' : 'rgba(248, 250, 252, 0.98)',
+              backgroundColor: 'rgba(0, 0, 0, 0.95)',
               paddingBottom: insets.bottom + 8,
               marginBottom: isKeyboardVisible
                 ? keyboardHeight - insets.bottom + 8
                 : tabBarOffset + 12,
               borderTopWidth: 1,
-              borderTopColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)',
-              shadowColor: isDark ? '#6366f1' : '#8b5cf6',
+              borderTopColor: Theme.border.accent,
+              shadowColor: Theme.accent.primary,
               shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: isDark ? 0.15 : 0.08,
-              shadowRadius: 16,
+              shadowOpacity: 0.2,
+              shadowRadius: 20,
               elevation: 12,
               transform: [{ translateY: keyboardTranslateY }],
             },
@@ -954,7 +1007,7 @@ export function ChatPage() {
           {isRecording ? (
             <Animated.View entering={FadeInDown} style={styles.recordingContainer}>
               <LinearGradient
-                colors={isDark ? ['rgba(239, 68, 68, 0.15)', 'rgba(220, 38, 38, 0.1)'] : ['rgba(239, 68, 68, 0.1)', 'rgba(220, 38, 38, 0.05)']}
+                colors={['rgba(239, 68, 68, 0.15)', 'rgba(220, 38, 38, 0.1)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.recordingBox}
@@ -970,10 +1023,10 @@ export function ChatPage() {
                     </View>
                   </Animated.View>
                   <View style={styles.recordingTextBox}>
-                    <Text style={[styles.recordingLabel, { color: isDark ? '#fca5a5' : '#dc2626' }]}>
-                      Запись аудио
+                    <Text style={[styles.recordingLabel, { color: Theme.status.error }]}>
+                      Идёт запись
                     </Text>
-                    <Text style={[styles.recordingTimer, { color: isDark ? '#f87171' : '#b91c1c' }]}>
+                    <Text style={[styles.recordingTimer, { color: Theme.status.error }]}>
                       {String(Math.floor(recordingTime / 60)).padStart(2, '0')}:{String(recordingTime % 60).padStart(2, '0')}
                     </Text>
                   </View>
@@ -1026,8 +1079,8 @@ export function ChatPage() {
                 style={[
                   styles.micButton,
                   {
-                    backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(139, 92, 246, 0.1)',
-                    borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(139, 92, 246, 0.25)',
+                    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+                    borderColor: 'rgba(255, 107, 0, 0.3)',
                     opacity: !activeChatId ? 0.5 : 1,
                   }
                 ]}
@@ -1035,7 +1088,7 @@ export function ChatPage() {
                 <Ionicons 
                   name="mic" 
                   size={22} 
-                  color={isDark ? '#818cf8' : '#8b5cf6'} 
+                  color={Theme.accent.primary} 
                 />
               </TouchableOpacity>
 
@@ -1044,8 +1097,8 @@ export function ChatPage() {
                 style={[
                   styles.inputFieldBox,
                   {
-                    borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.8)',
-                    backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+                    borderColor: Theme.border.default,
+                    backgroundColor: Theme.background.tertiary,
                   }
                 ]}
               >
@@ -1053,10 +1106,10 @@ export function ChatPage() {
                   ref={textInputRef}
                   style={[
                     styles.input,
-                    { color: isDark ? '#f1f5f9' : '#1e293b' }
+                    { color: Theme.text.primary }
                   ]}
                   placeholder="Напишите сообщение..."
-                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                  placeholderTextColor={Theme.text.tertiary}
                   multiline
                   value={message}
                   onChangeText={setMessage}
@@ -1069,11 +1122,11 @@ export function ChatPage() {
                 <Animated.View entering={FadeInRight} exiting={FadeOutRight}>
                   <TouchableOpacity
                     onPress={handleSendMessage}
-                    disabled={isLoading || !message.trim()}
+                    disabled={isLoading || !message.trim() || !canSendMessage()}
                     style={styles.sendBtnWrapper}
                   >
                     <LinearGradient
-                      colors={isLoading ? ['#6b7280', '#4b5563'] : (isDark ? ['#6366f1', '#4f46e5'] : ['#8b5cf6', '#7c3aed'])}
+                      colors={!canSendMessage() ? ['#4b5563', '#374151'] : isLoading ? ['#6b7280', '#4b5563'] : [Theme.accent.primary, Theme.accent.primaryLight]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.sendBtn}
@@ -1110,8 +1163,13 @@ export function ChatPage() {
 }
 
 const styles = StyleSheet.create({
+  // ═══════════════════════════════════════════════════════════════════════
+  // AURORA Chat Design — Immersive, fluid interface
+  // ═══════════════════════════════════════════════════════════════════════
+  
   mainContainer: {
     flex: 1,
+    backgroundColor: Theme.background.pure,
   },
   container: {
     flex: 1,
@@ -1119,158 +1177,100 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // HEADER — Floating, transparent
+  // ─────────────────────────────────────────────────────────────────────
   header: {
     paddingBottom: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: Theme.spacing.gutter,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 10,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     flex: 1,
+    justifyContent: 'space-between',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerOrb: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: 'hidden',
+    ...Theme.shadow.glow,
+  },
+  headerOrbGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerButton: {
-    padding: 8,
-  },
-  messagesList: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  messageContainer: {
-    marginBottom: 16,
-    maxWidth: '75%',
-  },
-  messageContainerUser: {
-    alignSelf: 'flex-end',
-  },
-  messageContainerAI: {
-    alignSelf: 'flex-start',
-  },
-  messageUserBubble: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderTopRightRadius: 4,
-  },
-  messageUserText: {
-    color: '#fff',
-    fontSize: 15,
-    lineHeight: 22,
-    letterSpacing: 0.1,
-  },
-  messageAIBubble: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderTopLeftRadius: 4,
-    borderWidth: 1,
-  },
-  messageAIText: {
-    fontSize: 15,
-    lineHeight: 22,
-    letterSpacing: 0.1,
-  },
-  inputContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    position: 'absolute',
-    bottom: 30,
-    left: 0,
-    right: 0,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  inputRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 24,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  attachButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  voiceButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    maxHeight: 100,
-    paddingVertical: 6,
-    lineHeight: 22,
-  },
-  sendButtonContainer: {
-    marginBottom: 4,
-  },
-  sendButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: Theme.glass.background,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.glass.background,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+  },
+  panicButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.glass.background,
+    borderWidth: 1,
+    borderColor: Theme.status.errorBorder,
+  },
+  panicButtonEnhanced: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  panicButtonGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  headerTitle: {
+    fontSize: Theme.typography.size.lg,
+    fontWeight: Theme.typography.weight.semibold,
+    letterSpacing: Theme.typography.tracking.wide,
+    color: Theme.text.primary,
+  },
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Theme.radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
+  },
+  headerButton: {
+    padding: 10,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -1281,61 +1281,252 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(245, 158, 11, 0.25)',
+    paddingVertical: 5,
+    borderRadius: Theme.radius.sm,
+    backgroundColor: Theme.status.warningBg,
+    borderWidth: 1,
+    borderColor: Theme.status.warningBorder,
   },
   temporaryText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#f59e0b',
+    fontSize: 11,
+    fontWeight: Theme.typography.weight.semibold,
+    color: Theme.status.warning,
     letterSpacing: 0.3,
   },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // MESSAGES LIST — Soft, glowing bubbles
+  // ─────────────────────────────────────────────────────────────────────
+  messagesList: {
+    paddingHorizontal: Theme.spacing.gutter,
+    paddingTop: Theme.spacing.xl,
+  },
+  messageContainer: {
+    marginBottom: Theme.spacing.lg,
+    maxWidth: '82%',
+  },
+  messageContainerUser: {
+    alignSelf: 'flex-end',
+  },
+  messageContainerAI: {
+    alignSelf: 'flex-start',
+  },
+  messageUserBubble: {
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md + 2,
+    borderRadius: Theme.radius.xl,
+    borderBottomRightRadius: Theme.radius.sm,
+    backgroundColor: Theme.accent.primary,
+    ...Theme.shadow.glow,
+  },
+  messageUserText: {
+    color: '#FFFFFF',
+    fontSize: Theme.typography.size.base,
+    lineHeight: 24,
+    letterSpacing: 0.2,
+  },
+  messageAIBubble: {
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md + 2,
+    borderRadius: Theme.radius.xl,
+    borderBottomLeftRadius: Theme.radius.sm,
+    borderWidth: 1,
+    backgroundColor: Theme.glass.background,
+    borderColor: Theme.glass.border,
+    flex: 1,
+  },
+  messageAIText: {
+    fontSize: Theme.typography.size.base,
+    lineHeight: 24,
+    letterSpacing: 0.2,
+    color: Theme.text.primary,
+  },
+  aiMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  aiAvatarContainer: {
+    marginBottom: 4,
+  },
+  aiAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Theme.shadow.sm,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // INPUT AREA — Floating, glowing
+  // ─────────────────────────────────────────────────────────────────────
+  inputContainer: {
+    paddingHorizontal: Theme.spacing.lg,
+    paddingTop: Theme.spacing.md,
+    position: 'absolute',
+    bottom: 28,
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    backgroundColor: Theme.glass.background,
+    borderRadius: Theme.radius.xxxl,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+    ...Theme.shadow.md,
+  },
+  inputRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: Theme.radius.xl,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: 10,
+    gap: 10,
+    backgroundColor: Theme.background.tertiary,
+    borderWidth: 1,
+    borderColor: Theme.border.default,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  attachButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Theme.radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
+  },
+  voiceButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Theme.radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
+  },
+  input: {
+    flex: 1,
+    fontSize: Theme.typography.size.md,
+    maxHeight: 100,
+    paddingVertical: 6,
+    lineHeight: 22,
+    color: Theme.text.primary,
+  },
+  sendButtonContainer: {
+    marginBottom: 4,
+  },
+  sendButton: {
+    width: 46,
+    height: 46,
+    borderRadius: Theme.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.accent.primary,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  // ─────────────────────────────────────────────────────────────────────
+  // EMPTY STATE / WELCOME — Aurora orb, immersive
+  // ─────────────────────────────────────────────────────────────────────
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: Theme.spacing.gutter,
   },
   welcomeCard: {
     alignItems: 'center',
-    maxWidth: 400,
+    maxWidth: 340,
     width: '100%',
   },
-  welcomeIconContainer: {
-    marginBottom: 32,
+  orbContainer: {
+    marginBottom: Theme.spacing.xxxl,
   },
-  welcomeIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+  orbGlowOuter: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: Theme.accent.primaryGlow,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    ...Theme.shadow.glowStrong,
+  },
+  orbGlowMiddle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: Theme.accent.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbCore: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  welcomeIconContainer: {
+    marginBottom: Theme.spacing.xxl,
+  },
+  welcomeIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.accent.primary,
+    ...Theme.shadow.glow,
   },
   welcomeTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 12,
+    fontSize: Theme.typography.size.xxl,
+    fontWeight: Theme.typography.weight.semibold,
+    marginBottom: Theme.spacing.sm,
     textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: Theme.typography.tracking.normal,
+    color: Theme.text.primary,
   },
   welcomeSubtitle: {
-    fontSize: 17,
-    fontWeight: '500',
-    marginBottom: 32,
+    fontSize: Theme.typography.size.base,
+    fontWeight: Theme.typography.weight.regular,
+    marginBottom: Theme.spacing.xxl,
     textAlign: 'center',
     lineHeight: 24,
+    color: Theme.text.tertiary,
+  },
+  suggestionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Theme.spacing.sm,
+  },
+  suggestionPill: {
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.sm + 2,
+    borderRadius: Theme.radius.pill,
+    backgroundColor: Theme.glass.background,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+  },
+  suggestionText: {
+    fontSize: Theme.typography.size.sm,
+    color: Theme.text.secondary,
+    fontWeight: Theme.typography.weight.medium,
   },
   quickActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Theme.spacing.md,
     width: '100%',
   },
   actionCard: {
@@ -1343,85 +1534,107 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    gap: 10,
+    paddingVertical: Theme.spacing.lg,
+    paddingHorizontal: Theme.spacing.md,
+    borderRadius: Theme.radius.lg,
     borderWidth: 1,
+    backgroundColor: Theme.glass.background,
+    borderColor: Theme.glass.border,
   },
   actionText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: Theme.typography.size.sm,
+    fontWeight: Theme.typography.weight.medium,
+    color: Theme.text.primary,
   },
   welcomeText: {
-    fontSize: 14,
+    fontSize: Theme.typography.size.base,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 22,
+    marginBottom: Theme.spacing.lg,
+    color: Theme.text.secondary,
   },
   welcomeFeatures: {
-    gap: 12,
-    marginBottom: 20,
+    gap: Theme.spacing.md,
+    marginBottom: Theme.spacing.lg,
     width: '100%',
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
+    gap: 10,
+    paddingVertical: 6,
   },
   featureText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: Theme.typography.size.base,
+    fontWeight: Theme.typography.weight.medium,
+    color: Theme.text.secondary,
   },
   welcomePrompt: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Theme.typography.size.lg,
+    fontWeight: Theme.typography.weight.semibold,
     textAlign: 'center',
+    color: Theme.text.primary,
   },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // ERROR STATES
+  // ─────────────────────────────────────────────────────────────────────
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 8,
+    gap: 12,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md,
+    marginHorizontal: Theme.spacing.md,
+    marginBottom: 10,
+    borderRadius: Theme.radius.md,
+    backgroundColor: Theme.status.errorBg,
+    borderWidth: 1,
+    borderColor: Theme.status.errorBorder,
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: Theme.typography.size.sm,
+    fontWeight: Theme.typography.weight.medium,
+    color: Theme.status.error,
   },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // RECORDING UI
+  // ─────────────────────────────────────────────────────────────────────
   recordingIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 12,
+    gap: 12,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.md,
+    borderRadius: Theme.radius.md,
+    marginBottom: Theme.spacing.md,
     borderWidth: 1,
+    backgroundColor: Theme.status.errorBg,
+    borderColor: Theme.status.errorBorder,
   },
   recordingPulse: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.status.error,
   },
   recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#fff',
   },
   recordingText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: Theme.typography.size.sm,
+    fontWeight: Theme.typography.weight.semibold,
     letterSpacing: 0.2,
+    color: Theme.text.primary,
   },
-  // New Recording Styles
   recordingContainer: {
     width: '100%',
   },
@@ -1429,169 +1642,191 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 24,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.lg,
+    borderRadius: Theme.radius.xl,
     borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderColor: Theme.status.errorBorder,
+    backgroundColor: Theme.status.errorBg,
   },
   recordingInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Theme.spacing.md,
   },
   recordingPulseOuter: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    width: 48,
+    height: 48,
+    borderRadius: Theme.radius.lg,
+    backgroundColor: Theme.status.errorBg,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Theme.status.errorBorder,
   },
   recordingPulseInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Theme.status.error,
     alignItems: 'center',
     justifyContent: 'center',
+    opacity: 0.3,
   },
   recordingDotLarge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#ef4444',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.status.error,
   },
   recordingTextBox: {
-    gap: 2,
+    gap: 4,
   },
   recordingLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: Theme.typography.size.sm,
+    fontWeight: Theme.typography.weight.semibold,
     letterSpacing: 0.2,
+    color: Theme.status.error,
   },
   recordingTimer: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: Theme.typography.size.xxl,
+    fontWeight: Theme.typography.weight.bold,
     fontVariant: ['tabular-nums'],
-    letterSpacing: 1,
+    letterSpacing: 1.5,
+    color: Theme.text.primary,
   },
   recordingActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: Theme.spacing.md,
   },
   recordingCancelBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
   },
   recordingStopBtn: {
     overflow: 'hidden',
-    borderRadius: 24,
+    borderRadius: Theme.radius.lg,
   },
   recordingStopGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: Theme.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.status.error,
+  },
+// ─────────────────────────────────────────────────────────────────────
+  // INPUT CONTROLS — Glowing, soft
+  // ─────────────────────────────────────────────────────────────────────
+  micButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.accent.primarySoft,
+    borderWidth: 1,
+    borderColor: Theme.accent.primaryGlow,
   },
-  // Mic Button
-  micButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-  },
-  // Input Field
   inputFieldBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    borderWidth: 1.5,
+    borderRadius: Theme.radius.xxl,
+    paddingHorizontal: Theme.spacing.md,
+    backgroundColor: 'transparent',
     minHeight: 44,
-    maxHeight: 120,
+    maxHeight: 100,
   },
-  // Send Button
   sendBtnWrapper: {
     overflow: 'hidden',
-    borderRadius: 22,
+    borderRadius: 24,
+    ...Theme.shadow.glow,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.accent.primary,
   },
   inputField: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
-    paddingLeft: 4,
-    borderWidth: 1.5,
+    borderRadius: Theme.radius.lg,
+    paddingLeft: 6,
+    borderWidth: 1,
+    borderColor: Theme.border.default,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+    backgroundColor: Theme.background.tertiary,
   },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginLeft: 8,
+    gap: 10,
+    marginLeft: 10,
   },
-  // Voice Message Styles
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // VOICE MESSAGE UI
+  // ─────────────────────────────────────────────────────────────────────
   voiceMessageBubble: {
-    borderRadius: 20,
+    borderRadius: Theme.radius.lg,
     overflow: 'hidden',
-    minWidth: 200,
-    maxWidth: 280,
+    minWidth: 220,
+    maxWidth: 300,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 4,
+    backgroundColor: Theme.background.card,
+    borderWidth: 1,
+    borderColor: Theme.border.default,
   },
   voiceMessageHeader: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.md,
   },
   voiceLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
+    gap: 10,
+    paddingVertical: 6,
   },
   voiceLoadingText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    fontWeight: '500',
+    color: Theme.text.secondary,
+    fontSize: Theme.typography.size.sm,
+    fontWeight: Theme.typography.weight.medium,
   },
   voicePlayerWrapper: {
-    marginVertical: 2,
+    marginVertical: 4,
   },
   voiceTranscription: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: Theme.border.default,
+    backgroundColor: Theme.background.tertiary,
   },
   voiceTranscriptionText: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Theme.typography.size.sm,
+    lineHeight: 21,
+    color: Theme.text.primary,
   },
 });
 

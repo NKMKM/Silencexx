@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Theme } from '@/constants/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -118,7 +119,7 @@ function VoiceRecordingInputComponent({
           style={[
             styles.actionButton,
             {
-              backgroundColor: isDark ? '#4f46e5' : '#6366f1',
+              backgroundColor: Theme.accent.primary,
               opacity: isProcessing ? 0.5 : 1,
             },
           ]}
@@ -201,7 +202,7 @@ function VoiceRecordingInputComponent({
           style={[
             styles.sendButton,
             {
-              backgroundColor: isDark ? '#4f46e5' : '#6366f1',
+              backgroundColor: Theme.accent.primary,
               opacity: isLoading ? 0.5 : 1,
             },
           ]}
@@ -217,7 +218,7 @@ function VoiceRecordingInputComponent({
             style={[
               styles.micButton,
               {
-                backgroundColor: isDark ? '#6366f1' : '#8b5cf6',
+                backgroundColor: Theme.accent.primary,
                 opacity: (isProcessing || isRecording) ? 0.5 : 1,
               },
             ]}

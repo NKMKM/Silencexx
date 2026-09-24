@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 import {
   registerForPushNotificationsAsync,
   scheduleDailyReminder,
@@ -25,8 +25,7 @@ interface ReminderModalProps {
 }
 
 export function ReminderModal({ visible, onClose }: ReminderModalProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true;
   const [enabled, setEnabled] = useState(false);
   const [selectedHour, setSelectedHour] = useState(9);
   const [hasPermission, setHasPermission] = useState(false);
@@ -80,35 +79,35 @@ export function ReminderModal({ visible, onClose }: ReminderModalProps) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
+        <BlurView intensity={20} tint="dark" style={styles.blurView}>
           <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         </BlurView>
 
         <View style={styles.modalContainer}>
-          <View style={[styles.modal, isDark && styles.modalDark]}>
+          <View style={[styles.modal, styles.modalDark]}>
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <View style={[styles.iconContainer, isDark && styles.iconContainerDark]}>
-                  <Ionicons name="time" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
+                <View style={[styles.iconContainer, styles.iconContainerDark]}>
+                  <Ionicons name="time" size={24} color={Theme.accent.primary} />
                 </View>
-                <Text style={[styles.title, isDark && styles.titleDark, { fontWeight: '700', letterSpacing: -0.5 }]}>
+                <Text style={[styles.title, styles.titleDark, { fontWeight: '700', letterSpacing: -0.5 }]}>
                   Напоминания
                 </Text>
               </View>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={isDark ? '#94a3b8' : '#64748b'} />
+                <Ionicons name="close" size={24} color={Theme.text.secondary} />
               </TouchableOpacity>
             </View>
 
             {/* Description */}
-            <Text style={[styles.description, isDark && styles.descriptionDark]}>
+            <Text style={[styles.description, styles.descriptionDark]}>
               Установите ежедневное напоминание для записи мыслей
             </Text>
 
             {/* Time Selector */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+              <Text style={[styles.sectionTitle, styles.sectionTitleDark]}>
                 Время напоминания
               </Text>
               <ScrollView
@@ -124,16 +123,16 @@ export function ReminderModal({ visible, onClose }: ReminderModalProps) {
                     style={[
                       styles.hourButton,
                       selectedHour === hour && styles.hourButtonSelected,
-                      isDark && styles.hourButtonDark,
-                      selectedHour === hour && isDark && styles.hourButtonSelectedDark,
+                      styles.hourButtonDark,
+                      selectedHour === hour && styles.hourButtonSelectedDark,
                     ]}
                   >
                     <Text
                       style={[
                         styles.hourText,
                         selectedHour === hour && styles.hourTextSelected,
-                        isDark && styles.hourTextDark,
-                        selectedHour === hour && isDark && styles.hourTextSelectedDark,
+                        styles.hourTextDark,
+                        selectedHour === hour && styles.hourTextSelectedDark,
                       ]}
                     >
                       {hour.toString().padStart(2, '0')}:00
@@ -158,7 +157,7 @@ export function ReminderModal({ visible, onClose }: ReminderModalProps) {
               ) : (
                 <TouchableOpacity onPress={handleEnableReminder} style={styles.actionButton}>
                   <LinearGradient
-                    colors={['#3b82f6', '#8b5cf6']}
+                    colors={Theme.accent.gradient as unknown as [string, string]}
                     style={styles.actionGradient}
                   >
                     <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -191,7 +190,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
   modal: {
-    backgroundColor: '#ffffff',
+    backgroundColor: Theme.background.card,
     borderRadius: 24,
     padding: 24,
     shadowColor: '#000',
@@ -199,9 +198,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: Theme.border.primary,
   },
   modalDark: {
-    backgroundColor: '#1e293b',
+    backgroundColor: Theme.background.card,
   },
   header: {
     flexDirection: 'row',
@@ -218,32 +219,32 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconContainerDark: {
-    backgroundColor: 'rgba(167, 139, 250, 0.2)',
+    backgroundColor: 'rgba(255, 107, 0, 0.2)',
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1e293b',
+    color: Theme.text.primary,
   },
   titleDark: {
-    color: '#e2e8f0',
+    color: Theme.text.primary,
   },
   closeButton: {
     padding: 4,
   },
   description: {
     fontSize: 14,
-    color: '#64748b',
+    color: Theme.text.secondary,
     marginBottom: 24,
     lineHeight: 20,
   },
   descriptionDark: {
-    color: '#94a3b8',
+    color: Theme.text.secondary,
   },
   section: {
     marginBottom: 24,
@@ -251,11 +252,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#475569',
+    color: Theme.text.secondary,
     marginBottom: 12,
   },
   sectionTitleDark: {
-    color: '#cbd5e1',
+    color: Theme.text.secondary,
   },
   hoursScroll: {
     marginHorizontal: -24,
@@ -269,34 +270,34 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
+    borderColor: Theme.border.primary,
+    backgroundColor: Theme.background.secondary,
   },
   hourButtonDark: {
-    borderColor: '#334155',
-    backgroundColor: '#0f172a',
+    borderColor: Theme.border.primary,
+    backgroundColor: Theme.background.primary,
   },
   hourButtonSelected: {
-    borderColor: '#8b5cf6',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderColor: Theme.accent.primary,
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
   },
   hourButtonSelectedDark: {
-    borderColor: '#a78bfa',
-    backgroundColor: 'rgba(167, 139, 250, 0.2)',
+    borderColor: Theme.accent.secondary,
+    backgroundColor: 'rgba(255, 107, 0, 0.2)',
   },
   hourText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#475569',
+    color: Theme.text.secondary,
   },
   hourTextDark: {
-    color: '#cbd5e1',
+    color: Theme.text.secondary,
   },
   hourTextSelected: {
-    color: '#8b5cf6',
+    color: Theme.accent.primary,
   },
   hourTextSelectedDark: {
-    color: '#a78bfa',
+    color: Theme.accent.secondary,
   },
   actions: {
     gap: 12,

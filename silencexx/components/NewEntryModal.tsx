@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 interface NewEntryModalProps {
   visible: boolean;
@@ -25,13 +25,12 @@ const moods = [
   { id: 1, emoji: '😊', label: 'Отлично', color: ['#10b981', '#059669'] as const },
   { id: 2, emoji: '😌', label: 'Хорошо', color: ['#3b82f6', '#2563eb'] as const },
   { id: 3, emoji: '😐', label: 'Нормально', color: ['#f59e0b', '#d97706'] as const },
-  { id: 4, emoji: '😔', label: 'Грустно', color: ['#8b5cf6', '#7c3aed'] as const },
+  { id: 4, emoji: '😔', label: 'Грустно', color: ['#A855F7', '#C084FC'] as const },
   { id: 5, emoji: '😰', label: 'Тревожно', color: ['#ef4444', '#dc2626'] as const },
 ];
 
 export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const [selectedMood, setSelectedMood] = useState(moods[0]);
   const [entryText, setEntryText] = useState('');
 
@@ -66,7 +65,7 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
           >
             <TouchableOpacity activeOpacity={1}>
               <LinearGradient
-                colors={isDark ? ['#0f172a', '#1e1b4b', '#16213e'] : ['#f8fafc', '#f1f5f9', '#e2e8f0']}
+                colors={Theme.gradients.backgroundDeep as any}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.gradientContainer}
@@ -75,31 +74,31 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
                   style={[
                     styles.blurContainer,
                     {
-                      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                      backgroundColor: Theme.glass.background,
                     },
                   ]}
                 >
                   {/* Header */}
-                  <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.15)' }]}>
+                  <View style={[styles.header, { borderBottomColor: Theme.glass.border }]}>
                     <View style={styles.headerLeft}>
                       <LinearGradient
-                        colors={isDark ? ['#6366f1', '#a855f7'] : ['#8b5cf6', '#ec4899']}
+                        colors={Theme.accent.gradient as any}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={styles.headerIcon}
                       >
                         <Ionicons name="create-outline" size={22} color="#fff" />
                       </LinearGradient>
-                      <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Новая запись</Text>
+                      <Text style={[styles.headerTitle, { color: Theme.text.primary }]}>Новая запись</Text>
                     </View>
                     <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                      <Ionicons name="close" size={24} color={isDark ? '#cbd5e1' : '#64748b'} />
+                      <Ionicons name="close" size={24} color={Theme.text.secondary} />
                     </TouchableOpacity>
                   </View>
 
                   {/* Mood Selection */}
                   <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Как вы себя чувствуете?</Text>
+                    <Text style={[styles.sectionTitle, { color: Theme.text.primary }]}>Как вы себя чувствуете?</Text>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
@@ -123,8 +122,8 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
                           <Text
                             style={[
                               styles.moodLabel,
-                              { color: isDark ? '#cbd5e1' : '#64748b' },
-                              selectedMood.id === mood.id && { color: isDark ? '#e2e8f0' : '#1e293b', fontWeight: '700' },
+                              { color: Theme.text.secondary },
+                              selectedMood.id === mood.id && { color: Theme.text.primary, fontWeight: '700' },
                             ]}
                           >
                             {mood.label}
@@ -136,24 +135,24 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
 
                   {/* Text Input */}
                   <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>Что у вас на душе?</Text>
+                    <Text style={[styles.sectionTitle, { color: Theme.text.primary }]}>Что у вас на душе?</Text>
                     <TextInput
                       value={entryText}
                       onChangeText={setEntryText}
                       placeholder="Напишите о своих мыслях и чувствах..."
-                      placeholderTextColor={isDark ? '#64748b' : '#cbd5e1'}
+                      placeholderTextColor={Theme.text.muted}
                       multiline
                       maxLength={1000}
                       style={[
                         styles.textInput,
                         {
-                          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.6)',
-                          borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.15)',
-                          color: isDark ? '#e2e8f0' : '#1e293b',
+                          backgroundColor: Theme.background.secondary,
+                          borderColor: Theme.glass.border,
+                          color: Theme.text.primary,
                         },
                       ]}
                     />
-                    <Text style={[styles.charCount, { color: isDark ? '#94a3b8' : '#cbd5e1' }]}>
+                    <Text style={[styles.charCount, { color: Theme.text.tertiary }]}>
                       {entryText.length} / 1000
                     </Text>
                   </View>
@@ -165,11 +164,11 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
                       style={[
                         styles.cancelButton,
                         {
-                          backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(139, 92, 246, 0.1)',
+                          backgroundColor: Theme.glass.background,
                         },
                       ]}
                     >
-                      <Text style={[styles.cancelButtonText, { color: isDark ? '#818cf8' : '#8b5cf6' }]}>Отмена</Text>
+                      <Text style={[styles.cancelButtonText, { color: Theme.accent.primary }]}>Отмена</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleSave}
@@ -178,12 +177,8 @@ export function NewEntryModal({ visible, onClose, onSave }: NewEntryModalProps) 
                       <LinearGradient
                         colors={
                           entryText.trim()
-                            ? isDark
-                              ? ['#6366f1', '#a855f7']
-                              : ['#8b5cf6', '#ec4899']
-                            : isDark
-                            ? ['#475569', '#64748b']
-                            : ['#cbd5e1', '#b0bec5']
+                            ? Theme.accent.gradient as any
+                            : [Theme.text.tertiary, Theme.text.tertiary]
                         }
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
@@ -217,14 +212,14 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
   },
   gradientContainer: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: Theme.radius.pill,
+    borderTopRightRadius: Theme.radius.pill,
     overflow: 'hidden',
     paddingBottom: 20,
   },
   blurContainer: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: Theme.radius.pill,
+    borderTopRightRadius: Theme.radius.pill,
     overflow: 'hidden',
     paddingBottom: 20,
   },
@@ -243,9 +238,10 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Theme.radius.organic,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Theme.shadows.glow,
   },
   headerTitle: {
     fontSize: 22,
@@ -298,8 +294,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   textInput: {
-    borderWidth: 1.5,
-    borderRadius: 18,
+    borderWidth: 1,
+    borderRadius: Theme.radius.organic,
     padding: 16,
     fontSize: 15,
     minHeight: 150,
@@ -320,11 +316,11 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     paddingVertical: 16,
-    borderRadius: 18,
+    borderRadius: Theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(99, 102, 241, 0.25)',
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -337,12 +333,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    borderRadius: Theme.radius.pill,
+    ...Theme.shadows.glow,
   },
   saveButtonText: {
     color: '#fff',

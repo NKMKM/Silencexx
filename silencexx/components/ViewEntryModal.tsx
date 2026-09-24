@@ -3,7 +3,7 @@ import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 interface ViewEntryModalProps {
   visible: boolean;
@@ -12,8 +12,7 @@ interface ViewEntryModalProps {
 }
 
 export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
 
   // Parse mood emoji and text from diary_content
   const parseContent = (content: string | undefined) => {
@@ -41,7 +40,7 @@ export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps)
           style={styles.modalContent}
         >
           <LinearGradient
-            colors={isDark ? ['#0f172a', '#1e1b4b', '#16213e'] : ['#f8fafc', '#f1f5f9', '#e2e8f0']}
+            colors={Theme.gradients.backgroundDeep as any}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.gradient}
@@ -50,8 +49,8 @@ export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps)
               style={[
                 styles.container,
                 {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.92)',
-                  borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(99, 102, 241, 0.15)',
+                  backgroundColor: Theme.glass.background,
+                  borderColor: Theme.glass.border,
                 },
               ]}
             >
@@ -60,24 +59,24 @@ export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps)
                 style={[
                   styles.header,
                   {
-                    borderBottomColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.12)',
+                    borderBottomColor: Theme.glass.border,
                   },
                 ]}
               >
                 <View style={styles.headerContent}>
-                  <View style={styles.moodContainer}>
+                  <View style={[styles.moodContainer, { backgroundColor: Theme.glass.backgroundLight }]}>
                     <Text style={styles.moodEmoji}>{mood}</Text>
                   </View>
-                  <Text style={[styles.title, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Запись</Text>
+                  <Text style={[styles.title, { color: Theme.text.primary }]}>Запись</Text>
                 </View>
                 <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <Ionicons name="close" size={26} color={isDark ? '#cbd5e1' : '#64748b'} />
+                  <Ionicons name="close" size={26} color={Theme.text.secondary} />
                 </TouchableOpacity>
               </View>
 
               {/* Body */}
               <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-                <Text style={[styles.dateText, { color: isDark ? '#94a3b8' : '#475569' }]}>
+                <Text style={[styles.dateText, { color: Theme.text.secondary }]}>
                   {entry?.diary_date ? new Date(entry.diary_date).toLocaleDateString('ru-RU', {
                     year: 'numeric',
                     month: 'long',
@@ -89,12 +88,12 @@ export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps)
                   style={[
                     styles.contentCard,
                     {
-                      backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-                      borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.1)',
+                      backgroundColor: Theme.background.secondary,
+                      borderColor: Theme.glass.border,
                     },
                   ]}
                 >
-                  <Text style={[styles.contentText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>
+                  <Text style={[styles.contentText, { color: Theme.text.primary }]}>
                     {text}
                   </Text>
                 </View>
@@ -104,7 +103,7 @@ export function ViewEntryModal({ visible, onClose, entry }: ViewEntryModalProps)
               <View style={styles.footer}>
                 <TouchableOpacity onPress={onClose} style={styles.closeButtonFooter}>
                   <LinearGradient
-                    colors={isDark ? ['#6366f1', '#a855f7'] : ['#8b5cf6', '#ec4899']}
+                    colors={Theme.accent.gradient as any}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.closeGradient}
@@ -135,18 +134,18 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '88%',
     maxWidth: 440,
-    borderRadius: 28,
+    borderRadius: Theme.radius.pill,
     overflow: 'hidden',
     maxHeight: '80%',
   },
   gradient: {
-    borderRadius: 28,
+    borderRadius: Theme.radius.pill,
     overflow: 'hidden',
   },
   container: {
     padding: 24,
-    borderWidth: 1.5,
-    borderRadius: 28,
+    borderWidth: 1,
+    borderRadius: Theme.radius.pill,
     maxHeight: '100%',
   },
   header: {
@@ -165,8 +164,8 @@ const styles = StyleSheet.create({
   moodContainer: {
     width: 52,
     height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    borderRadius: Theme.radius.lg,
+    backgroundColor: Theme.glass.backgroundLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -196,8 +195,8 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   contentCard: {
-    borderWidth: 1.5,
-    borderRadius: 18,
+    borderWidth: 1,
+    borderRadius: Theme.radius.lg,
     padding: 16,
     marginBottom: 12,
   },
@@ -220,12 +219,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    borderRadius: Theme.radius.pill,
+    ...Theme.shadow.glow,
   },
   closeButtonText: {
     color: '#fff',

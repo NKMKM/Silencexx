@@ -13,12 +13,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
 import { Input } from './ui/Input';
-import { FloatingClouds } from './FloatingClouds';
-import { AnimatedGradient } from './AnimatedGradient';
 import { signInWithGoogle, signInWithApple } from '@/services/oauth';
 import { authApi } from '@/services/api';
+import { Theme } from '@/constants/theme';
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -40,18 +38,15 @@ export function LoginPage({
   const [errors, setErrors] = useState({ email: '', password: '' });
   
   const insets = useSafeAreaInsets();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   
   const contentTranslateY = useSharedValue(0);
 
   const handleInputFocus = (offset: number) => {
-    // Поднимаем форму при фокусе
     contentTranslateY.value = withTiming(-120, { duration: 300 });
   };
 
   const handleInputBlur = () => {
-    // Опускаем форму при потере фокуса
     contentTranslateY.value = withTiming(0, { duration: 300 });
   };
 
@@ -127,41 +122,40 @@ export function LoginPage({
 
   return (
     <View style={styles.container}>
-      <View style={styles.gradient}>
-        <AnimatedGradient
-          lightColors={['#fafbfc', '#f8fafc', '#f5f7fa']}
-          darkColors={['#124edbff', '#ffffffff', '#124edbff']}
-          isDark={isDark}
-        />
-        <FloatingClouds />
-
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <Animated.View
-            style={[
-              styles.scrollContent,
-              { 
-                flex: 1,
-                justifyContent: 'center',
-                paddingHorizontal: 24,
-              },
-              useAnimatedStyle(() => ({
-                transform: [{ translateY: contentTranslateY.value }],
-              })),
-            ]}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <Animated.View
+          style={[
+            styles.scrollContent,
+            { 
+              flex: 1,
+              justifyContent: 'center',
+              paddingHorizontal: Theme.spacing.xl,
+            },
+            useAnimatedStyle(() => ({
+              transform: [{ translateY: contentTranslateY.value }],
+            })),
+          ]}
           >
-            {/* Header */}
+            {/* AURORA Header */}
             <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
-              <LinearGradient colors={['#60a5fa', '#a78bfa']} style={styles.logo}>
-                <Ionicons name="cloud" size={48} color="#ffffff" />
-              </LinearGradient>
-              <Text style={[styles.title, isDark && styles.titleDark]}>CloudMind</Text>
-              <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>Welcome back</Text>
+              <View style={styles.logoContainer}>
+                <View style={styles.logoGlow}>
+                  <LinearGradient
+                    colors={[Theme.accent.primaryLight, Theme.accent.primary, Theme.accent.secondary]}
+                    style={styles.logo}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  />
+                </View>
+              </View>
+              <Text style={styles.title}>Aurora</Text>
+              <Text style={styles.subtitle}>Войдите в свой аккаунт</Text>
             </Animated.View>
 
             {/* Card */}
-            <View style={[styles.card, isDark && styles.cardDark]}>
+            <View style={styles.card}>
               {/* Email Input */}
-              <Text style={[styles.label, isDark && styles.labelDark]}>Your Email</Text>
+              <Text style={styles.label}>Email</Text>
               <Input
                 placeholder="example@mail.com"
                 value={email}
@@ -174,16 +168,16 @@ export function LoginPage({
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoFocus
-                leftIcon={<Ionicons name="mail-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                leftIcon={<Ionicons name="mail-outline" size={20} color={Theme.text.secondary} />}
                 error={errors.email}
               />
 
               {/* Password Input */}
               <View style={{ marginTop: 18 }}>
                 <View style={styles.labelRow}>
-                  <Text style={[styles.label, isDark && styles.labelDark]}>Password</Text>
+                  <Text style={styles.label}>Пароль</Text>
                   <TouchableOpacity onPress={onNavigateToForgotPassword} disabled={isLoading}>
-                    <Text style={styles.forgotPassword}>Forgot?</Text>
+                    <Text style={styles.forgotPassword}>Забыли?</Text>
                   </TouchableOpacity>
                 </View>
                 <Input
@@ -197,13 +191,13 @@ export function LoginPage({
                   onInputBlur={handleInputBlur}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  leftIcon={<Ionicons name="lock-closed-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                  leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Theme.text.secondary} />}
                   rightIcon={
                     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                       <Ionicons 
                         name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
                         size={20} 
-                        color={isDark ? '#94a3b8' : '#64748b'} 
+                        color={Theme.text.secondary} 
                       />
                     </TouchableOpacity>
                   }
@@ -216,27 +210,22 @@ export function LoginPage({
                 onPress={handleLogin}
                 disabled={isLoading}
                 activeOpacity={0.8}
-                style={{ marginTop: 28 }}
+                style={{ marginTop: Theme.spacing.xl }}
               >
-                <LinearGradient
-                  colors={isLoading ? ['#94a3b8', '#64748b'] : ['#3b82f6', '#8b5cf6']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.signInButton}
-                >
+                <View style={[styles.signInButton, isLoading && styles.signInButtonDisabled]}>
                   {isLoading ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
+                    <ActivityIndicator color={Theme.text.inverse} size="small" />
                   ) : (
-                    <Text style={styles.signInButtonText}>Sign in</Text>
+                    <Text style={styles.signInButtonText}>Войти</Text>
                   )}
-                </LinearGradient>
+                </View>
               </TouchableOpacity>
 
               {/* Divider */}
               <View style={styles.divider}>
-                <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
-                <Text style={[styles.dividerText, isDark && styles.dividerTextDark]}>or</Text>
-                <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>или</Text>
+                <View style={styles.dividerLine} />
               </View>
 
               {/* Social Login Buttons */}
@@ -244,11 +233,11 @@ export function LoginPage({
                 <TouchableOpacity
                   onPress={() => handleSocialLogin('google')}
                   disabled={isLoading}
-                  style={[styles.socialButton, isDark && styles.socialButtonDark]}
+                  style={styles.socialButton}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="logo-google" size={24} color="#3b82f6" />
-                  <Text style={[styles.socialButtonText, isDark && styles.socialButtonTextDark]}>Google</Text>
+                  <Ionicons name="logo-google" size={24} color={Theme.accent.primary} />
+                  <Text style={styles.socialButtonText}>Google</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -257,91 +246,208 @@ export function LoginPage({
                   style={[styles.socialButton, styles.appleButton]}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="logo-apple" size={24} color="#ffffff" />
+                  <Ionicons name="logo-apple" size={24} color={Theme.text.inverse} />
                   <Text style={styles.appleButtonText}>Apple</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Sign Up Link */}
               <View style={styles.footer}>
-                <Text style={[styles.footerText, isDark && styles.footerTextDark]}>Don't have an account? </Text>
+                <Text style={styles.footerText}>Нет аккаунта? </Text>
                 <TouchableOpacity onPress={onNavigateToRegister} disabled={isLoading}>
-                  <Text style={styles.registerLink}>Sign up</Text>
+                  <Text style={styles.registerLink}>Регистрация</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </Animated.View>
         </TouchableWithoutFeedback>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  gradient: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
-  header: { alignItems: 'center', marginBottom: 48 },
-  logo: { width: 88, height: 88, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 20, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 10 },
-  title: { fontSize: 32, fontWeight: '800', color: '#1e293b', marginBottom: 6, letterSpacing: 0.5 },
-  titleDark: { color: '#f1f5f9' },
-  subtitle: { fontSize: 16, color: '#64748b', fontWeight: '500', letterSpacing: 0.3 },
-  subtitleDark: { color: '#94a3b8' },
+  // ═══════════════════════════════════════════════════════════════════════
+  // AURORA Login Design — Immersive, cosmic entry
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  container: { 
+    flex: 1, 
+    backgroundColor: Theme.background.pure,
+  },
+  scrollContent: { 
+    flexGrow: 1, 
+    paddingHorizontal: Theme.spacing.xl,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // HEADER — Orb logo
+  // ─────────────────────────────────────────────────────────────────────
+  header: { 
+    alignItems: 'center', 
+    marginBottom: Theme.spacing.xxl,
+  },
+  logoContainer: {
+    marginBottom: Theme.spacing.xl,
+  },
+  logoGlow: { 
+    width: 100, 
+    height: 100, 
+    borderRadius: 50, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: Theme.accent.primaryGlow,
+    ...Theme.shadow.glowStrong,
+  },
+  logo: { 
+    width: 72, 
+    height: 72, 
+    borderRadius: 36, 
+  },
+  title: { 
+    fontSize: Theme.typography.size.display, 
+    fontWeight: Theme.typography.weight.bold, 
+    color: Theme.text.primary, 
+    marginBottom: Theme.spacing.xs, 
+    letterSpacing: Theme.typography.tracking.wide,
+  },
+  subtitle: { 
+    fontSize: Theme.typography.size.md, 
+    color: Theme.text.tertiary, 
+    fontWeight: Theme.typography.weight.regular, 
+    letterSpacing: 0.3,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // AUTH CARD — Glass morphism
+  // ─────────────────────────────────────────────────────────────────────
   card: { 
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.9)' : '#ffffff',
-    borderRadius: 24, 
-    padding: 28, 
-    shadowColor: '#ffffffff', 
-    shadowOffset: { width: 0, height: 8 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 16, 
-    elevation: 4 
-    
+    backgroundColor: Theme.glass.background,
+    borderRadius: Theme.radius.xxl, 
+    padding: Theme.spacing.xl, 
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+    ...Theme.shadow.lg,
   },
-  cardDark: { 
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(46, 63, 102, 0.5)' : '#42537aff',
-    borderWidth: Platform.OS === 'ios' ? 1 : 0,
-    borderColor: Platform.OS === 'ios' ? 'rgba(148, 163, 184, 0.1)' : 'transparent'
+  label: { 
+    fontSize: Theme.typography.size.xs, 
+    fontWeight: Theme.typography.weight.semibold, 
+    color: Theme.text.accent, 
+    marginBottom: Theme.spacing.sm, 
+    letterSpacing: 1, 
+    textTransform: 'uppercase',
   },
-  label: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 10, letterSpacing: 0.3, textTransform: 'uppercase' },
-  labelDark: { color: '#e2e8f0' },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  forgotPassword: { fontSize: 13, fontWeight: '700', color: '#8b5cf6', letterSpacing: 0.2 },
-  signInButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
-  signInButtonText: { fontSize: 16, fontWeight: '800', color: '#ffffff', letterSpacing: 0.5 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  dividerLine: { flex: 1, height: 1.5, backgroundColor: '#e2e8f0' },
-  dividerLineDark: { backgroundColor: 'rgba(148, 163, 184, 0.15)' },
-  dividerText: { paddingHorizontal: 16, fontSize: 13, color: '#94a3b8', fontWeight: '600', letterSpacing: 0.3 },
-  dividerTextDark: { color: '#64748b' },
-  socialButtons: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  labelRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: Theme.spacing.sm,
+  },
+  forgotPassword: { 
+    fontSize: Theme.typography.size.xs, 
+    fontWeight: Theme.typography.weight.semibold, 
+    color: Theme.accent.secondary, 
+    letterSpacing: 0.2,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // SIGN IN BUTTON — Glowing accent
+  // ─────────────────────────────────────────────────────────────────────
+  signInButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: Theme.spacing.lg, 
+    borderRadius: Theme.radius.lg, 
+    backgroundColor: Theme.accent.primary,
+    ...Theme.shadow.glow,
+  },
+  signInButtonDisabled: {
+    backgroundColor: Theme.text.muted,
+    shadowOpacity: 0,
+  },
+  signInButtonText: { 
+    fontSize: Theme.typography.size.md, 
+    fontWeight: Theme.typography.weight.semibold, 
+    color: '#FFFFFF', 
+    letterSpacing: 0.3,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // DIVIDER
+  // ─────────────────────────────────────────────────────────────────────
+  divider: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginVertical: Theme.spacing.xl,
+  },
+  dividerLine: { 
+    flex: 1, 
+    height: 1, 
+    backgroundColor: Theme.border.subtle,
+  },
+  dividerText: { 
+    paddingHorizontal: Theme.spacing.lg, 
+    fontSize: Theme.typography.size.xs, 
+    color: Theme.text.muted, 
+    fontWeight: Theme.typography.weight.medium, 
+    letterSpacing: 0.5,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // SOCIAL BUTTONS — Soft glass
+  // ─────────────────────────────────────────────────────────────────────
+  socialButtons: { 
+    flexDirection: 'row', 
+    gap: Theme.spacing.md, 
+    marginBottom: Theme.spacing.xl,
+  },
   socialButton: { 
     flex: 1, 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    gap: 10, 
-    backgroundColor: Platform.OS === 'ios' ? '#ffffff' : '#f8f9fa',
-    borderWidth: 2, 
-    borderColor: '#e2e8f0', 
-    borderRadius: 14, 
-    paddingVertical: 14,
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: Platform.OS === 'ios' ? 0.05 : 0, 
-    shadowRadius: 4, 
-    elevation: Platform.OS === 'ios' ? 2 : 0
+    gap: Theme.spacing.sm, 
+    backgroundColor: Theme.background.tertiary,
+    borderWidth: 1, 
+    borderColor: Theme.border.medium, 
+    borderRadius: Theme.radius.lg, 
+    paddingVertical: Theme.spacing.md,
   },
-  socialButtonDark: { 
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(51, 65, 85, 0.6)' : '#1e293b',
-    borderColor: Platform.OS === 'ios' ? 'rgba(148, 163, 184, 0.15)' : '#334155'
+  socialButtonText: { 
+    fontSize: Theme.typography.size.sm, 
+    fontWeight: Theme.typography.weight.semibold, 
+    color: Theme.text.primary, 
+    letterSpacing: 0.2,
   },
-  socialButtonText: { fontSize: 15, fontWeight: '700', color: '#3b82f6', letterSpacing: 0.2 },
-  socialButtonTextDark: { color: '#60a5fa' },
-  appleButton: { backgroundColor: Platform.OS === 'ios' ? '#000000' : '#1a1a1a', borderColor: '#000000' },
-  appleButtonText: { fontSize: 15, fontWeight: '700', color: '#ffffff', letterSpacing: 0.2 },
-  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' },
-  footerText: { fontSize: 14, color: '#64748b', fontWeight: '500' },
-  footerTextDark: { color: '#94a3b8' },
-  registerLink: { fontSize: 14, fontWeight: '800', color: '#8b5cf6', letterSpacing: 0.3 },
+  appleButton: { 
+    backgroundColor: '#FFFFFF', 
+    borderColor: '#FFFFFF',
+  },
+  appleButtonText: { 
+    fontSize: Theme.typography.size.sm, 
+    fontWeight: Theme.typography.weight.semibold, 
+    color: '#000000', 
+    letterSpacing: 0.2,
+  },
+  
+  // ─────────────────────────────────────────────────────────────────────
+  // FOOTER
+  // ─────────────────────────────────────────────────────────────────────
+  footer: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    flexWrap: 'wrap',
+  },
+  footerText: { 
+    fontSize: Theme.typography.size.sm, 
+    color: Theme.text.secondary, 
+    fontWeight: Theme.typography.weight.medium,
+  },
+  registerLink: { 
+    fontSize: Theme.typography.size.sm, 
+    fontWeight: Theme.typography.weight.bold, 
+    color: Theme.accent.primary, 
+    letterSpacing: 0.2,
+  },
 });

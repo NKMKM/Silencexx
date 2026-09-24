@@ -13,8 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../utils/ThemeContext';
-import { AnimatedGradient } from '../components/AnimatedGradient';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Theme } from '@/constants/theme';
 import { authApi } from '@/services/api';
 
 interface Session {
@@ -28,8 +28,7 @@ interface Session {
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const insets = useSafeAreaInsets();
 
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -144,15 +143,14 @@ export default function SessionsScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <AnimatedGradient
-          lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-          darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
-          isDark={isDark}
+        <LinearGradient
+          colors={[Theme.background.primary, Theme.background.secondary]}
+          style={StyleSheet.absoluteFill}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#818cf8" />
+          <ActivityIndicator size="large" color={Theme.accent.primary} />
           <Text
-            style={[styles.loadingText, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+            style={[styles.loadingText, { color: Theme.text.primary }]}
           >
             Загрузка сессий...
           </Text>
@@ -166,16 +164,15 @@ export default function SessionsScreen() {
 
   return (
     <View style={styles.container}>
-      <AnimatedGradient
-        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
-        isDark={isDark}
+      <LinearGradient
+        colors={[Theme.background.primary, Theme.background.secondary]}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={28} color={isDark ? '#818cf8' : '#6366f1'} />
+          <Ionicons name="chevron-back" size={28} color={Theme.accent.primary} />
         </TouchableOpacity>
 
         <View style={styles.headerContent}>
@@ -183,24 +180,22 @@ export default function SessionsScreen() {
             style={[
               styles.headerIconContainer,
               {
-                backgroundColor: isDark
-                  ? 'rgba(99, 102, 241, 0.2)'
-                  : 'rgba(99, 102, 241, 0.15)',
+                backgroundColor: 'rgba(255, 107, 0, 0.15)',
               },
             ]}
           >
-            <Ionicons name="hardware-chip" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
+            <Ionicons name="hardware-chip" size={24} color={Theme.accent.primary} />
           </View>
 
           <View>
             <Text
-              style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+              style={[styles.headerTitle, { color: Theme.text.primary }]}
             >
               Активные устройства
             </Text>
 
             <Text
-              style={[styles.headerSubtitle, { color: isDark ? '#94a3b8' : '#64748b' }]}
+              style={[styles.headerSubtitle, { color: Theme.text.secondary }]}
             >
               {sessions.length} {sessions.length === 1 ? 'устройство' : 'устройства'}
             </Text>
@@ -223,12 +218,8 @@ export default function SessionsScreen() {
               style={[
                 styles.currentSessionCard,
                 {
-                  backgroundColor: isDark
-                    ? 'rgba(99, 102, 241, 0.15)'
-                    : 'rgba(99, 102, 241, 0.1)',
-                  borderColor: isDark
-                    ? 'rgba(99, 102, 241, 0.4)'
-                    : 'rgba(99, 102, 241, 0.3)',
+                  backgroundColor: 'rgba(255, 107, 0, 0.1)',
+                  borderColor: 'rgba(255, 107, 0, 0.3)',
                 },
               ]}
             >
@@ -237,16 +228,14 @@ export default function SessionsScreen() {
                   style={[
                     styles.deviceIconContainer,
                     {
-                      backgroundColor: isDark
-                        ? 'rgba(99, 102, 241, 0.25)'
-                        : 'rgba(99, 102, 241, 0.15)',
+                      backgroundColor: 'rgba(255, 107, 0, 0.2)',
                     },
                   ]}
                 >
                   <Ionicons
                     name={getDeviceIcon(session.device_type)}
                     size={28}
-                    color={isDark ? '#818cf8' : '#6366f1'}
+                    color={Theme.accent.primary}
                   />
                 </View>
 
@@ -257,7 +246,7 @@ export default function SessionsScreen() {
                     <Text
                       style={[
                         styles.deviceName,
-                        { color: isDark ? '#f1f5f9' : '#0f172a' },
+                        { color: Theme.text.primary },
                       ]}
                     >
                       {session.device_type}
@@ -268,9 +257,7 @@ export default function SessionsScreen() {
                         styles.currentBadge,
                         {
                           alignSelf: 'flex-start',
-                          backgroundColor: isDark
-                            ? 'rgba(16, 185, 129, 0.15)'
-                            : 'rgba(16, 185, 129, 0.1)',
+                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
                         },
                       ]}
                     >
@@ -285,10 +272,10 @@ export default function SessionsScreen() {
                     <Ionicons
                       name="globe-outline"
                       size={14}
-                      color={isDark ? '#94a3b8' : '#64748b'}
+                      color={Theme.text.secondary}
                     />
                     <Text
-                      style={[styles.location, { color: isDark ? '#94a3b8' : '#64748b' }]}
+                      style={[styles.location, { color: Theme.text.secondary }]}
                     >
                       {session.session_ip}
                     </Text>
@@ -298,10 +285,10 @@ export default function SessionsScreen() {
                     <Ionicons
                       name="time-outline"
                       size={14}
-                      color={isDark ? '#94a3b8' : '#64748b'}
+                      color={Theme.text.secondary}
                     />
                     <Text
-                      style={[styles.lastActive, { color: isDark ? '#94a3b8' : '#64748b' }]}
+                      style={[styles.lastActive, { color: Theme.text.secondary }]}
                     >
                       {session.last_active ? getTimeAgo(session.last_active) : '—'}
                     </Text>
@@ -314,12 +301,8 @@ export default function SessionsScreen() {
                 style={[
                   styles.terminateAllButton,
                   {
-                    backgroundColor: isDark
-                      ? 'rgba(239, 68, 68, 0.1)'
-                      : 'rgba(239, 68, 68, 0.08)',
-                    borderColor: isDark
-                      ? 'rgba(239, 68, 68, 0.3)'
-                      : 'rgba(239, 68, 68, 0.2)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderColor: 'rgba(239, 68, 68, 0.3)',
                   },
                 ]}
                 onPress={() => handleTerminateSession(session.id, true)}
@@ -338,7 +321,7 @@ export default function SessionsScreen() {
           <>
             <Animated.View entering={FadeInDown.duration(300).delay(60)}>
               <Text
-                style={[styles.sectionTitle, { color: isDark ? '#cbd5e1' : '#475569' }]}
+                style={[styles.sectionTitle, { color: Theme.text.secondary }]}
               >
                 Другие устройства
               </Text>
@@ -353,12 +336,8 @@ export default function SessionsScreen() {
                   style={[
                     styles.sessionCard,
                     {
-                      backgroundColor: isDark
-                        ? 'rgba(30, 41, 59, 0.6)'
-                        : 'rgba(255, 255, 255, 0.9)',
-                      borderColor: isDark
-                        ? 'rgba(99, 102, 241, 0.2)'
-                        : 'rgba(226, 232, 240, 0.5)',
+                      backgroundColor: Theme.background.card,
+                      borderColor: Theme.background.tertiary,
                     },
                   ]}
                 >
@@ -367,16 +346,14 @@ export default function SessionsScreen() {
                       style={[
                         styles.deviceIconContainer,
                         {
-                          backgroundColor: isDark
-                            ? 'rgba(99, 102, 241, 0.1)'
-                            : 'rgba(99, 102, 241, 0.08)',
+                          backgroundColor: 'rgba(255, 107, 0, 0.1)',
                         },
                       ]}
                     >
                       <Ionicons
                         name={getDeviceIcon(session.device_type)}
                         size={24}
-                        color={isDark ? '#818cf8' : '#6366f1'}
+                        color={Theme.accent.primary}
                       />
                     </View>
 
@@ -384,7 +361,7 @@ export default function SessionsScreen() {
                       <Text
                         style={[
                           styles.deviceName,
-                          { color: isDark ? '#f1f5f9' : '#0f172a' },
+                          { color: Theme.text.primary },
                         ]}
                       >
                         {session.device_type}
@@ -394,12 +371,12 @@ export default function SessionsScreen() {
                         <Ionicons
                           name="globe-outline"
                           size={14}
-                          color={isDark ? '#94a3b8' : '#64748b'}
+                          color={Theme.text.secondary}
                         />
                         <Text
                           style={[
                             styles.location,
-                            { color: isDark ? '#94a3b8' : '#64748b' },
+                            { color: Theme.text.secondary },
                           ]}
                         >
                           {session.session_ip}
@@ -410,12 +387,12 @@ export default function SessionsScreen() {
                         <Ionicons
                           name="time-outline"
                           size={14}
-                          color={isDark ? '#94a3b8' : '#64748b'}
+                          color={Theme.text.secondary}
                         />
                         <Text
                           style={[
                             styles.lastActive,
-                            { color: isDark ? '#94a3b8' : '#64748b' },
+                            { color: Theme.text.secondary },
                           ]}
                         >
                           {session.last_active ? getTimeAgo(session.last_active) : '—'}
@@ -427,9 +404,7 @@ export default function SessionsScreen() {
                       style={[
                         styles.terminateButton,
                         {
-                          backgroundColor: isDark
-                            ? 'rgba(239, 68, 68, 0.1)'
-                            : 'rgba(239, 68, 68, 0.08)',
+                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
                         },
                       ]}
                       onPress={() => handleTerminateSession(session.id, false)}
@@ -450,21 +425,19 @@ export default function SessionsScreen() {
               style={[
                 styles.emptyIconContainer,
                 {
-                  backgroundColor: isDark
-                    ? 'rgba(99, 102, 241, 0.1)'
-                    : 'rgba(99, 102, 241, 0.08)',
+                  backgroundColor: 'rgba(255, 107, 0, 0.1)',
                 },
               ]}
             >
               <Ionicons
                 name="shield-checkmark"
                 size={48}
-                color={isDark ? '#818cf8' : '#6366f1'}
+                color={Theme.accent.primary}
               />
             </View>
 
             <Text
-              style={[styles.emptyTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}
+              style={[styles.emptyTitle, { color: Theme.text.primary }]}
             >
               Нет других сеансов
             </Text>
@@ -472,7 +445,7 @@ export default function SessionsScreen() {
             <Text
               style={[
                 styles.emptySubtitle,
-                { color: isDark ? '#94a3b8' : '#64748b' },
+                { color: Theme.text.secondary },
               ]}
             >
               Вы вошли только на этом устройстве
@@ -485,140 +458,156 @@ export default function SessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Theme.background.primary },
 
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 16 },
+  loadingText: { marginTop: 14, fontSize: 16, color: Theme.text.secondary },
 
-  header: { paddingHorizontal: 20, paddingBottom: 20 },
+  header: { paddingHorizontal: 22, paddingBottom: 24 },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    backgroundColor: Theme.background.elevated,
   },
 
-  headerContent: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 4,
+    letterSpacing: -0.4,
+    marginBottom: 5,
+    color: Theme.text.primary,
   },
-  headerSubtitle: { fontSize: 14, fontWeight: '500' },
+  headerSubtitle: { fontSize: 14, fontWeight: '500', color: Theme.text.secondary },
 
   scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, gap: 16 },
+  scrollContent: { paddingHorizontal: 22, gap: 18 },
 
   currentSessionCard: {
-    padding: 20,
-    borderRadius: 24,
+    padding: 22,
+    borderRadius: Theme.radius.xl,
     borderWidth: 2,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 6,
+    borderColor: Theme.accent.primary,
+    backgroundColor: Theme.background.card,
+    shadowColor: Theme.accent.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 8,
   },
 
   sessionCard: {
-    padding: 18,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    shadowColor: '#6366f1',
+    padding: 20,
+    borderRadius: Theme.radius.lg,
+    borderWidth: 1,
+    borderColor: Theme.border.primary,
+    backgroundColor: Theme.background.card,
+    shadowColor: '#0A0A0F',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 3,
+    elevation: 4,
   },
 
-  sessionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
+  sessionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },
 
   deviceIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
   },
 
-  sessionInfo: { flex: 1, gap: 10 },
+  sessionInfo: { flex: 1, gap: 12 },
 
-  deviceName: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  deviceName: { fontSize: 19, fontWeight: '800', letterSpacing: -0.4, color: Theme.text.primary },
 
   currentBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: Theme.radius.sm,
+    backgroundColor: Theme.status.successBg,
   },
-  currentDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
-  currentText: { fontSize: 12, fontWeight: '700' },
+  currentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.status.success },
+  currentText: { fontSize: 12, fontWeight: '700', color: Theme.status.success },
 
-  sessionDetails: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  location: { fontSize: 14, fontWeight: '600' },
-  lastActive: { fontSize: 13, fontWeight: '500' },
+  sessionDetails: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  location: { fontSize: 14, fontWeight: '600', color: Theme.text.primary },
+  lastActive: { fontSize: 13, fontWeight: '500', color: Theme.text.secondary },
 
   terminateButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.status.errorBg,
   },
 
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 8,
+    letterSpacing: 0.6,
+    marginTop: 10,
+    color: Theme.accent.primary,
   },
 
   terminateAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 20,
+    gap: 12,
+    paddingVertical: 18,
+    borderRadius: Theme.radius.lg,
     borderWidth: 1.5,
-    marginTop: 12,
+    borderColor: Theme.status.error,
+    marginTop: 14,
+    backgroundColor: Theme.status.errorBg,
   },
-  terminateAllText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.3 },
+  terminateAllText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.3, color: Theme.status.error },
 
-  emptyState: { alignItems: 'center', paddingVertical: 60 },
+  emptyState: { alignItems: 'center', paddingVertical: 70 },
 
   emptyIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 104,
+    height: 104,
+    borderRadius: Theme.radius.xxl + 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    backgroundColor: Theme.background.elevated,
   },
 
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 8,
+    letterSpacing: -0.4,
+    marginBottom: 10,
+    color: Theme.text.primary,
   },
 
   emptySubtitle: {
     fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
+    color: Theme.text.secondary,
   },
 });

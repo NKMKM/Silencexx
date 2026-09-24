@@ -1,76 +1,74 @@
 import { Tabs } from 'expo-router';
-import React, { useRef, useEffect, memo, useState } from 'react';
-import { Platform, Animated, View, StyleSheet, Keyboard } from 'react-native';
+import React, { memo, useEffect, useRef, useState } from 'react';
+import { 
+  View, 
+  StyleSheet, 
+  Platform, 
+  Animated as RNAnimated,
+  Keyboard,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Theme } from '@/constants/theme';
 
-// Оптимизированный компонент анимированной иконки таба
-const AnimatedTabIcon = memo(({ 
+/**
+ * Стандартный полноширинный таб-бар
+ */
+
+const TabIcon = memo(({ 
   name, 
   outlineName, 
-  color, 
-  focused 
+  focused,
+  color,
 }: { 
-  name: any; 
-  outlineName: any; 
-  color: string; 
+  name: keyof typeof Ionicons.glyphMap; 
+  outlineName: keyof typeof Ionicons.glyphMap; 
   focused: boolean;
+  color: string;
 }) => {
-  const scaleAnim = useRef(new Animated.Value(focused ? 1.1 : 1)).current;
-  const indicatorAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
-
+  const scaleAnim = useRef(new RNAnimated.Value(1)).current;
+  
   useEffect(() => {
-    // Упрощенная анимация для производительности
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: focused ? 1.1 : 1,
-        friction: 4,
-        tension: 50,
-        useNativeDriver: true,
-      }),
-      Animated.timing(indicatorAnim, {
-        toValue: focused ? 1 : 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    RNAnimated.spring(scaleAnim, {
+      toValue: focused ? 1.15 : 1,
+      damping: 15,
+      stiffness: 180,
+      useNativeDriver: true,
+    }).start();
   }, [focused]);
 
   return (
     <View style={styles.iconContainer}>
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <Ionicons
-          name={focused ? name : outlineName}
-          size={24}
-          color={color}
-        />
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.indicator,
-          { backgroundColor: color, opacity: indicatorAnim },
-        ]}
-      />
+      <RNAnimated.View style={[styles.iconWrapper, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={[
+          styles.iconBackground,
+          focused && { backgroundColor: `${color}20` }
+        ]}>
+          <Ionicons
+            name={focused ? name : outlineName}
+            size={24}
+            color={focused ? color : Theme.text.tertiary}
+          />
+        </View>
+      </RNAnimated.View>
+      {focused && (
+        <View style={[styles.activeIndicator, { backgroundColor: color }]} />
+      )}
     </View>
   );
 });
 
 export default function TabLayout() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
   const insets = useSafeAreaInsets();
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => setKeyboardVisible(true)
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => setKeyboardVisible(false)
-    );
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
 
     return () => {
       keyboardDidShowListener.remove();
@@ -82,105 +80,124 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        animation: 'shift',
+        animation: 'fade',
         lazy: true,
         tabBarStyle: {
-          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : '#ffffff',
-          borderTopColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#e2e8f0',
-          borderTopWidth: 1.5,
+          backgroundColor: Theme.background.primary,
+          borderTopWidth: 1,
+          borderTopColor: Theme.border.primary,
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom,
           paddingTop: 8,
-          position: 'absolute',
-          elevation: 0,
-          shadowColor: isDark ? '#000' : '#8b5cf6',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: isDark ? 0.3 : 0.08,
-          shadowRadius: 12,
+          display: isKeyboardVisible ? 'none' : 'flex',
+          ...Platform.select({
+            ios: {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: -2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 10,
+            },
+            android: {
+              elevation: 10,
+            },
+          }),
         },
-        tabBarActiveTintColor: isDark ? '#818cf8' : '#8b5cf6',
-        tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
+        tabBarActiveTintColor: Theme.accent.primary,
+        tabBarInactiveTintColor: Theme.text.tertiary,
+        tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '700',
-          marginTop: 4,
-          letterSpacing: 0.2,
+          fontWeight: '600',
+          marginTop: 2,
         },
+        tabBarHideOnKeyboard: true,
       }}>
+      
+      {/* Чат с ИИ */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Главная',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon
-              name="home"
-              outlineName="home-outline"
-              color={color}
+          title: 'Чат',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name="chatbubble"
+              outlineName="chatbubble-outline"
               focused={focused}
+              color={Theme.accent.primary}
             />
           ),
         }}
       />
+      
+      {/* Задания */}
       <Tabs.Screen
         name="tasks"
         options={{
           title: 'Задания',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon
-              name="checkbox"
-              outlineName="checkbox-outline"
-              color={color}
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name="sparkles"
+              outlineName="sparkles-outline"
               focused={focused}
+              color="#10B981"
             />
           ),
         }}
       />
+      
+      {/* Календарь */}
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Дневник',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon
+          title: 'Календарь',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
               name="calendar"
               outlineName="calendar-outline"
-              color={color}
               focused={focused}
+              color="#8B5CF6"
             />
           ),
         }}
       />
+      
+      {/* Inbox */}
       <Tabs.Screen
         name="inbox"
         options={{
-          title: 'Сообщения',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon
+          title: 'Inbox',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
               name="mail"
               outlineName="mail-outline"
-              color={color}
               focused={focused}
+              color="#06B6D4"
             />
           ),
         }}
       />
+      
+      {/* Профиль */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Настройки',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon
-              name="settings"
-              outlineName="settings-outline"
-              color={color}
+          title: 'Профиль',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name="person"
+              outlineName="person-outline"
               focused={focused}
+              color="#EC4899"
             />
           ),
         }}
       />
+      
+      {/* Hidden explore tab */}
       <Tabs.Screen
         name="explore"
         options={{
-          href: null, // Скрываем из навигации
+          href: null,
         }}
       />
     </Tabs>
@@ -192,11 +209,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  indicator: {
-    position: 'absolute',
-    bottom: -4,
+  iconWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBackground: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeIndicator: {
     width: 4,
     height: 4,
     borderRadius: 2,
+    marginTop: 4,
   },
 });

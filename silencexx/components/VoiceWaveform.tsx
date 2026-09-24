@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { Theme } from '@/constants/theme';
 
 interface VoiceWaveformProps {
   isRecording: boolean;
@@ -28,7 +29,7 @@ export function VoiceWaveform({ isRecording, audioLevel = 0, isDark }: VoiceWave
               styles.bar,
               {
                 height: barHeight,
-                backgroundColor: isDark ? '#818cf8' : '#a855f7',
+                backgroundColor: Theme.accent.primary,
               },
             ]}
           />

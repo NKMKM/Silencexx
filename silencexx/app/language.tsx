@@ -9,9 +9,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 import { useRouter } from 'expo-router';
-import { AnimatedGradient } from '@/components/AnimatedGradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 interface Language {
@@ -39,8 +38,7 @@ const LANGUAGES: Language[] = [
 ];
 
 export default function LanguageScreen() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [selectedLanguage, setSelectedLanguage] = useState('ru');
@@ -55,10 +53,9 @@ export default function LanguageScreen() {
 
   return (
     <View style={styles.container}>
-      <AnimatedGradient
-        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
-        isDark={isDark}
+      <LinearGradient
+        colors={Theme.accent.gradient}
+        style={StyleSheet.absoluteFillObject}
       />
 
       {/* Header */}
@@ -66,17 +63,17 @@ export default function LanguageScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={28} color={isDark ? '#818cf8' : '#6366f1'} />
+          <Ionicons name="chevron-back" size={28} color={Theme.accent.primary} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.15)' }]}>
-            <Ionicons name="language" size={24} color={isDark ? '#818cf8' : '#6366f1'} />
+          <View style={[styles.headerIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.2)' }]}>
+            <Ionicons name="language" size={24} color={Theme.accent.primary} />
           </View>
           <View>
-            <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+            <Text style={[styles.headerTitle, { color: Theme.text.primary }]}>
               Язык приложения
             </Text>
-            <Text style={[styles.headerSubtitle, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+            <Text style={[styles.headerSubtitle, { color: Theme.text.secondary }]}>
               Выберите предпочитаемый язык
             </Text>
           </View>
@@ -97,11 +94,11 @@ export default function LanguageScreen() {
                 styles.languageCard,
                 {
                   backgroundColor: selectedLanguage === language.code
-                    ? isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(99, 102, 241, 0.1)'
-                    : isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.9)',
+                    ? 'rgba(255, 107, 0, 0.15)'
+                    : Theme.background.card,
                   borderColor: selectedLanguage === language.code
-                    ? isDark ? 'rgba(129, 140, 248, 0.5)' : 'rgba(99, 102, 241, 0.5)'
-                    : isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(226, 232, 240, 0.5)',
+                    ? Theme.accent.primary
+                    : Theme.background.tertiary,
                   borderWidth: selectedLanguage === language.code ? 2 : 1.5,
                 },
               ]}
@@ -109,16 +106,16 @@ export default function LanguageScreen() {
               <View style={styles.languageLeft}>
                 <Text style={styles.flag}>{language.flag}</Text>
                 <View style={styles.languageInfo}>
-                  <Text style={[styles.languageName, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+                  <Text style={[styles.languageName, { color: Theme.text.primary }]}>
                     {language.nativeName}
                   </Text>
-                  <Text style={[styles.languageEnglish, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+                  <Text style={[styles.languageEnglish, { color: Theme.text.secondary }]}>
                     {language.name}
                   </Text>
                 </View>
               </View>
               {selectedLanguage === language.code && (
-                <View style={[styles.checkContainer, { backgroundColor: isDark ? '#818cf8' : '#6366f1' }]}>
+                <View style={[styles.checkContainer, { backgroundColor: Theme.accent.primary }]}>
                   <Ionicons name="checkmark" size={20} color="#fff" />
                 </View>
               )}
@@ -133,88 +130,99 @@ export default function LanguageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Theme.background.primary,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 22,
+    paddingBottom: 24,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    backgroundColor: Theme.background.elevated,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 18,
   },
   headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 4,
+    letterSpacing: -0.4,
+    marginBottom: 5,
+    color: Theme.text.primary,
   },
   headerSubtitle: {
     fontSize: 14,
     fontWeight: '500',
+    color: Theme.text.secondary,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: 22,
+    gap: 14,
   },
   languageCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    borderRadius: 20,
-    shadowColor: '#6366f1',
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    borderRadius: Theme.radius.lg,
+    borderWidth: 1,
+    borderColor: Theme.border.primary,
+    backgroundColor: Theme.background.card,
+    shadowColor: '#0A0A0F',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 3,
+    elevation: 4,
   },
   languageLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 18,
     flex: 1,
   },
   flag: {
-    fontSize: 32,
+    fontSize: 34,
   },
   languageInfo: {
     flex: 1,
   },
   languageName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
-    marginBottom: 2,
+    marginBottom: 3,
+    color: Theme.text.primary,
   },
   languageEnglish: {
     fontSize: 13,
     fontWeight: '500',
+    color: Theme.text.secondary,
   },
   checkContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: Theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.accent.primary,
   },
 });

@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '@/utils/ThemeContext';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -11,12 +10,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { AnimatedGradient } from '@/components/AnimatedGradient';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Theme } from '@/constants/theme';
 
 export default function ExploreScreen() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
-
   // Анимация появления
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.8);
@@ -49,23 +46,24 @@ export default function ExploreScreen() {
 
   return (
     <View style={styles.container}>
-      <AnimatedGradient
-        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-        darkColors={['#0f172a', '#1e293b', '#334155']}
-        isDark={isDark}
+      <LinearGradient
+        colors={[Theme.background.primary, Theme.background.secondary]}
+        style={StyleSheet.absoluteFill}
       />
       <Animated.View style={[styles.content, containerStyle]}>
         <Animated.View style={[styles.iconContainer, iconStyle]}>
-          <Ionicons 
-            name="compass" 
-            size={80} 
-            color={isDark ? '#a78bfa' : '#8b5cf6'} 
-          />
+          <View style={styles.iconGlow}>
+            <Ionicons 
+              name="compass" 
+              size={80} 
+              color={Theme.accent.primary} 
+            />
+          </View>
         </Animated.View>
-        <Text style={[styles.title, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>
+        <Text style={[styles.title, { color: Theme.text.primary }]}>
           Исследовать
         </Text>
-        <Text style={[styles.subtitle, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+        <Text style={[styles.subtitle, { color: Theme.text.secondary }]}>
           Скоро здесь появится что-то интересное ✨
         </Text>
       </Animated.View>
@@ -85,6 +83,13 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 24,
+  },
+  iconGlow: {
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 10,
   },
   title: {
     fontSize: 32,

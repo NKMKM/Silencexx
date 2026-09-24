@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -46,8 +46,7 @@ export const Input = forwardRef<TextInput, InputProps>(
     },
     ref
   ) => {
-    const { activeTheme } = useTheme();
-    const isDark = activeTheme === 'dark';
+    const isDark = true; // Force dark theme
     const [isFocused, setIsFocused] = useState(false);
     const focusAnim = React.useRef(new Animated.Value(0)).current;
 
@@ -76,50 +75,44 @@ export const Input = forwardRef<TextInput, InputProps>(
     const borderColor = focusAnim.interpolate({
       inputRange: [0, 1],
       outputRange: error
-        ? [isDark ? 'rgba(239, 68, 68, 0.4)' : '#ef4444', isDark ? 'rgba(239, 68, 68, 0.6)' : '#dc2626']
-        : [isDark ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.3)', isDark ? '#a78bfa' : '#8b5cf6'],
+        ? [Theme.status.error, Theme.status.error]
+        : [Theme.border.primary, Theme.accent.primary],
     });
 
     const shadowOpacity = focusAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, isDark ? 0.3 : 0.15],
+      outputRange: [0, 0.35],
     });
 
     const getInputContainerStyle = (): ViewStyle => ({
       flexDirection: 'row',
       alignItems: 'center',
-      minHeight: 52,
-      borderRadius: 14,
-      paddingHorizontal: 16,
-      gap: 12,
-      backgroundColor: isDark
-        ? Platform.OS === 'ios'
-          ? 'rgba(30, 41, 59, 0.4)'
-          : '#1e293b'
-        : Platform.OS === 'ios'
-        ? '#ffffff'
-        : '#f8fafc',
+      minHeight: 58,
+      borderRadius: Theme.radius.lg,
+      paddingHorizontal: 18,
+      gap: 14,
+      backgroundColor: Theme.background.tertiary,
     });
 
     const getInputTextStyle = (): TextStyle => ({
       flex: 1,
-      fontSize: 15,
-      color: isDark ? '#f1f5f9' : '#1e293b',
+      fontSize: 16,
+      color: Theme.text.primary,
       fontWeight: '400',
-      paddingVertical: 12,
+      paddingVertical: 16,
     });
 
     const getLabelTextStyle = (): TextStyle => ({
       fontSize: 14,
       fontWeight: '600',
-      color: isDark ? '#e2e8f0' : '#475569',
-      marginBottom: 8,
+      color: Theme.text.secondary,
+      marginBottom: 10,
     });
 
     const getErrorTextStyle = (): TextStyle => ({
       fontSize: 12,
-      color: isDark ? '#f87171' : '#dc2626',
-      marginTop: 6,
+      color: Theme.status.error,
+      marginTop: 8,
     });
 
     const renderIcon = (icon: React.ReactNode | string, size: number = 22) => {
@@ -128,7 +121,7 @@ export const Input = forwardRef<TextInput, InputProps>(
           <Ionicons
             name={icon as any}
             size={size}
-            color={isDark ? '#94a3b8' : '#64748b'}
+            color={Theme.text.secondary}
           />
         );
       }
@@ -142,13 +135,13 @@ export const Input = forwardRef<TextInput, InputProps>(
           style={[
             getInputContainerStyle(),
             {
-              borderWidth: 2,
+              borderWidth: 1.5,
               borderColor: borderColor,
-              shadowColor: isDark ? '#a78bfa' : '#8b5cf6',
-              shadowOffset: { width: 0, height: 4 },
+              shadowColor: Theme.accent.primary,
+              shadowOffset: { width: 0, height: 6 },
               shadowOpacity: Platform.OS === 'ios' ? shadowOpacity : 0,
-              shadowRadius: 12,
-              elevation: Platform.OS === 'ios' ? (isFocused ? 8 : 2) : 0,
+              shadowRadius: 18,
+              elevation: Platform.OS === 'ios' ? (isFocused ? 10 : 3) : 0,
             },
           ]}
         >
@@ -156,7 +149,7 @@ export const Input = forwardRef<TextInput, InputProps>(
           <TextInput
             ref={ref}
             style={[getInputTextStyle(), inputStyle]}
-            placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+            placeholderTextColor={Theme.text.tertiary}
             editable={editable}
             onFocus={handleFocus}
             onBlur={handleBlur}

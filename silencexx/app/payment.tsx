@@ -5,6 +5,7 @@ export default function PaymentScreen() {
   const params = useLocalSearchParams();
   const planName = (params.planName as string) || 'Premium';
   const planPrice = (params.planPrice as string) || '399₽';
+  const tierSlug = (params.tierSlug as string) || 'plus';
 
-  return <PaymentPage planName={planName} planPrice={planPrice} />;
+  return <PaymentPage planName={planName} planPrice={planPrice} tierSlug={tierSlug} />;
 }

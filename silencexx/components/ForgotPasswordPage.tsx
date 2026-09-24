@@ -10,15 +10,15 @@ import {
   ScrollView,
   Keyboard,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInRight, FadeOutLeft, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 import { Input } from './ui/Input';
-import { FloatingClouds } from './FloatingClouds';
-import { AnimatedGradient } from './AnimatedGradient';
+import { api } from '@/services/api';
 
 interface ForgotPasswordPageProps {
   onBack: () => void;
@@ -26,7 +26,7 @@ interface ForgotPasswordPageProps {
   onNavigateToOTP?: (contact: string) => void;
 }
 
-type Step = 'contact' | 'otp' | 'newPassword';
+type Step = 'contact' | 'emailSent' | 'otp' | 'newPassword';
 
 export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }: ForgotPasswordPageProps) {
   const [step, setStep] = useState<Step>('contact');
@@ -41,11 +41,10 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
   const [confirmError, setConfirmError] = useState('');
 
   const insets = useSafeAreaInsets();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true;
 
   const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email);
   };
 
@@ -60,14 +59,14 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
     return 'unknown';
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     let error = '';
     if (!contact) {
       error = 'Введите email или номер телефона';
     } else {
       const type = getContactType(contact);
       if (type === 'email' && !isValidEmail(contact)) {
-        error = 'Неверный формат email';
+        error = 'Неверный формат email. Используйте только латинские буквы';
       } else if (type === 'phone' && !isValidPhone(contact)) {
         error = 'Неверный формат номера телефона';
       } else if (type === 'unknown') {
@@ -81,15 +80,27 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setContactError('');
-      if (onNavigateToOTP) {
+    const contactType = getContactType(contact);
+    
+    try {
+      if (contactType === 'email') {
+        // Отправляем запрос на сброс пароля через email
+        const response = await api.post('/auth/request-password-reset', { email: contact });
+        
+        if (response.data?.success) {
+          setStep('emailSent');
+        } else {
+          setContactError(response.data?.error || 'Ошибка при отправке');
+        }
+      } else if (contactType === 'phone' && onNavigateToOTP) {
+        // Для телефона используем OTP
         onNavigateToOTP(contact);
-      } else {
-        setStep('otp');
       }
-    }, 1000);
+    } catch (err: any) {
+      setContactError(err.response?.data?.error || 'Ошибка при отправке');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleResetPassword = () => {
@@ -98,8 +109,8 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
     if (!newPassword) {
       setPasswordError('Введите новый пароль');
       hasError = true;
-    } else if (newPassword.length < 6) {
-      setPasswordError('Минимум 6 символов');
+    } else if (newPassword.length < 8) {
+      setPasswordError('Минимум 8 символов');
       hasError = true;
     } else {
       setPasswordError('');
@@ -126,17 +137,17 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
 
   const renderContactStep = () => (
     <Animated.View entering={FadeInRight} exiting={FadeOutLeft}>
-      <View style={[styles.iconContainer, isDark && styles.iconContainerDark]}>
-        <Ionicons name="key" size={40} color="#8b5cf6" />
+      <View style={[styles.iconContainer, styles.iconContainerDark]}>
+        <Ionicons name="key" size={40} color={Theme.accent.primary} />
       </View>
-      <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>Восстановление пароля</Text>
-      <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
-        Введите email или номер телефона для получения кода восстановления
+      <Text style={[styles.stepTitle, styles.stepTitleDark]}>Восстановление пароля</Text>
+      <Text style={[styles.stepSubtitle, styles.stepSubtitleDark]}>
+        Введите email для получения ссылки на сброс пароля
       </Text>
 
       <View style={styles.inputContainer}>
         <Input
-          placeholder="example@mail.com или +7 900 123-45-67"
+          placeholder="example@mail.com"
           value={contact}
           onChangeText={(text) => {
             setContact(text);
@@ -148,9 +159,9 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
           autoFocus
           leftIcon={
             <Ionicons 
-              name={getContactType(contact) === 'email' ? 'mail-outline' : 'call-outline'} 
+              name="mail-outline" 
               size={20} 
-              color={isDark ? '#94a3b8' : '#64748b'} 
+              color={Theme.text.secondary} 
             />
           }
           error={contactError}
@@ -164,7 +175,7 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={isLoading ? ['#94a3b8', '#64748b'] : ['#3b82f6', '#8b5cf6']}
+          colors={isLoading ? ['#94a3b8', '#64748b'] : Theme.accent.gradient as unknown as [string, string]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.button}
@@ -173,27 +184,72 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
             <ActivityIndicator color="#ffffff" />
           ) : (
             <>
-              <Text style={styles.buttonText}>Отправить код</Text>
+              <Text style={styles.buttonText}>Отправить ссылку</Text>
               <Ionicons name="paper-plane" size={20} color="#ffffff" />
             </>
           )}
         </LinearGradient>
       </TouchableOpacity>
 
-      <Text style={[styles.hint, isDark && styles.hintDark]}>
-        <Ionicons name="information-circle-outline" size={16} color={isDark ? '#94a3b8' : '#64748b'} />
-        {' '}Код придет в течение нескольких минут
+      <Text style={[styles.hint, styles.hintDark]}>
+        <Ionicons name="information-circle-outline" size={16} color={Theme.text.secondary} />
+        {' '}Ссылка для сброса пароля будет отправлена на email
       </Text>
+    </Animated.View>
+  );
+
+  const renderEmailSentStep = () => (
+    <Animated.View entering={FadeInRight} exiting={FadeOutLeft}>
+      <View style={[styles.iconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+        <Ionicons name="mail-open" size={40} color="#10b981" />
+      </View>
+      <Text style={[styles.stepTitle, styles.stepTitleDark]}>Проверьте почту</Text>
+      <Text style={[styles.stepSubtitle, styles.stepSubtitleDark]}>
+        Мы отправили ссылку для сброса пароля на{'\n'}
+        <Text style={{ fontWeight: '600', color: Theme.accent.primary }}>{contact}</Text>
+      </Text>
+
+      <View style={[styles.emailSentCard, styles.emailSentCardDark]}>
+        <Ionicons name="shield-checkmark" size={24} color={Theme.accent.primary} />
+        <Text style={[styles.emailSentText, styles.emailSentTextDark]}>
+          Ссылка действительна 1 час. Перейдите по ней для создания нового пароля.
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        onPress={onBack}
+        activeOpacity={0.8}
+        style={{ marginTop: 24 }}
+      >
+        <LinearGradient
+          colors={Theme.accent.gradient as unknown as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.button}
+        >
+          <Text style={styles.buttonText}>Вернуться к входу</Text>
+          <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => setStep('contact')}
+        style={styles.resendButton}
+      >
+        <Text style={[styles.resendText, styles.resendTextDark]}>
+          Не получили письмо? Отправить снова
+        </Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 
   const renderNewPasswordStep = () => (
     <Animated.View entering={FadeInRight} exiting={FadeOutLeft}>
-      <View style={[styles.iconContainer, isDark && styles.iconContainerDark]}>
+      <View style={[styles.iconContainer, styles.iconContainerDark]}>
         <Ionicons name="checkmark-circle" size={40} color="#10b981" />
       </View>
-      <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>Создайте новый пароль</Text>
-      <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
+      <Text style={[styles.stepTitle, styles.stepTitleDark]}>Создайте новый пароль</Text>
+      <Text style={[styles.stepSubtitle, styles.stepSubtitleDark]}>
         Придумайте надежный пароль для защиты аккаунта
       </Text>
 
@@ -209,13 +265,13 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
           autoCapitalize="none"
           autoCorrect={false}
           autoFocus
-          leftIcon={<Ionicons name="lock-closed-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+          leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Theme.text.secondary} />}
           rightIcon={
             <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
               <Ionicons 
                 name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} 
                 size={20} 
-                color={isDark ? '#94a3b8' : '#64748b'} 
+                color={Theme.text.secondary} 
               />
             </TouchableOpacity>
           }
@@ -234,13 +290,13 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
             secureTextEntry={!showConfirmPassword}
             autoCapitalize="none"
             autoCorrect={false}
-            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Theme.text.secondary} />}
             rightIcon={
               <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                 <Ionicons 
                   name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} 
                   size={20} 
-                  color={isDark ? '#94a3b8' : '#64748b'} 
+                  color={Theme.text.secondary} 
                 />
               </TouchableOpacity>
             }
@@ -256,7 +312,7 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={isLoading ? ['#94a3b8', '#64748b'] : ['#10b981', '#059669']}
+          colors={isLoading ? ['#94a3b8', '#64748b'] : Theme.accent.gradient as unknown as [string, string]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.button}
@@ -280,55 +336,85 @@ export function ForgotPasswordPage({ onBack, onPasswordReset, onNavigateToOTP }:
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <View style={styles.gradient}>
-        <AnimatedGradient
-          lightColors={['rgba(239, 246, 255, 0.95)', 'rgba(250, 245, 255, 0.95)', 'rgba(252, 231, 243, 0.95)']}
-          darkColors={['#0f172a', '#581c87', '#0f172a']}
-          isDark={isDark}
-        />
-        <FloatingClouds />
-
+      <LinearGradient
+        colors={Theme.gradients.main as unknown as [string, string]}
+        style={styles.gradient}
+      >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={[styles.content, { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 120, 120) }]}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={isDark ? '#f1f5f9' : '#1e293b'} />
+            <Ionicons name="arrow-back" size={24} color={Theme.text.primary} />
           </TouchableOpacity>
 
           <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
-            <LinearGradient colors={['#60a5fa', '#a78bfa']} style={styles.logo}>
+            <LinearGradient colors={Theme.accent.gradient as unknown as [string, string]} style={styles.logo}>
               <Ionicons name="cloud" size={48} color="#ffffff" />
             </LinearGradient>
           </Animated.View>
 
-          <View style={[styles.card, isDark && styles.cardDark]}>
+          <View style={[styles.card, styles.cardDark]}>
             {step === 'contact' && renderContactStep()}
+            {step === 'emailSent' && renderEmailSentStep()}
             {step === 'newPassword' && renderNewPasswordStep()}
           </View>
         </View>
         </TouchableWithoutFeedback>
-      </View>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Theme.background.primary },
   gradient: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 24 },
   backButton: { marginBottom: 20, width: 40, height: 40, justifyContent: 'center' },
   header: { alignItems: 'center', marginBottom: 32 },
-  logo: { width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center', shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
-  card: { borderRadius: 24, padding: 24, backgroundColor: 'rgba(255, 255, 255, 0.5)' },
-  cardDark: { backgroundColor: 'rgba(30, 41, 59, 0.5)', borderWidth: 0 },
-  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(139, 92, 246, 0.1)', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
-  iconContainerDark: { backgroundColor: 'rgba(139, 92, 246, 0.2)' },
-  stepTitle: { fontSize: 24, fontWeight: '700', color: '#1e293b', marginBottom: 8, textAlign: 'center' },
-  stepTitleDark: { color: '#f1f5f9' },
-  stepSubtitle: { fontSize: 14, color: '#64748b', marginBottom: 24, textAlign: 'center', lineHeight: 20 },
-  stepSubtitleDark: { color: '#94a3b8' },
+  logo: { width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center', shadowColor: Theme.accent.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  card: { borderRadius: 24, padding: 24, backgroundColor: Theme.background.card },
+  cardDark: { backgroundColor: Theme.background.card, borderWidth: 1, borderColor: Theme.border.primary },
+  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255, 107, 0, 0.1)', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
+  iconContainerDark: { backgroundColor: 'rgba(255, 107, 0, 0.2)' },
+  stepTitle: { fontSize: 24, fontWeight: '700', color: Theme.text.primary, marginBottom: 8, textAlign: 'center' },
+  stepTitleDark: { color: Theme.text.primary },
+  stepSubtitle: { fontSize: 14, color: Theme.text.secondary, marginBottom: 24, textAlign: 'center', lineHeight: 20 },
+  stepSubtitleDark: { color: Theme.text.secondary },
   inputContainer: { marginBottom: 24 },
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderRadius: 12 },
   buttonText: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
-  hint: { marginTop: 16, fontSize: 13, color: '#64748b', textAlign: 'center', flexDirection: 'row', alignItems: 'center' },
-  hintDark: { color: '#94a3b8' },
+  hint: { marginTop: 16, fontSize: 13, color: Theme.text.secondary, textAlign: 'center', flexDirection: 'row', alignItems: 'center' },
+  hintDark: { color: Theme.text.secondary },
+  emailSentCard: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 12, 
+    backgroundColor: 'rgba(255, 107, 0, 0.08)', 
+    padding: 16, 
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  emailSentCardDark: { 
+    backgroundColor: 'rgba(255, 107, 0, 0.15)' 
+  },
+  emailSentText: { 
+    flex: 1, 
+    fontSize: 14, 
+    color: Theme.text.secondary, 
+    lineHeight: 20 
+  },
+  emailSentTextDark: { 
+    color: Theme.text.secondary 
+  },
+  resendButton: { 
+    marginTop: 16, 
+    alignItems: 'center' 
+  },
+  resendText: { 
+    fontSize: 14, 
+    color: Theme.accent.primary, 
+    textDecorationLine: 'underline' 
+  },
+  resendTextDark: { 
+    color: Theme.accent.secondary 
+  },
 });

@@ -7,6 +7,7 @@ import {
   GestureResponderEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Theme } from '@/constants/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -109,9 +110,7 @@ export function VoiceButton({
                 ? isDark
                   ? '#dc2626'
                   : '#ef4444'
-                : isDark
-                ? '#6366f1'
-                : '#8b5cf6',
+                : Theme.accent.primary,
               opacity: isProcessing ? 0.6 : 1,
             },
           ]}
@@ -154,7 +153,7 @@ export function VoiceButton({
         <Text
           style={[
             styles.processingText,
-            { color: isDark ? '#a78bfa' : '#8b5cf6' },
+            { color: Theme.accent.secondary },
           ]}
         >
           Обработка...

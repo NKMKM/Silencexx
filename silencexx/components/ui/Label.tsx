@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, TextStyle } from 'react-native';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 export interface LabelProps {
   children: React.ReactNode;
@@ -8,13 +8,10 @@ export interface LabelProps {
 }
 
 export function Label({ children, style }: LabelProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
-
   const baseStyle: TextStyle = {
     fontSize: 14,
     fontWeight: '500',
-    color: isDark ? '#f3f4f6' : '#0f172a',
+    color: Theme.text.primary,
     marginBottom: 4,
   };
 

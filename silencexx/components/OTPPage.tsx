@@ -22,9 +22,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
-import { FloatingClouds } from './FloatingClouds';
-import { AnimatedGradient } from './AnimatedGradient';
+import { Theme } from '@/constants/theme';
 
 interface OTPPageProps {
   contact: string;
@@ -44,8 +42,7 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
   
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const insets = useSafeAreaInsets();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true;
 
   const shakeAnimation = useSharedValue(0);
 
@@ -175,14 +172,10 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 100}
       enabled={true}
     >
-      <View style={styles.gradient}>
-        <AnimatedGradient
-          lightColors={['rgba(239, 246, 255, 0.95)', 'rgba(250, 245, 255, 0.95)', 'rgba(252, 231, 243, 0.95)']}
-          darkColors={['#0f172a', '#581c87', '#0f172a']}
-          isDark={isDark}
-        />
-        <FloatingClouds />
-
+      <LinearGradient
+        colors={Theme.gradients.main as unknown as [string, string]}
+        style={styles.gradient}
+      >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
             contentContainerStyle={[
@@ -197,15 +190,15 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
             scrollEnabled={true}
           >
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={isDark ? '#f1f5f9' : '#1e293b'} />
+            <Ionicons name="arrow-back" size={24} color={Theme.text.primary} />
           </TouchableOpacity>
 
           <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
-            <View style={[styles.iconContainer, isDark && styles.iconContainerDark]}>
-              <Ionicons name="lock-closed" size={40} color="#8b5cf6" />
+            <View style={[styles.iconContainer, styles.iconContainerDark]}>
+              <Ionicons name="lock-closed" size={40} color={Theme.accent.primary} />
             </View>
-            <Text style={[styles.title, isDark && styles.titleDark]}>Введите код</Text>
-            <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>
+            <Text style={[styles.title, styles.titleDark]}>Введите код</Text>
+            <Text style={[styles.subtitle, styles.subtitleDark]}>
               Мы отправили 6-значный код на{'\n'}
               <Text style={styles.contact}>{maskedContact}</Text>
             </Text>
@@ -213,7 +206,7 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
 
           <Animated.View 
             entering={FadeInUp.delay(200).springify()} 
-            style={[styles.card, isDark && styles.cardDark]}
+            style={[styles.card, styles.cardDark]}
           >
             <Animated.View style={[styles.codeContainer, animatedCodeContainerStyle]}>
               {code.map((digit, index) => (
@@ -221,16 +214,16 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
                   key={index}
                   style={[
                     styles.digitBox,
-                    isDark && styles.digitBoxDark,
+                    styles.digitBoxDark,
                     focusedIndex === index && styles.digitBoxFocused,
-                    focusedIndex === index && isDark && styles.digitBoxFocusedDark,
+                    focusedIndex === index && styles.digitBoxFocusedDark,
                     digit !== '' && styles.digitBoxFilled,
                     error && styles.digitBoxError,
                   ]}
                 >
                   <TextInput
                     ref={(ref) => { inputRefs.current[index] = ref; }}
-                    style={[styles.digitInput, isDark && styles.digitInputDark]}
+                    style={[styles.digitInput, styles.digitInputDark]}
                     value={digit}
                     onChangeText={(text) => handleChangeText(text, index)}
                     onKeyPress={(e) => handleKeyPress(e, index)}
@@ -252,11 +245,11 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
             ) : null}
 
             <View style={styles.resendContainer}>
-              <Text style={[styles.resendText, isDark && styles.resendTextDark]}>
+              <Text style={[styles.resendText, styles.resendTextDark]}>
                 Не получили код?{' '}
               </Text>
               {resendTimer > 0 ? (
-                <Text style={[styles.resendTimer, isDark && styles.resendTimerDark]}>
+                <Text style={[styles.resendTimer, styles.resendTimerDark]}>
                   Повторить через {resendTimer}с
                 </Text>
               ) : (
@@ -276,7 +269,7 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
                 colors={
                   isLoading || code.join('').length !== OTP_LENGTH
                     ? ['#94a3b8', '#64748b']
-                    : ['#3b82f6', '#8b5cf6']
+                    : Theme.accent.gradient as unknown as [string, string]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -291,43 +284,43 @@ export function OTPPage({ contact, onVerify, onResend, onBack }: OTPPageProps) {
           </Animated.View>
           </ScrollView>
         </TouchableWithoutFeedback>
-      </View>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Theme.background.primary },
   gradient: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
   backButton: { marginBottom: 20, width: 40, height: 40, justifyContent: 'center' },
   header: { alignItems: 'center', marginBottom: 32 },
-  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(139, 92, 246, 0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  iconContainerDark: { backgroundColor: 'rgba(139, 92, 246, 0.2)' },
-  title: { fontSize: 28, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
-  titleDark: { color: '#f1f5f9' },
-  subtitle: { fontSize: 15, color: '#64748b', textAlign: 'center', lineHeight: 22 },
-  subtitleDark: { color: '#94a3b8' },
-  contact: { fontWeight: '600', color: '#8b5cf6' },
-  card: { borderRadius: 24, padding: 24, backgroundColor: 'rgba(255, 255, 255, 0.5)' },
-  cardDark: { backgroundColor: 'rgba(30, 41, 59, 0.5)', borderWidth: 0 },
+  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255, 107, 0, 0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  iconContainerDark: { backgroundColor: 'rgba(255, 107, 0, 0.2)' },
+  title: { fontSize: 28, fontWeight: '700', color: Theme.text.primary, marginBottom: 8 },
+  titleDark: { color: Theme.text.primary },
+  subtitle: { fontSize: 15, color: Theme.text.secondary, textAlign: 'center', lineHeight: 22 },
+  subtitleDark: { color: Theme.text.secondary },
+  contact: { fontWeight: '600', color: Theme.accent.primary },
+  card: { borderRadius: 24, padding: 24, backgroundColor: Theme.background.card },
+  cardDark: { backgroundColor: Theme.background.card, borderWidth: 1, borderColor: Theme.border.primary },
   codeContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  digitBox: { width: 48, height: 56, borderWidth: 2, borderColor: '#e2e8f0', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
-  digitBoxDark: { borderColor: 'rgba(148, 163, 184, 0.3)', backgroundColor: 'rgba(51, 65, 85, 0.5)' },
-  digitBoxFocused: { borderColor: '#8b5cf6', borderWidth: 2 },
-  digitBoxFocusedDark: { borderColor: '#a78bfa' },
-  digitBoxFilled: { borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.05)' },
+  digitBox: { width: 48, height: 56, borderWidth: 2, borderColor: Theme.border.primary, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Theme.background.card },
+  digitBoxDark: { borderColor: Theme.border.primary, backgroundColor: Theme.background.card },
+  digitBoxFocused: { borderColor: Theme.accent.primary, borderWidth: 2 },
+  digitBoxFocusedDark: { borderColor: Theme.accent.secondary },
+  digitBoxFilled: { borderColor: Theme.accent.primary, backgroundColor: 'rgba(255, 107, 0, 0.05)' },
   digitBoxError: { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.05)' },
-  digitInput: { fontSize: 24, fontWeight: '700', color: '#1e293b', textAlign: 'center', width: '100%' },
-  digitInputDark: { color: '#f1f5f9' },
+  digitInput: { fontSize: 24, fontWeight: '700', color: Theme.text.primary, textAlign: 'center', width: '100%' },
+  digitInputDark: { color: Theme.text.primary },
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 12 },
   errorText: { fontSize: 13, color: '#ef4444', fontWeight: '500' },
   resendContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-  resendText: { fontSize: 14, color: '#64748b' },
-  resendTextDark: { color: '#94a3b8' },
-  resendTimer: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
-  resendTimerDark: { color: '#64748b' },
-  resendLink: { fontSize: 14, fontWeight: '700', color: '#8b5cf6' },
+  resendText: { fontSize: 14, color: Theme.text.secondary },
+  resendTextDark: { color: Theme.text.secondary },
+  resendTimer: { fontSize: 14, color: Theme.text.tertiary, fontWeight: '500' },
+  resendTimerDark: { color: Theme.text.tertiary },
+  resendLink: { fontSize: 14, fontWeight: '700', color: Theme.accent.primary },
   verifyButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderRadius: 12 },
   verifyButtonText: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
 });

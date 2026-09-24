@@ -7,7 +7,7 @@ import {
   TextStyle,
   View,
 } from 'react-native';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 export interface ButtonProps {
   onPress?: () => void;
@@ -32,8 +32,7 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
 
   const getContainerStyle = (): ViewStyle => {
     const baseStyle: ViewStyle = {
@@ -53,18 +52,18 @@ export function Button({
 
     const variantStyles: Record<string, ViewStyle> = {
       default: {
-        backgroundColor: isDark ? '#7c3aed' : '#8b5cf6',
+        backgroundColor: Theme.accent.primary,
       },
       destructive: {
-        backgroundColor: isDark ? 'rgba(239, 68, 68, 0.6)' : '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.6)',
       },
       outline: {
-        backgroundColor: isDark ? 'rgba(55, 65, 81, 0.3)' : '#ffffff',
+        backgroundColor: 'rgba(55, 65, 81, 0.3)',
         borderWidth: 1,
-        borderColor: isDark ? '#374151' : '#e5e7eb',
+        borderColor: '#374151',
       },
       secondary: {
-        backgroundColor: isDark ? '#374151' : '#f3f4f6',
+        backgroundColor: '#374151',
       },
       ghost: {
         backgroundColor: 'transparent',
@@ -101,11 +100,11 @@ export function Button({
     const variantStyles: Record<string, TextStyle> = {
       default: { color: '#ffffff' },
       destructive: { color: '#ffffff' },
-      outline: { color: isDark ? '#f9fafb' : '#0f172a' },
-      secondary: { color: isDark ? '#f9fafb' : '#0f172a' },
-      ghost: { color: isDark ? '#f9fafb' : '#0f172a' },
+      outline: { color: Theme.text.primary },
+      secondary: { color: Theme.text.primary },
+      ghost: { color: Theme.text.primary },
       link: {
-        color: isDark ? '#8b5cf6' : '#7c3aed',
+        color: Theme.accent.primary,
         textDecorationLine: 'underline',
       },
     };
@@ -128,7 +127,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'default' || variant === 'destructive' ? '#ffffff' : isDark ? '#8b5cf6' : '#7c3aed'}
+          color={variant === 'default' || variant === 'destructive' ? '#ffffff' : Theme.accent.primary}
         />
       ) : (
         <>

@@ -15,7 +15,15 @@ import {
   deleteSession,
   logout,
   checkSessionActive,
-  verifyToken
+  verifyToken,
+  updateProfile,
+  changePassword,
+  requestEmailChange,
+  verifyEmailChange,
+  requestPasswordReset,
+  resetPasswordWithToken,
+  getEmailChangeStatus,
+  uploadAvatar
 } from './auth';
 import { googleAuth, appleAuth } from './oauth';
 import { 
@@ -50,6 +58,30 @@ import {
   incrementLimitCounter,
   getUserLimits,
 } from './subscriptions';
+import {
+  createPayment,
+  confirmPayment,
+  getPaymentHistory,
+  getAvailablePlans,
+  cancelSubscription,
+  getCurrentSubscription,
+} from './payments';
+import {
+  startPanicMode,
+  recordAnxietyLevel,
+  processPanicStep,
+  completePanicMode,
+  getPanicHistory,
+} from './panicMode';
+import {
+  sendMessage,
+  getMessages,
+  deleteMessage,
+  getMessageStatus,
+  clearChat,
+} from './messages';
+import { initializeQueue } from './aiQueue';
+import { preloadCommonResponses } from './cache';
 
 const app = express();
 
@@ -85,9 +117,17 @@ app.post('/api/auth/login', login);
 app.post('/api/auth/verify-otp', verifyOTP);
 app.post('/api/auth/resend-otp', resendOTP);
 app.post('/api/auth/reset-password', resetPassword);
+app.post('/api/auth/request-password-reset', requestPasswordReset);
+app.post('/api/auth/reset-password-with-token', resetPasswordWithToken);
 
 // Profile & Sessions (защищенные роуты - проверяем активность сессии)
 app.get('/api/auth/profile', checkSessionActive, getProfile);
+app.put('/api/auth/profile', checkSessionActive, updateProfile);
+app.post('/api/auth/change-password', checkSessionActive, changePassword);
+app.post('/api/auth/request-email-change', checkSessionActive, requestEmailChange);
+app.post('/api/auth/verify-email-change', verifyEmailChange);
+app.get('/api/auth/email-change-status', checkSessionActive, getEmailChangeStatus);
+app.post('/api/auth/upload-avatar', checkSessionActive, upload.single('avatar') as any, uploadAvatar);
 app.get('/api/auth/sessions', checkSessionActive, getSessions);
 app.delete('/api/auth/sessions/:sessionId', checkSessionActive, deleteSession);
 app.post('/api/auth/logout', checkSessionActive, logout);
@@ -854,7 +894,108 @@ app.post('/api/journal/entry', async (req: Request, res: Response) => {
   }
 });
 
-// 404 обработчик
+// Запуск сервера
+const PORT = config.port;
+
+// Subscription Routes
+/**
+ * GET /api/subscription/limits
+ * Получить информацию о лимитах пользователя
+ */
+app.get('/api/subscription/limits', checkSessionActive, async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No token' });
+    }
+
+    const decoded = verifyToken(token);
+    const limits = await getUserLimits(decoded.userId);
+
+    if (!limits) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      limits,
+    });
+  } catch (error) {
+    console.error('Error getting user limits:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get subscription limits',
+    });
+  }
+});
+
+// Payment Routes
+app.post('/api/payments/create', checkSessionActive, createPayment);
+app.post('/api/payments/confirm', checkSessionActive, confirmPayment);
+app.get('/api/payments/history', checkSessionActive, getPaymentHistory);
+
+/**
+ * GET /api/subscriptions/limits
+ * Получить лимиты пользователя (plural form)
+ */
+app.get('/api/subscriptions/limits', checkSessionActive, async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Token required' });
+    }
+
+    const decoded = verifyToken(token);
+    const limits = await getUserLimits(decoded.userId);
+
+    if (!limits) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      limits: {
+        tier: limits.tierName,
+        dailyChatUsed: limits.dailyChatUsed,
+        dailyChatLimit: limits.dailyChatLimit,
+        dailyVoiceUsed: limits.dailyVoiceUsed,
+        dailyVoiceLimit: limits.dailyVoiceLimit,
+        dailyAnalysisUsed: limits.dailyMoodAnalysisUsed,
+        dailyAnalysisLimit: limits.dailyMoodAnalysisLimit,
+        dailyJournalUsed: limits.dailyJournalUsed,
+        dailyJournalLimit: limits.dailyJournalLimit,
+        hasTTS: limits.hasTTS,
+        hasExport: limits.hasExport,
+        chatHistoryDays: limits.chatHistoryDays,
+        subscriptionExpiresAt: limits.subscriptionExpiresAt,
+        isExpired: limits.isExpired,
+      },
+    });
+  } catch (error) {
+    console.error('Error getting subscription limits:', error);
+    res.status(500).json({ success: false, error: 'Failed to get limits' });
+  }
+});
+
+app.get('/api/subscriptions/available-plans', getAvailablePlans);
+app.get('/api/subscriptions/current', checkSessionActive, getCurrentSubscription);
+app.post('/api/subscriptions/cancel', checkSessionActive, cancelSubscription);
+
+// Panic Mode Routes
+app.post('/api/panic/start', checkSessionActive, startPanicMode);
+app.post('/api/panic/anxiety-level', checkSessionActive, recordAnxietyLevel);
+app.post('/api/panic/step', checkSessionActive, processPanicStep);
+app.post('/api/panic/complete', checkSessionActive, completePanicMode);
+app.get('/api/panic/history', checkSessionActive, getPanicHistory);
+
+// Message Routes
+app.post('/api/messages/send', checkSessionActive, sendMessage);
+app.get('/api/messages/:chatId', checkSessionActive, getMessages);
+app.delete('/api/messages/:messageId', checkSessionActive, deleteMessage);
+app.get('/api/messages/status/:jobId', checkSessionActive, getMessageStatus);
+app.delete('/api/chat/:chatId/clear', checkSessionActive, clearChat);
+
+// 404 обработчик - должен быть последним!
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     error: 'Endpoint не найден',
@@ -863,8 +1004,9 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Запуск сервера
-const PORT = config.port;
+// Initialize AI Queue and Cache
+initializeQueue();
+preloadCommonResponses();
 
 app.listen(PORT, () => {
   console.log(`
@@ -897,40 +1039,21 @@ app.listen(PORT, () => {
 ║                                                      ║
 ║  Subscriptions:                                      ║
 ║  ✓ GET /api/subscription/limits                      ║
+║  ✓ POST /api/payments/create                         ║
+║  ✓ POST /api/payments/confirm                        ║
+║  ✓ GET /api/payments/history                         ║
+║  ✓ GET /api/subscriptions/available-plans           ║
+║  ✓ GET /api/subscriptions/current                    ║
+║  ✓ POST /api/subscriptions/cancel                    ║
+║                                                      ║
+║  Panic Mode (Emergency Support):                     ║
+║  ✓ POST /api/panic/start                             ║
+║  ✓ POST /api/panic/anxiety-level                     ║
+║  ✓ POST /api/panic/step                              ║
+║  ✓ POST /api/panic/complete                          ║
+║  ✓ GET /api/panic/history                            ║
 ╚══════════════════════════════════════════════════════╝
   `);
-});
-
-// Subscription Routes
-/**
- * GET /api/subscription/limits
- * Получить информацию о лимитах пользователя
- */
-app.get('/api/subscription/limits', checkSessionActive, async (req: Request, res: Response) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ success: false, error: 'No token' });
-    }
-
-    const decoded = verifyToken(token);
-    const limits = await getUserLimits(decoded.userId);
-
-    if (!limits) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    res.json({
-      success: true,
-      limits,
-    });
-  } catch (error) {
-    console.error('Error getting user limits:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get subscription limits',
-    });
-  }
 });
 
 export default app;

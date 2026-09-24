@@ -43,12 +43,18 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 console.log('🔌 API URL:', API_URL);
 
+// Экспортируем функцию для получения базового URL (без /api)
+export const getBaseURL = () => {
+  return API_URL.replace('/api', '');
+};
+
 // Создаем axios инстанс
 const api = axios.create({
   baseURL: API_URL,
   timeout: 200000, // 200 seconds - match backend timeout for Ollama responses
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // Обход предупреждения ngrok
   },
 });
 
@@ -604,6 +610,67 @@ const authApi = {
       throw error;
     }
   },
+
+  /**
+   * Обновить профиль (имя, телефон)
+   */
+  updateProfile: async (data: { name?: string; phone?: string }): Promise<any> => {
+    try {
+      const response = await api.put('/auth/profile', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error updating profile:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Сменить пароль
+   */
+  changePassword: async (currentPassword: string, newPassword: string): Promise<any> => {
+    try {
+      const response = await api.post('/auth/change-password', { currentPassword, newPassword });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error changing password:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Загрузить аватар
+   */
+  uploadAvatar: async (uri: string): Promise<any> => {
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'avatar.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      
+      formData.append('avatar', {
+        uri,
+        name: filename,
+        type,
+      } as any);
+      
+      const response = await api.post('/auth/upload-avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error uploading avatar:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
 };
 // Inbox API
 const inboxApi = {
@@ -705,6 +772,72 @@ const journalApi = {
   },
 };
 
+// Daily Tasks API (AI-generated tasks)
+export interface DailyTask {
+  id: number;
+  title: string;
+  description: string;
+  status: 'locked' | 'opened' | 'completed';
+  theme: string;
+  streak: number;
+  expiresAt: string;
+  createdAt: string;
+}
+
+const dailyTasksApi = {
+  /**
+   * Получить текущее задание (или сгенерировать новое)
+   */
+  getTask: async (): Promise<{ success: boolean; task: DailyTask }> => {
+    try {
+      const response = await api.get('/daily-task');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting daily task:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Открыть задание (статус: locked -> opened)
+   */
+  openTask: async (taskId: number): Promise<{ success: boolean; status: string }> => {
+    try {
+      const response = await api.put('/daily-task/open', { taskId });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error opening task:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Завершить задание
+   */
+  completeTask: async (taskId: number): Promise<{ success: boolean; status: string; reward?: any }> => {
+    try {
+      const response = await api.put('/daily-task/complete', { taskId });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error completing task:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Получить историю стрика
+   */
+  getStreak: async (): Promise<{ success: boolean; streak: number; history: boolean[] }> => {
+    try {
+      const response = await api.get('/daily-task/streak');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting streak:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+};
+
 // Экспорт всех API сервисов
-export { chatApi, authApi, inboxApi, journalApi, api };
+export { chatApi, authApi, inboxApi, journalApi, dailyTasksApi, api };
 export default chatApi;

@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -20,10 +20,11 @@ const plans = [
   {
     id: 1,
     name: 'Бесплатный',
+    slug: 'free',
     price: '0₽',
     period: 'навсегда',
     icon: 'sparkles-outline' as const,
-    gradient: ['#94a3b8', '#64748b'] as const,
+    gradient: ['#666666', '#444444'] as const,
     features: [
       '5 сообщений в день',
       '1 голосовое сообщение в день',
@@ -37,10 +38,11 @@ const plans = [
   {
     id: 2,
     name: 'Плюс',
+    slug: 'plus',
     price: '99₽',
     period: 'в месяц',
     icon: 'star-outline' as const,
-    gradient: ['#a78bfa', '#ec4899'] as const,
+    gradient: ['#A855F7', '#C084FC'] as const,
     features: [
       '50 сообщений в день',
       'Неограниченные голосовые сообщения',
@@ -55,10 +57,11 @@ const plans = [
   {
     id: 3,
     name: 'Профессиональный',
+    slug: 'pro',
     price: '299₽',
     period: 'в месяц',
     icon: 'flash-outline' as const,
-    gradient: ['#60a5fa', '#06b6d4'] as const,
+    gradient: ['#C084FC', '#FFAD66'] as const,
     features: [
       '200 сообщений в день',
       'Неограниченные голосовые сообщения',
@@ -73,8 +76,7 @@ const plans = [
 ];
 
 export default function BillingScreen() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [selectedPlan, setSelectedPlan] = useState(plans[1]);
@@ -90,17 +92,14 @@ export default function BillingScreen() {
       params: {
         planName: plan.name,
         planPrice: plan.price,
+        tierSlug: plan.slug,
       },
     });
   };
 
   return (
     <LinearGradient
-      colors={
-        isDark
-          ? ['#0f172a', '#1e293b', '#334155']
-          : ['#e0e7ff', '#ddd6fe', '#e9d5ff']
-      }
+      colors={Theme.accent.gradient}
       style={styles.container}
     >
       <ScrollView
@@ -117,13 +116,13 @@ export default function BillingScreen() {
             <Ionicons
               name="arrow-back"
               size={24}
-              color={isDark ? '#e2e8f0' : '#1e293b'}
+              color={Theme.text.primary}
             />
           </TouchableOpacity>
           <Text
             style={[
               styles.headerTitle,
-              { color: isDark ? '#e2e8f0' : '#1e293b' },
+              { color: Theme.text.primary },
             ]}
           >
             Подписки
@@ -135,7 +134,7 @@ export default function BillingScreen() {
         <Text
           style={[
             styles.subtitle,
-            { color: isDark ? '#94a3b8' : '#64748b' },
+            { color: Theme.text.secondary },
           ]}
         >
           Выберите подходящий план
@@ -156,17 +155,11 @@ export default function BillingScreen() {
                 style={[
                   styles.planCard,
                   {
-                    backgroundColor: isDark
-                      ? 'rgba(30, 41, 59, 0.6)'
-                      : 'rgba(255, 255, 255, 0.6)',
+                    backgroundColor: Theme.background.card,
                     borderColor:
                       selectedPlan.id === plan.id
-                        ? isDark
-                          ? '#a78bfa'
-                          : '#8b5cf6'
-                        : isDark
-                        ? 'rgba(71, 85, 105, 0.3)'
-                        : 'rgba(226, 232, 240, 0.5)',
+                        ? Theme.accent.primary
+                        : Theme.background.tertiary,
                     borderWidth: selectedPlan.id === plan.id ? 2 : 1,
                   },
                 ]}
@@ -175,7 +168,7 @@ export default function BillingScreen() {
                 {plan.isPopular && (
                   <View style={styles.popularBadge}>
                     <LinearGradient
-                      colors={['#a78bfa', '#ec4899']}
+                      colors={['#A855F7', '#C084FC']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.badgeGradient}
@@ -209,7 +202,7 @@ export default function BillingScreen() {
                     <Text
                       style={[
                         styles.planName,
-                        { color: isDark ? '#e2e8f0' : '#1e293b' },
+                        { color: Theme.text.primary },
                       ]}
                     >
                       {plan.name}
@@ -218,7 +211,7 @@ export default function BillingScreen() {
                       <Text
                         style={[
                           styles.planPrice,
-                          { color: isDark ? '#c4b5fd' : '#7c3aed' },
+                          { color: Theme.accent.primary },
                         ]}
                       >
                         {plan.price}
@@ -226,7 +219,7 @@ export default function BillingScreen() {
                       <Text
                         style={[
                           styles.planPeriod,
-                          { color: isDark ? '#94a3b8' : '#64748b' },
+                          { color: Theme.text.secondary },
                         ]}
                       >
                         {plan.period}
@@ -242,12 +235,12 @@ export default function BillingScreen() {
                       <Ionicons
                         name="checkmark-circle"
                         size={20}
-                        color={isDark ? '#a78bfa' : '#8b5cf6'}
+                        color={Theme.accent.primary}
                       />
                       <Text
                         style={[
                           styles.featureText,
-                          { color: isDark ? '#cbd5e1' : '#475569' },
+                          { color: Theme.text.secondary },
                         ]}
                       >
                         {feature}
@@ -284,7 +277,7 @@ export default function BillingScreen() {
         <Text
           style={[
             styles.footerText,
-            { color: isDark ? '#64748b' : '#94a3b8' },
+            { color: Theme.text.tertiary },
           ]}
         >
           Подписку можно отменить в любое время. Автоматическое продление.
@@ -297,129 +290,146 @@ export default function BillingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Theme.background.primary,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingTop: 65,
+    paddingHorizontal: 22,
+    paddingBottom: Theme.spacing.xl,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   backButton: {
-    padding: 8,
+    padding: 10,
+    borderRadius: Theme.radius.md,
+    backgroundColor: Theme.background.elevated,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
+    color: Theme.text.primary,
+    letterSpacing: -0.3,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    color: Theme.text.secondary,
+    lineHeight: 24,
   },
   planWrapper: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   planCard: {
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: Theme.radius.lg,
+    padding: 22,
+    backgroundColor: Theme.background.card,
+    borderWidth: 1,
+    borderColor: Theme.border.primary,
+    shadowColor: '#0A0A0F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   popularBadge: {
     position: 'absolute',
-    top: -12,
+    top: -14,
     left: '50%',
     transform: [{ translateX: -50 }],
     zIndex: 1,
   },
   currentBadge: {
     position: 'absolute',
-    top: -12,
-    right: 16,
+    top: -14,
+    right: 18,
     zIndex: 1,
   },
   badgeGradient: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Theme.radius.sm,
   },
   badgeText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
   planHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 22,
   },
   planIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 18,
+    backgroundColor: Theme.background.elevated,
   },
   planInfo: {
     flex: 1,
   },
   planName: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 5,
+    color: Theme.text.primary,
+    letterSpacing: -0.2,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 8,
+    gap: 10,
   },
   planPrice: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
+    color: Theme.accent.primary,
   },
   planPeriod: {
     fontSize: 14,
+    color: Theme.text.secondary,
   },
   featuresContainer: {
-    gap: 12,
-    marginBottom: 20,
+    gap: 14,
+    marginBottom: 22,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   featureText: {
     fontSize: 15,
     flex: 1,
+    color: Theme.text.primary,
   },
   subscribeButtonWrapper: {
-    marginTop: 8,
+    marginTop: 10,
   },
   subscribeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: Theme.radius.md,
+    shadowColor: Theme.accent.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
   },
   subscribeButtonText: {
     color: '#fff',
@@ -427,8 +437,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   footerText: {
-    fontSize: 12,
+    fontSize: 13,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 10,
+    color: Theme.text.tertiary,
   },
 });

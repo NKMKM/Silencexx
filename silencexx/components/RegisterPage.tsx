@@ -13,11 +13,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
 import { Input } from './ui/Input';
-import { FloatingClouds } from './FloatingClouds';
-import { AnimatedGradient } from './AnimatedGradient';
 import { authApi } from '@/services/api';
+import { Theme } from '@/constants/theme';
 
 interface RegisterPageProps {
   onRegister: () => void;
@@ -38,8 +36,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
   const [errors, setErrors] = useState({ email: '', name: '', password: '', confirmPassword: '' });
 
   const insets = useSafeAreaInsets();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   
   const contentTranslateY = useSharedValue(0);
 
@@ -162,52 +159,49 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
 
   return (
     <View style={styles.container}>
-      <View style={styles.gradient}>
-        <AnimatedGradient
-          lightColors={['#fafbfc', '#f8fafc', '#f5f7fa']}
-          darkColors={['#124edbff', '#ffffffff', '#124edbff']}
-          isDark={isDark}
-        />
-        <FloatingClouds />
+      <LinearGradient
+        colors={['#000000', '#0A0A0A', '#080808', '#000000']}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <Animated.View
-            style={[
-              styles.scrollContent,
-              { 
-                flex: 1,
-                justifyContent: 'center',
-                paddingHorizontal: 24,
-              },
-              useAnimatedStyle(() => ({
-                transform: [{ translateY: contentTranslateY.value }],
-              })),
-            ]}
-          >
-            {/* Back Button */}
-            {step !== 'email' && (
-              <TouchableOpacity 
-                onPress={goBack}
-                style={styles.backButton}
-              >
-                <Ionicons name="arrow-back" size={24} color={isDark ? '#f1f5f9' : '#1e293b'} />
-              </TouchableOpacity>
-            )}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <Animated.View
+          style={[
+            styles.scrollContent,
+            { 
+              flex: 1,
+              justifyContent: 'center',
+              paddingHorizontal: 24,
+            },
+            useAnimatedStyle(() => ({
+              transform: [{ translateY: contentTranslateY.value }],
+            })),
+          ]}
+        >
+          {/* Back Button */}
+          {step !== 'email' && (
+            <TouchableOpacity 
+              onPress={goBack}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color={Theme.text.primary} />
+            </TouchableOpacity>
+          )}
 
-            {/* Header */}
-            <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
-              <LinearGradient colors={['#60a5fa', '#a78bfa']} style={styles.logo}>
-                <Ionicons name="cloud" size={48} color="#ffffff" />
+          {/* Header */}
+          <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
+            <LinearGradient colors={[Theme.accent.primary, Theme.accent.primaryLight]} style={styles.logo}>
+              <Ionicons name="sparkles" size={48} color="#ffffff" />
               </LinearGradient>
-              <Text style={[styles.title, isDark && styles.titleDark]}>CloudMind</Text>
-              <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>Create your account</Text>
+              <Text style={styles.title}>CloudMind</Text>
+              <Text style={styles.subtitle}>Создание аккаунта</Text>
             </Animated.View>
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, isDark && styles.progressBarDark]}>
+              <View style={styles.progressBar}>
                 <LinearGradient
-                  colors={['#3b82f6', '#8b5cf6']}
+                  colors={[Theme.accent.primary, Theme.accent.primaryLight]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={[styles.progressFill, { width: `${getProgress()}%` }]}
@@ -216,13 +210,13 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
             </View>
 
             {/* Card */}
-            <View style={[styles.card, isDark && styles.cardDark]}>
+            <View style={styles.card}>
               {/* Email Step */}
               {step === 'email' && (
                 <Animated.View entering={FadeInDown.delay(50).springify()}>
-                  <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>Your Email</Text>
-                  <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
-                    We'll use this to create your account
+                  <Text style={styles.stepTitle}>Ваш Email</Text>
+                  <Text style={styles.stepSubtitle}>
+                    Мы используем его для создания аккаунта
                   </Text>
                   <Input
                     placeholder="example@mail.com"
@@ -236,7 +230,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoFocus
-                    leftIcon={<Ionicons name="mail-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                    leftIcon={<Ionicons name="mail-outline" size={20} color={Theme.text.secondary} />}
                     error={errors.email}
                   />
                   <TouchableOpacity
@@ -245,12 +239,12 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     style={{ marginTop: 24 }}
                   >
                     <LinearGradient
-                      colors={['#3b82f6', '#8b5cf6']}
+                      colors={[Theme.accent.primary, Theme.accent.primaryLight]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.nextButton}
                     >
-                      <Text style={styles.nextButtonText}>Next</Text>
+                      <Text style={styles.nextButtonText}>Далее</Text>
                       <Ionicons name="arrow-forward" size={20} color="#ffffff" />
                     </LinearGradient>
                   </TouchableOpacity>
@@ -260,12 +254,12 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
               {/* Name Step */}
               {step === 'name' && (
                 <Animated.View entering={FadeInDown.delay(50).springify()}>
-                  <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>What's your name?</Text>
-                  <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
-                    This will show on your profile
+                  <Text style={styles.stepTitle}>Как вас зовут?</Text>
+                  <Text style={styles.stepSubtitle}>
+                    Это имя будет показано в профиле
                   </Text>
                   <Input
-                    placeholder="Enter your name"
+                    placeholder="Введите имя"
                     value={name}
                     onChangeText={(text) => {
                       setName(text);
@@ -275,7 +269,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     onInputBlur={handleInputBlur}
                     autoCapitalize="words"
                     autoFocus
-                    leftIcon={<Ionicons name="person-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                    leftIcon={<Ionicons name="person-outline" size={20} color={Theme.text.secondary} />}
                     error={errors.name}
                   />
                   <TouchableOpacity
@@ -284,12 +278,12 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     style={{ marginTop: 24 }}
                   >
                     <LinearGradient
-                      colors={['#3b82f6', '#8b5cf6']}
+                      colors={[Theme.accent.primary, Theme.accent.primaryLight]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.nextButton}
                     >
-                      <Text style={styles.nextButtonText}>Next</Text>
+                      <Text style={styles.nextButtonText}>Далее</Text>
                       <Ionicons name="arrow-forward" size={20} color="#ffffff" />
                     </LinearGradient>
                   </TouchableOpacity>
@@ -299,9 +293,9 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
               {/* Password Step */}
               {step === 'password' && (
                 <Animated.View entering={FadeInDown.delay(50).springify()}>
-                  <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>Create Password</Text>
-                  <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
-                    At least 6 characters with letters and numbers
+                  <Text style={styles.stepTitle}>Создайте пароль</Text>
+                  <Text style={styles.stepSubtitle}>
+                    Минимум 6 символов с буквами и цифрами
                   </Text>
                   <Input
                     placeholder="••••••••"
@@ -315,13 +309,13 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoFocus
-                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Theme.text.secondary} />}
                     rightIcon={
                       <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                         <Ionicons 
                           name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
                           size={20} 
-                          color={isDark ? '#94a3b8' : '#64748b'} 
+                          color={Theme.text.secondary} 
                         />
                       </TouchableOpacity>
                     }
@@ -333,12 +327,12 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     style={{ marginTop: 24 }}
                   >
                     <LinearGradient
-                      colors={['#3b82f6', '#8b5cf6']}
+                      colors={[Theme.accent.primary, Theme.accent.primaryLight]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.nextButton}
                     >
-                      <Text style={styles.nextButtonText}>Next</Text>
+                      <Text style={styles.nextButtonText}>Далее</Text>
                       <Ionicons name="arrow-forward" size={20} color="#ffffff" />
                     </LinearGradient>
                   </TouchableOpacity>
@@ -348,9 +342,9 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
               {/* Confirm Password Step */}
               {step === 'confirm' && (
                 <Animated.View entering={FadeInDown.delay(50).springify()}>
-                  <Text style={[styles.stepTitle, isDark && styles.stepTitleDark]}>Confirm Password</Text>
-                  <Text style={[styles.stepSubtitle, isDark && styles.stepSubtitleDark]}>
-                    Re-enter your password to confirm
+                  <Text style={styles.stepTitle}>Подтвердите пароль</Text>
+                  <Text style={styles.stepSubtitle}>
+                    Введите пароль ещё раз
                   </Text>
                   <Input
                     placeholder="••••••••"
@@ -364,13 +358,13 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     secureTextEntry={!showConfirmPassword}
                     autoCapitalize="none"
                     autoFocus
-                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color={isDark ? '#94a3b8' : '#64748b'} />}
+                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Theme.text.secondary} />}
                     rightIcon={
                       <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                         <Ionicons 
                           name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} 
                           size={20} 
-                          color={isDark ? '#94a3b8' : '#64748b'} 
+                          color={Theme.text.secondary} 
                         />
                       </TouchableOpacity>
                     }
@@ -383,7 +377,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                     style={{ marginTop: 24 }}
                   >
                     <LinearGradient
-                      colors={isLoading ? ['#94a3b8', '#64748b'] : ['#3b82f6', '#8b5cf6']}
+                      colors={isLoading ? ['#4b5563', '#374151'] : [Theme.accent.primary, Theme.accent.primaryLight]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.nextButton}
@@ -392,7 +386,7 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
                         <ActivityIndicator color="#ffffff" size="small" />
                       ) : (
                         <>
-                          <Text style={styles.nextButtonText}>Sign up</Text>
+                          <Text style={styles.nextButtonText}>Создать аккаунт</Text>
                           <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
                         </>
                       )}
@@ -403,69 +397,151 @@ export function RegisterPage({ onRegister, onNavigateToLogin }: RegisterPageProp
 
               {/* Divider */}
               <View style={styles.divider}>
-                <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
-                <Text style={[styles.dividerText, isDark && styles.dividerTextDark]}>or</Text>
-                <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>или</Text>
+                <View style={styles.dividerLine} />
               </View>
 
               {/* Sign In Link */}
               <View style={styles.footer}>
-                <Text style={[styles.footerText, isDark && styles.footerTextDark]}>Already have an account? </Text>
+                <Text style={styles.footerText}>Уже есть аккаунт? </Text>
                 <TouchableOpacity onPress={onNavigateToLogin} disabled={isLoading}>
-                  <Text style={styles.loginLink}>Sign in</Text>
+                  <Text style={styles.loginLink}>Войти</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </Animated.View>
         </TouchableWithoutFeedback>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  gradient: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
-  backButton: { marginBottom: 16, width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  header: { alignItems: 'center', marginBottom: 48 },
-  logo: { width: 88, height: 88, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 20, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 10 },
-  title: { fontSize: 32, fontWeight: '800', color: '#1e293b', marginBottom: 6, letterSpacing: 0.5 },
-  titleDark: { color: '#f1f5f9' },
-  subtitle: { fontSize: 16, color: '#64748b', fontWeight: '500', letterSpacing: 0.3 },
-  subtitleDark: { color: '#94a3b8' },
-  progressContainer: { marginBottom: 24 },
-  progressBar: { height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, overflow: 'hidden' },
-  progressBarDark: { backgroundColor: 'rgba(148, 163, 184, 0.2)' },
-  progressFill: { height: '100%', borderRadius: 2 },
+  container: { flex: 1, backgroundColor: Theme.background.primary },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 26 },
+  backButton: { 
+    marginBottom: 18, 
+    width: 48, 
+    height: 48, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: Theme.background.elevated,
+    borderRadius: Theme.radius.lg,
+  },
+  header: { alignItems: 'center', marginBottom: Theme.spacing.xxl },
+  logo: { 
+    width: 104, 
+    height: 104, 
+    borderRadius: Theme.radius.xl, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 28, 
+    shadowColor: Theme.accent.primary, 
+    shadowOffset: { width: 0, height: 14 }, 
+    shadowOpacity: 0.5, 
+    shadowRadius: 28, 
+    elevation: 18,
+    backgroundColor: Theme.background.elevated,
+  },
+  title: { 
+    fontSize: 38, 
+    fontWeight: '800', 
+    color: Theme.text.primary, 
+    marginBottom: 10, 
+    letterSpacing: -0.5 
+  },
+  subtitle: { 
+    fontSize: 17, 
+    color: Theme.text.secondary, 
+    fontWeight: '500', 
+    letterSpacing: 0.3 
+  },
+  progressContainer: { marginBottom: 28 },
+  progressBar: { 
+    height: 5, 
+    backgroundColor: Theme.background.tertiary, 
+    borderRadius: 3, 
+    overflow: 'hidden' 
+  },
+  progressFill: { height: '100%', borderRadius: 3 },
   card: { 
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.9)' : '#ffffff',
-    borderRadius: 24, 
-    padding: 28, 
-    shadowColor: '#ffffffff', 
-    shadowOffset: { width: 0, height: 8 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 16, 
-    elevation: 4 
+    backgroundColor: Theme.background.card,
+    borderRadius: Theme.radius.xl, 
+    padding: 30, 
+    borderWidth: 1,
+    borderColor: Theme.border.primary,
+    shadowColor: Theme.accent.primary, 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 28, 
+    elevation: 12 
   },
-  cardDark: { 
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(46, 63, 102, 0.5)' : '#42537aff',
-    borderWidth: Platform.OS === 'ios' ? 1 : 0,
-    borderColor: Platform.OS === 'ios' ? 'rgba(148, 163, 184, 0.1)' : 'transparent'
+  stepTitle: { 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: Theme.text.primary, 
+    marginBottom: 12, 
+    textAlign: 'center', 
+    letterSpacing: -0.3 
   },
-  stepTitle: { fontSize: 24, fontWeight: '800', color: '#1e293b', marginBottom: 10, textAlign: 'center', letterSpacing: 0.3 },
-  stepTitleDark: { color: '#f1f5f9' },
-  stepSubtitle: { fontSize: 14, color: '#64748b', marginBottom: 24, textAlign: 'center', lineHeight: 20 },
-  stepSubtitleDark: { color: '#94a3b8' },
-  nextButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 12, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
-  nextButtonText: { fontSize: 16, fontWeight: '800', color: '#ffffff', letterSpacing: 0.5 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  dividerLine: { flex: 1, height: 1.5, backgroundColor: '#e2e8f0' },
-  dividerLineDark: { backgroundColor: 'rgba(148, 163, 184, 0.15)' },
-  dividerText: { paddingHorizontal: 16, fontSize: 13, color: '#94a3b8', fontWeight: '600', letterSpacing: 0.3 },
-  dividerTextDark: { color: '#64748b' },
-  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' },
-  footerText: { fontSize: 14, color: '#64748b', fontWeight: '500' },
-  footerTextDark: { color: '#94a3b8' },
-  loginLink: { fontSize: 14, fontWeight: '800', color: '#8b5cf6', letterSpacing: 0.3 },
+  stepSubtitle: { 
+    fontSize: 15, 
+    color: Theme.text.secondary, 
+    marginBottom: 28, 
+    textAlign: 'center', 
+    lineHeight: 22 
+  },
+  nextButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 12, 
+    paddingVertical: 18, 
+    borderRadius: Theme.radius.lg, 
+    shadowColor: Theme.accent.primary, 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.45, 
+    shadowRadius: 18, 
+    elevation: 10 
+  },
+  nextButtonText: { 
+    fontSize: 17, 
+    fontWeight: '800', 
+    color: '#ffffff', 
+    letterSpacing: 0.5 
+  },
+  divider: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginVertical: 28 
+  },
+  dividerLine: { 
+    flex: 1, 
+    height: 1, 
+    backgroundColor: Theme.border.primary 
+  },
+  dividerText: { 
+    paddingHorizontal: 18, 
+    fontSize: 13, 
+    color: Theme.text.tertiary, 
+    fontWeight: '600', 
+    letterSpacing: 0.3 
+  },
+  footer: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    flexWrap: 'wrap' 
+  },
+  footerText: { 
+    fontSize: 14, 
+    color: Theme.text.secondary, 
+    fontWeight: '500' 
+  },
+  loginLink: { 
+    fontSize: 14, 
+    fontWeight: '800', 
+    color: Theme.accent.primary, 
+    letterSpacing: 0.3 
+  },
 });

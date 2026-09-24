@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { Theme } from '@/constants/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -149,7 +150,7 @@ export function AudioPlayer({ audioUri, isDark }: AudioPlayerProps) {
           style={[
             styles.playButton,
             {
-              backgroundColor: isDark ? '#4f46e5' : '#6366f1',
+              backgroundColor: Theme.accent.primary,
             },
           ]}
         >
@@ -181,7 +182,7 @@ export function AudioPlayer({ audioUri, isDark }: AudioPlayerProps) {
             style={[
               styles.waveformBar,
               {
-                backgroundColor: isDark ? '#a78bfa' : '#8b5cf6',
+                backgroundColor: Theme.accent.secondary,
                 height: `${40 + Math.random() * 40}%`,
               },
             ]}

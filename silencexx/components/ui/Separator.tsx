@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, ViewStyle } from 'react-native';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 export interface SeparatorProps {
   style?: ViewStyle;
@@ -8,11 +8,8 @@ export interface SeparatorProps {
 }
 
 export function Separator({ style, orientation = 'horizontal' }: SeparatorProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
-
   const baseStyle: ViewStyle = {
-    backgroundColor: isDark ? '#374151' : '#e5e7eb',
+    backgroundColor: Theme.border.primary,
   };
 
   const orientationStyle: ViewStyle =

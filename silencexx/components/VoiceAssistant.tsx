@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 import * as Speech from 'expo-speech';
 import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
@@ -40,8 +40,7 @@ interface VoiceAssistantProps {
 const { height } = Dimensions.get('window');
 
 export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -215,11 +214,7 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
       statusBarTranslucent
     >
       <LinearGradient
-        colors={
-          isDark
-            ? ['#0b0820', '#120f2d', '#0b0820']
-            : ['#e8e7ff', '#f3e8ff', '#e8e7ff']
-        }
+        colors={Theme.accent.gradient}
         style={styles.container}
       >
         <View style={styles.header}>
@@ -227,22 +222,22 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
             <View
               style={[
                 styles.headerIcon,
-                { backgroundColor: isDark ? 'rgba(129,140,248,0.18)' : 'rgba(99,102,241,0.2)' },
+                { backgroundColor: 'rgba(255, 107, 0, 0.18)' },
               ]}
             >
-              <Ionicons name="pulse" size={20} color={isDark ? '#c7d2fe' : '#4f46e5'} />
+              <Ionicons name="pulse" size={20} color={Theme.accent.primary} />
             </View>
-            <Text style={[styles.headerTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>
+            <Text style={[styles.headerTitle, { color: Theme.text.primary }]}>
               Голосовой ИИ
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={isDark ? '#cbd5e1' : '#475569'} />
+            <Ionicons name="close" size={24} color={Theme.text.secondary} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.main}>
-          <Text style={[styles.status, { color: isDark ? '#cbd5e1' : '#475569' }]}>
+          <Text style={[styles.status, { color: Theme.text.secondary }]}>
             {statusText}
           </Text>
 
@@ -255,14 +250,14 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
                   backgroundColor: isListening
                     ? 'rgba(96, 165, 250, 0.4)'
                     : isThinking
-                    ? 'rgba(168, 85, 247, 0.35)'
-                    : 'rgba(129, 140, 248, 0.3)',
+                    ? 'rgba(255, 140, 51, 0.35)'
+                    : 'rgba(255, 107, 0, 0.3)',
                 },
               ]}
             />
             <Animated.View style={[styles.orb, orbStyle]}>
               <LinearGradient
-                colors={['#5b7bff', '#a855f7', '#22d3ee']}
+                colors={Theme.accent.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.orb}
@@ -276,13 +271,13 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
             style={[
               styles.micButton,
               {
-                shadowColor: isListening ? '#22d3ee' : '#8b5cf6',
-                borderColor: isListening ? '#22d3ee' : '#a855f7',
+                shadowColor: Theme.accent.primary,
+                borderColor: isListening ? Theme.accent.secondary : Theme.accent.primary,
               },
             ]}
           >
             <LinearGradient
-              colors={isListening ? ['#22d3ee', '#6366f1'] : ['#8b5cf6', '#22d3ee']}
+              colors={Theme.accent.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[StyleSheet.absoluteFill, { borderRadius: 80, opacity: 0.55 }]}
@@ -299,17 +294,17 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
           style={[
             styles.history,
             {
-              backgroundColor: isDark ? 'rgba(20, 27, 45, 0.65)' : 'rgba(255, 255, 255, 0.72)',
-              borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(139, 92, 246, 0.2)',
+              backgroundColor: Theme.background.card,
+              borderColor: Theme.background.tertiary,
             },
           ]}
         >
-          <Text style={[styles.historyTitle, { color: isDark ? '#cbd5e1' : '#334155' }]}>
+          <Text style={[styles.historyTitle, { color: Theme.text.secondary }]}>
             История
           </Text>
           <ScrollView style={{ maxHeight: height * 0.25 }} showsVerticalScrollIndicator={false}>
             {messages.length === 0 ? (
-              <Text style={{ color: isDark ? '#64748b' : '#94a3b8' }}>
+              <Text style={{ color: Theme.text.tertiary }}>
                 Пока нет сообщений
               </Text>
             ) : (
@@ -325,17 +320,17 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
                     style={[
                       styles.bubble,
                       msg.sender === 'user'
-                        ? { backgroundColor: isDark ? '#7c3aed' : '#6366f1' }
+                        ? { backgroundColor: Theme.accent.primary }
                         : {
-                            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.55)' : 'rgba(255,255,255,0.9)',
-                            borderColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(139, 92, 246, 0.2)',
+                            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                            borderColor: Theme.background.tertiary,
                           },
                     ]}
                   >
                     <Text
                       style={[
                         styles.bubbleText,
-                        { color: msg.sender === 'user' ? '#fff' : isDark ? '#e2e8f0' : '#0f172a' },
+                        { color: msg.sender === 'user' ? '#fff' : Theme.text.primary },
                       ]}
                     >
                       {msg.text}
@@ -354,95 +349,110 @@ export function VoiceAssistant({ visible, onClose }: VoiceAssistantProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 54,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingTop: 60,
+    paddingHorizontal: 22,
+    paddingBottom: Theme.spacing.lg,
+    backgroundColor: Theme.background.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: Theme.spacing.lg,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Theme.background.elevated,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     letterSpacing: -0.3,
+    color: Theme.text.primary,
   },
   closeButton: {
-    padding: 8,
+    padding: 10,
+    borderRadius: Theme.radius.sm,
+    backgroundColor: Theme.background.tertiary,
   },
   main: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
+    gap: Theme.spacing.xl,
   },
   status: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.2,
+    color: Theme.text.secondary,
   },
   orbContainer: {
-    width: 240,
-    height: 240,
+    width: 260,
+    height: 260,
     alignItems: 'center',
     justifyContent: 'center',
   },
   glow: {
     position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: Theme.accent.primary,
+    opacity: 0.15,
   },
   orb: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 14,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    shadowColor: Theme.accent.primary,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 16,
   },
   micButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 130,
+    height: 130,
+    borderRadius: Theme.radius.xxl + 25,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
+    borderWidth: 2,
+    borderColor: Theme.border.accent,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowColor: Theme.accent.primary,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
+    backgroundColor: Theme.background.card,
   },
   history: {
-    padding: 16,
-    borderWidth: 1.5,
-    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderRadius: Theme.radius.lg,
+    backgroundColor: Theme.background.card,
+    borderColor: Theme.border.primary,
   },
   historyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    marginBottom: 12,
-    letterSpacing: 0.2,
+    marginBottom: 14,
+    letterSpacing: 0.3,
+    color: Theme.accent.primary,
+    textTransform: 'uppercase',
   },
   bubbleWrapper: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   bubbleLeft: {
     alignItems: 'flex-start',
@@ -452,14 +462,17 @@ const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: '85%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderWidth: 1.2,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: Theme.radius.lg,
+    borderWidth: 1,
+    backgroundColor: Theme.background.tertiary,
+    borderColor: Theme.border.primary,
   },
   bubbleText: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     letterSpacing: 0.1,
+    color: Theme.text.primary,
   },
 });

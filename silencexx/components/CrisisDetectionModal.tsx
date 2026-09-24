@@ -15,6 +15,7 @@ import Animated, {
   FadeIn, 
   SlideInUp,
 } from 'react-native-reanimated';
+import { Theme } from '@/constants/theme';
 
 interface CrisisDetectionModalProps {
   visible: boolean;
@@ -95,7 +96,7 @@ export const CrisisDetectionModal: React.FC<CrisisDetectionModalProps> = ({
         <LinearGradient
           colors={isCrisis 
             ? ['#7C2D12', '#5B21B6', '#1E1B4B']
-            : ['#0F172A', '#1E3A8A', '#1E1B4B']}
+            : [Theme.background.primary, '#0A0A0A', Theme.background.secondary]}
           style={styles.fullScreen}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -141,7 +142,7 @@ export const CrisisDetectionModal: React.FC<CrisisDetectionModalProps> = ({
                     <LinearGradient
                       colors={isCrisis 
                         ? ['#EF4444', '#DC2626']
-                        : ['#3B82F6', '#1D4ED8']}
+                        : Theme.accent.gradient as unknown as [string, string]}
                       style={styles.iconBg}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -172,7 +173,7 @@ export const CrisisDetectionModal: React.FC<CrisisDetectionModalProps> = ({
                   <LinearGradient
                     colors={isCrisis
                       ? ['rgba(239, 68, 68, 0.15)', 'rgba(239, 68, 68, 0.05)']
-                      : ['rgba(59, 130, 246, 0.15)', 'rgba(59, 130, 246, 0.05)']}
+                      : ['rgba(255, 107, 0, 0.15)', 'rgba(255, 107, 0, 0.05)']}
                     style={styles.messageGradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
@@ -285,7 +286,7 @@ export const CrisisDetectionModal: React.FC<CrisisDetectionModalProps> = ({
                     <LinearGradient
                       colors={isCrisis 
                         ? ['#10B981', '#059669']
-                        : ['#6366F1', '#4F46E5']}
+                        : Theme.accent.gradient as unknown as [string, string]}
                       style={styles.primaryGradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -341,14 +342,14 @@ const styles = StyleSheet.create({
   blob1: {
     width: 300,
     height: 300,
-    backgroundColor: 'rgba(99, 102, 241, 0.4)',
+    backgroundColor: 'rgba(255, 107, 0, 0.4)',
     top: -80,
     right: -50,
   },
   blob2: {
     width: 250,
     height: 250,
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: 'rgba(255, 140, 51, 0.3)',
     bottom: -60,
     left: -40,
   },
@@ -413,7 +414,7 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3B82F6',
+    shadowColor: Theme.accent.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
@@ -519,7 +520,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderColor: 'rgba(255, 107, 0, 0.3)',
   },
   resourceCardCrisis: {
     borderColor: 'rgba(239, 68, 68, 0.3)',
@@ -540,7 +541,7 @@ const styles = StyleSheet.create({
   },
   resourceNumber: {
     fontSize: 12,
-    color: '#60A5FA',
+    color: Theme.accent.primary,
     fontWeight: '600',
   },
   resourceArrow: {
@@ -599,7 +600,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 12,
-    shadowColor: '#6366F1',
+    shadowColor: Theme.accent.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 12,

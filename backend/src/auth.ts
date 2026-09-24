@@ -3,9 +3,22 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { query } from './db';
 import { Request, Response } from 'express';
+import nodemailer from 'nodemailer';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
+const EMAIL_CHANGE_COOLDOWN_DAYS = 14;
+
+// Email transporter (в продакшене настроить реальный SMTP)
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+});
 
 // OTP storage (в продакшене использовать Redis)
 const otpStore = new Map<string, { code: string; expiresAt: number }>();
@@ -941,6 +954,640 @@ export const logout = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Ошибка при выходе',
+    });
+  }
+};
+/**
+ * PUT /api/auth/profile
+ * Обновление профиля пользователя (имя)
+ */
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const { name, phone } = req.body;
+
+    if (name && !isValidName(name)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Имя должно быть от 2 до 50 символов',
+      });
+    }
+
+    // Update user_description
+    const updateFields: string[] = [];
+    const updateValues: any[] = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updateFields.push(`name = $${paramIndex++}`);
+      updateValues.push(name);
+    }
+
+    if (phone !== undefined) {
+      if (phone && !isValidPhone(phone)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Неверный формат телефона',
+        });
+      }
+      updateFields.push(`phone = $${paramIndex++}`);
+      updateValues.push(phone || null);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Нет данных для обновления',
+      });
+    }
+
+    updateValues.push(userId);
+
+    const updateQuery = `
+      UPDATE user_description ud
+      SET ${updateFields.join(', ')}
+      FROM users u
+      WHERE u.user_desc_id = ud.id AND u.id = $${paramIndex}
+      RETURNING ud.*
+    `;
+
+    const result = await query(updateQuery, updateValues);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь не найден',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Профиль обновлен',
+      profile: result.rows[0],
+    });
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при обновлении профиля',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/change-password
+ * Смена пароля (требует текущий пароль)
+ */
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Текущий и новый пароль обязательны',
+      });
+    }
+
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Пароль должен быть 8+ символов, латиница + цифры. Кириллица запрещена',
+      });
+    }
+
+    // Get current password hash
+    const userResult = await query(
+      `SELECT uc.password_hash 
+       FROM user_credentials uc
+       WHERE uc.user_id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь не найден',
+      });
+    }
+
+    const isValidOldPassword = await comparePassword(currentPassword, userResult.rows[0].password_hash);
+    if (!isValidOldPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Неверный текущий пароль',
+      });
+    }
+
+    // Update password
+    const newHash = await hashPassword(newPassword);
+    await query(
+      `UPDATE user_credentials SET password_hash = $1 WHERE user_id = $2`,
+      [newHash, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Пароль успешно изменен',
+    });
+  } catch (error) {
+    console.error('❌ Change password error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при смене пароля',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/request-email-change
+ * Запрос на смену email (отправляет подтверждение на новый email)
+ * Ограничение: раз в 14 дней
+ */
+export const requestEmailChange = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const { newEmail } = req.body;
+
+    if (!newEmail || !isValidEmail(newEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Неверный формат email',
+      });
+    }
+
+    // Check 14-day cooldown
+    const cooldownCheck = await query(
+      `SELECT ud.last_email_change, ud.email
+       FROM users u
+       JOIN user_description ud ON u.user_desc_id = ud.id
+       WHERE u.id = $1`,
+      [userId]
+    );
+
+    if (cooldownCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь не найден',
+      });
+    }
+
+    const { last_email_change, email: currentEmail } = cooldownCheck.rows[0];
+    
+    if (newEmail.toLowerCase() === currentEmail?.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Новый email совпадает с текущим',
+      });
+    }
+
+    if (last_email_change) {
+      const daysSinceChange = Math.floor(
+        (Date.now() - new Date(last_email_change).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      
+      if (daysSinceChange < EMAIL_CHANGE_COOLDOWN_DAYS) {
+        const daysLeft = EMAIL_CHANGE_COOLDOWN_DAYS - daysSinceChange;
+        return res.status(429).json({
+          success: false,
+          error: `Email можно менять раз в ${EMAIL_CHANGE_COOLDOWN_DAYS} дней. Осталось ждать: ${daysLeft} дней`,
+          daysLeft,
+        });
+      }
+    }
+
+    // Check if new email already exists
+    const emailExists = await query(
+      `SELECT id FROM user_description WHERE LOWER(email) = LOWER($1)`,
+      [newEmail]
+    );
+
+    if (emailExists.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'Этот email уже используется',
+      });
+    }
+
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Save request
+    await query(
+      `INSERT INTO email_change_requests (user_id, new_email, verification_token, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, newEmail, verificationToken, expiresAt]
+    );
+
+    // Send verification email
+    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+    
+    try {
+      await emailTransporter.sendMail({
+        from: process.env.SMTP_FROM || 'noreply@silencexx.com',
+        to: newEmail,
+        subject: 'Подтверждение смены email - SilenceXX',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #6366f1;">Подтверждение смены email</h2>
+            <p>Вы запросили смену email на ${newEmail}.</p>
+            <p>Для подтверждения нажмите кнопку ниже:</p>
+            <a href="${verificationLink}" 
+               style="display: inline-block; background: linear-gradient(to right, #6366f1, #a855f7); 
+                      color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px;
+                      margin: 16px 0;">
+              Подтвердить email
+            </a>
+            <p style="color: #666; font-size: 14px;">
+              Ссылка действительна 24 часа.<br/>
+              Если вы не запрашивали смену email, проигнорируйте это письмо.
+            </p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('❌ Email send error:', emailError);
+      // В development режиме продолжаем работу
+      console.log(`📧 Verification link (dev): ${verificationLink}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Письмо с подтверждением отправлено на новый email',
+    });
+  } catch (error) {
+    console.error('❌ Request email change error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при запросе смены email',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/verify-email-change
+ * Подтверждение смены email по токену из письма
+ */
+export const verifyEmailChange = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Токен не предоставлен',
+      });
+    }
+
+    // Find request
+    const requestResult = await query(
+      `SELECT * FROM email_change_requests 
+       WHERE verification_token = $1 AND verified_at IS NULL`,
+      [token]
+    );
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Запрос не найден или уже использован',
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (new Date(request.expires_at) < new Date()) {
+      return res.status(410).json({
+        success: false,
+        error: 'Срок действия ссылки истек',
+      });
+    }
+
+    // Update email
+    await query(
+      `UPDATE user_description ud
+       SET email = $1, last_email_change = CURRENT_TIMESTAMP
+       FROM users u
+       WHERE u.user_desc_id = ud.id AND u.id = $2`,
+      [request.new_email, request.user_id]
+    );
+
+    // Mark request as verified
+    await query(
+      `UPDATE email_change_requests SET verified_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [request.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Email успешно изменен',
+      newEmail: request.new_email,
+    });
+  } catch (error) {
+    console.error('❌ Verify email change error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при подтверждении смены email',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/request-password-reset
+ * Запрос сброса пароля (отправляет ссылку на email)
+ * Используется на странице логина ("Забыли пароль?")
+ */
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Неверный формат email',
+      });
+    }
+
+    // Find user
+    const userResult = await query(
+      `SELECT u.id
+       FROM users u
+       JOIN user_description ud ON u.user_desc_id = ud.id
+       WHERE LOWER(ud.email) = LOWER($1)`,
+      [email]
+    );
+
+    // Всегда возвращаем success для безопасности
+    if (userResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Если email зарегистрирован, вы получите письмо со ссылкой для сброса пароля',
+      });
+    }
+
+    const userId = userResult.rows[0].id;
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save token
+    await query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, resetToken, expiresAt]
+    );
+
+    // Send email
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+
+    try {
+      await emailTransporter.sendMail({
+        from: process.env.SMTP_FROM || 'noreply@silencexx.com',
+        to: email,
+        subject: 'Сброс пароля - SilenceXX',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #6366f1;">Сброс пароля</h2>
+            <p>Вы запросили сброс пароля для вашего аккаунта.</p>
+            <p>Для создания нового пароля нажмите кнопку ниже:</p>
+            <a href="${resetLink}" 
+               style="display: inline-block; background: linear-gradient(to right, #6366f1, #a855f7); 
+                      color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px;
+                      margin: 16px 0;">
+              Сбросить пароль
+            </a>
+            <p style="color: #666; font-size: 14px;">
+              Ссылка действительна 1 час.<br/>
+              Если вы не запрашивали сброс пароля, проигнорируйте это письмо.
+            </p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('❌ Email send error:', emailError);
+      console.log(`📧 Reset link (dev): ${resetLink}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Если email зарегистрирован, вы получите письмо со ссылкой для сброса пароля',
+    });
+  } catch (error) {
+    console.error('❌ Request password reset error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при запросе сброса пароля',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/reset-password-with-token
+ * Сброс пароля по токену из email
+ */
+export const resetPasswordWithToken = async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Токен и новый пароль обязательны',
+      });
+    }
+
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Пароль должен быть 8+ символов, латиница + цифры. Кириллица запрещена',
+      });
+    }
+
+    // Find token
+    const tokenResult = await query(
+      `SELECT * FROM password_reset_tokens 
+       WHERE token = $1 AND used_at IS NULL`,
+      [token]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Токен не найден или уже использован',
+      });
+    }
+
+    const resetRequest = tokenResult.rows[0];
+
+    if (new Date(resetRequest.expires_at) < new Date()) {
+      return res.status(410).json({
+        success: false,
+        error: 'Срок действия ссылки истек',
+      });
+    }
+
+    // Update password
+    const newHash = await hashPassword(newPassword);
+    await query(
+      `UPDATE user_credentials SET password_hash = $1 WHERE user_id = $2`,
+      [newHash, resetRequest.user_id]
+    );
+
+    // Mark token as used
+    await query(
+      `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [resetRequest.id]
+    );
+
+    // Invalidate all sessions except current
+    await query(
+      `UPDATE session SET is_active = false WHERE user_id = $1`,
+      [resetRequest.user_id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Пароль успешно изменен. Войдите с новым паролем.',
+    });
+  } catch (error) {
+    console.error('❌ Reset password with token error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при сбросе пароля',
+    });
+  }
+};
+
+/**
+ * GET /api/auth/email-change-status
+ * Проверка статуса смены email (сколько дней до возможности смены)
+ */
+export const getEmailChangeStatus = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const result = await query(
+      `SELECT ud.last_email_change
+       FROM users u
+       JOIN user_description ud ON u.user_desc_id = ud.id
+       WHERE u.id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь не найден',
+      });
+    }
+
+    const { last_email_change } = result.rows[0];
+    
+    let canChange = true;
+    let daysLeft = 0;
+    let nextChangeDate = null;
+
+    if (last_email_change) {
+      const daysSinceChange = Math.floor(
+        (Date.now() - new Date(last_email_change).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      
+      if (daysSinceChange < EMAIL_CHANGE_COOLDOWN_DAYS) {
+        canChange = false;
+        daysLeft = EMAIL_CHANGE_COOLDOWN_DAYS - daysSinceChange;
+        nextChangeDate = new Date(new Date(last_email_change).getTime() + EMAIL_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+      }
+    }
+
+    res.json({
+      success: true,
+      canChange,
+      daysLeft,
+      nextChangeDate,
+      lastChange: last_email_change,
+      cooldownDays: EMAIL_CHANGE_COOLDOWN_DAYS,
+    });
+  } catch (error) {
+    console.error('❌ Get email change status error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при проверке статуса',
+    });
+  }
+};
+
+/**
+ * POST /api/auth/upload-avatar
+ * Загрузка аватара пользователя
+ */
+export const uploadAvatar = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Токен не предоставлен' });
+    }
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+
+    const file = (req as any).file;
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Файл не загружен',
+      });
+    }
+
+    // Save avatar filename to database
+    const avatarPath = file.filename;
+    
+    await query(
+      `UPDATE user_description ud
+       SET avatar = $1
+       FROM users u
+       WHERE u.user_desc_id = ud.id AND u.id = $2`,
+      [avatarPath, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Аватар загружен',
+      avatarUrl: `/uploads/${avatarPath}`,
+    });
+  } catch (error) {
+    console.error('❌ Upload avatar error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при загрузке аватара',
     });
   }
 };

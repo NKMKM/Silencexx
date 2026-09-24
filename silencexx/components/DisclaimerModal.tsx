@@ -23,6 +23,7 @@ import Animated, {
   withTiming,
   useAnimatedReaction,
 } from 'react-native-reanimated';
+import { Theme } from '@/constants/theme';
 
 interface DisclaimerModalProps {
   visible: boolean;
@@ -47,7 +48,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
 
   const crisisKeywords: CrisisKeyword[] = [
     { text: 'суицид / самовред', color: '#EF4444', icon: '⚠️' },
-    { text: 'серьезная депрессия', color: '#A855F7', icon: '💜' },
+    { text: 'серьезная депрессия', color: '#A855F7', icon: '🧡' },
     { text: 'злоупотребление ПВ', color: '#F97316', icon: '⛔' },
     { text: 'психоз / галлюцинации', color: '#EC4899', icon: '🔮' },
   ];
@@ -61,7 +62,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
     >
       <View style={styles.backdrop}>
         <LinearGradient
-          colors={['#0F172A', '#1E1B4B', '#3B2667']}
+          colors={[Theme.background.primary, '#0A0A0A', Theme.background.secondary]}
           style={styles.fullScreen}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -100,7 +101,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                     style={styles.section}
                   >
                     <LinearGradient
-                      colors={['rgba(99, 102, 241, 0.1)', 'rgba(168, 85, 247, 0.05)']}
+                      colors={['rgba(255, 107, 0, 0.1)', 'rgba(255, 140, 51, 0.05)']}
                       style={styles.sectionGradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -108,7 +109,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                       <View style={styles.sectionContent}>
                         <View style={styles.customIconContainer}>
                           <LinearGradient
-                            colors={['#6366F1', '#A855F7']}
+                            colors={Theme.accent.gradient as unknown as [string, string]}
                             style={styles.customIcon}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -134,7 +135,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                     style={styles.section}
                   >
                     <LinearGradient
-                      colors={['rgba(168, 85, 247, 0.1)', 'rgba(236, 72, 153, 0.05)']}
+                      colors={['rgba(255, 140, 51, 0.1)', 'rgba(255, 107, 0, 0.05)']}
                       style={styles.sectionGradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
@@ -142,7 +143,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                       <View style={styles.sectionContent}>
                         <View style={styles.customIconContainer}>
                           <LinearGradient
-                            colors={['#A855F7', '#EC4899']}
+                            colors={Theme.accent.gradient as unknown as [string, string]}
                             style={styles.customIcon}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -237,7 +238,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                   >
                     <LinearGradient
                       colors={isChecked 
-                        ? ['#6366F1', '#A855F7']
+                        ? Theme.accent.gradient as unknown as [string, string]
                         : ['#94A3B8', '#CBD5E1']}
                       style={styles.buttonGradient}
                       start={{ x: 0, y: 0 }}
@@ -291,26 +292,26 @@ const styles = StyleSheet.create({
   bgBlob: {
     position: 'absolute',
     borderRadius: 300,
-    opacity: 0.15,
+    opacity: 0.12,
   },
   blob1: {
-    width: 400,
-    height: 400,
-    backgroundColor: '#6366F1',
-    top: -100,
-    left: -100,
+    width: 420,
+    height: 420,
+    backgroundColor: Theme.accent.primary,
+    top: -120,
+    left: -120,
   },
   blob2: {
-    width: 300,
-    height: 300,
-    backgroundColor: '#A855F7',
-    bottom: -50,
-    right: -50,
+    width: 320,
+    height: 320,
+    backgroundColor: Theme.accent.secondary,
+    bottom: -70,
+    right: -70,
   },
   safeArea: {
     flex: 1,
     width: '100%',
-    maxWidth: 600,
+    maxWidth: 620,
     zIndex: 1,
   },
   scrollContainer: {
@@ -319,8 +320,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
   },
   content: {
     flex: 1,
@@ -328,102 +329,104 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Theme.spacing.xl,
   },
   mainTitle: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Theme.text.primary,
     textAlign: 'center',
-    marginBottom: 8,
-    lineHeight: 36,
+    marginBottom: 10,
+    lineHeight: 38,
   },
   mainSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 17,
+    color: Theme.text.secondary,
     textAlign: 'center',
     fontWeight: '500',
   },
   sectionsContainer: {
-    gap: 16,
-    marginBottom: 28,
+    gap: 18,
+    marginBottom: Theme.spacing.lg,
   },
   section: {
-    borderRadius: 20,
+    borderRadius: Theme.radius.lg,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(99, 102, 241, 0.4)',
+    borderWidth: 1,
+    borderColor: Theme.accent.primary,
+    backgroundColor: Theme.background.card,
   },
   sectionGradient: {
-    padding: 18,
+    padding: 20,
     borderWidth: 0,
   },
   sectionContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 16,
+    gap: 18,
   },
   customIconContainer: {
     marginTop: 2,
   },
   customIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: Theme.background.elevated,
+    shadowColor: '#0A0A0F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   customIconText: {
-    fontSize: 28,
+    fontSize: 30,
   },
   sectionTextBlock: {
     flex: 1,
   },
   sectionHeader: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 6,
+    color: Theme.text.primary,
+    marginBottom: 8,
   },
   sectionDesc: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    lineHeight: 21,
+    fontSize: 15,
+    color: Theme.text.secondary,
+    lineHeight: 22,
   },
   checkboxSection: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   checkboxWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: Theme.background.tertiary,
+    borderRadius: Theme.radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: Theme.border.primary,
   },
   customCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
+    width: 26,
+    height: 26,
+    borderRadius: Theme.radius.sm,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: Theme.border.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   customCheckboxChecked: {
-    backgroundColor: '#6366F1',
-    borderColor: '#6366F1',
+    backgroundColor: Theme.accent.primary,
+    borderColor: Theme.accent.primary,
   },
   checkmark: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -431,30 +434,30 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Theme.text.primary,
   },
   buttonsSection: {
-    gap: 12,
+    gap: 14,
   },
   primaryButton: {
-    borderRadius: 14,
+    borderRadius: Theme.radius.md,
     overflow: 'hidden',
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 10,
+    shadowColor: Theme.accent.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   primaryButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   buttonGradient: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
   },

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 
 const mockDevices = [
   {
@@ -24,8 +24,7 @@ const mockDevices = [
 
 export default function DevicesPage() {
   const router = useRouter();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
 
   const handleLogoutAll = () => {
     // Здесь в будущем можно вызвать API для завершения всех сессий
@@ -35,28 +34,28 @@ export default function DevicesPage() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={isDark ? ['#0f172a', '#1e293b', '#334155'] : ['#e0e7ff', '#ddd6fe', '#e9d5ff']}
+        colors={Theme.accent.gradient}
         style={StyleSheet.absoluteFillObject}
       />
 
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 50 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+          <Ionicons name="arrow-back" size={24} color={Theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Устройства</Text>
+        <Text style={[styles.headerTitle, { color: Theme.text.primary }]}>Устройства</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.description, { color: isDark ? '#cbd5e1' : '#64748b' }]}>
+        <Text style={[styles.description, { color: Theme.text.secondary }]}>
           Здесь отображаются устройства, на которых выполнен вход в ваш аккаунт.
         </Text>
 
         {mockDevices.map((device) => (
-          <View key={device.id} style={[styles.deviceCard, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)', borderColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.1)' }]}>
+          <View key={device.id} style={[styles.deviceCard, { backgroundColor: Theme.background.card, borderColor: Theme.background.tertiary }]}>
             <View style={styles.deviceIconContainer}>
               <LinearGradient
-                colors={['#60A5FA', '#A78BFA']}
+                colors={['#A855F7', '#C084FC']}
                 style={styles.deviceIcon}
               >
                 <Ionicons
@@ -67,9 +66,9 @@ export default function DevicesPage() {
               </LinearGradient>
             </View>
             <View style={styles.deviceInfo}>
-              <Text style={[styles.deviceName, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>{device.name}</Text>
-              <Text style={[styles.deviceType, { color: isDark ? '#94a3b8' : '#64748b' }]}>{device.type}</Text>
-              <Text style={[styles.deviceLastActive, { color: isDark ? '#64748b' : '#9ca3af' }]}>Активность: {device.lastActive}</Text>
+              <Text style={[styles.deviceName, { color: Theme.text.primary }]}>{device.name}</Text>
+              <Text style={[styles.deviceType, { color: Theme.text.secondary }]}>{device.type}</Text>
+              <Text style={[styles.deviceLastActive, { color: Theme.text.tertiary }]}>Активность: {device.lastActive}</Text>
             </View>
             {device.current && (
               <View style={styles.currentBadge}>
@@ -81,11 +80,11 @@ export default function DevicesPage() {
         ))}
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.logoutAllButton, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(248, 250, 252, 0.95)', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : 'rgba(248, 113, 113, 0.4)' }]} onPress={handleLogoutAll}>
-            <Ionicons name="log-out" size={18} color={isDark ? '#fca5a5' : '#dc2626'} />
-            <Text style={[styles.logoutAllText, { color: isDark ? '#fca5a5' : '#dc2626' }]}>Завершить все сессии и выйти</Text>
+          <TouchableOpacity style={[styles.logoutAllButton, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' }]} onPress={handleLogoutAll}>
+            <Ionicons name="log-out" size={18} color="#fca5a5" />
+            <Text style={[styles.logoutAllText, { color: '#fca5a5' }]}>Завершить все сессии и выйти</Text>
           </TouchableOpacity>
-          <Text style={[styles.footerHint, { color: isDark ? '#64748b' : '#94a3b8' }]}>
+          <Text style={[styles.footerHint, { color: Theme.text.tertiary }]}>
             При завершении всех сессий приложение выйдет из аккаунта на этом и других устройствах.
           </Text>
         </View>

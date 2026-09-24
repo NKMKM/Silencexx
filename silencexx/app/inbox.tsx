@@ -14,12 +14,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { inboxApi, AnonymousMessage } from '../services/api';
-import { useTheme } from '../utils/ThemeContext';
-import { AnimatedGradient } from '@/components/AnimatedGradient';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Theme } from '@/constants/theme';
 
 export default function InboxPage() {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   
   const [messages, setMessages] = useState<AnonymousMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -114,17 +113,12 @@ export default function InboxPage() {
     <TouchableOpacity
       style={[
         styles.messageCard,
-        { backgroundColor: isDark
-            ? Platform.OS === 'ios'
-              ? 'rgba(30, 41, 59, 0.6)'
-              : '#1e293b'
-            : Platform.OS === 'ios'
-            ? '#fff'
-            : '#f8fafc',
-          shadowOpacity: Platform.OS === 'ios' ? 0.06 : 0,
+        { backgroundColor: Theme.background.card,
+          shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0,
           elevation: Platform.OS === 'ios' ? 3 : 0,
+          borderColor: Theme.border.primary,
         },
-        !item.is_read && [styles.unreadCard, { borderLeftColor: isDark ? '#a78bfa' : '#6B46C1' }]
+        !item.is_read && [styles.unreadCard, { borderLeftColor: Theme.accent.primary }]
       ]}
       onPress={() => !item.is_read && handleMarkAsRead(item.id)}
     >
@@ -132,9 +126,9 @@ export default function InboxPage() {
         <Ionicons
           name={item.is_read ? "mail-open-outline" : "mail-outline"}
           size={20}
-          color={isDark ? '#a78bfa' : '#6B46C1'}
+          color={Theme.accent.primary}
         />
-        <Text style={[styles.messageDate, { color: isDark ? '#64748b' : '#9CA3AF' }]}>
+        <Text style={[styles.messageDate, { color: Theme.text.tertiary }]}>
           {new Date(item.sent_at).toLocaleDateString('ru-RU', {
             day: 'numeric',
             month: 'long',
@@ -143,22 +137,22 @@ export default function InboxPage() {
           })}
         </Text>
       </View>
-      <Text style={[styles.messageText, { color: isDark ? '#e2e8f0' : '#1F2937' }]}>
+      <Text style={[styles.messageText, { color: Theme.text.primary }]}>
         {item.message}
       </Text>
       {!item.is_read && (
-        <View style={[styles.unreadBadge, { backgroundColor: isDark ? '#a78bfa' : '#6B46C1' }]} />
+        <View style={[styles.unreadBadge, { backgroundColor: Theme.accent.primary }]} />
       )}
     </TouchableOpacity>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="mail-outline" size={80} color={isDark ? '#334155' : '#E9D5FF'} />
-      <Text style={[styles.emptyTitle, { color: isDark ? '#a78bfa' : '#6B46C1' }]}>
+      <Ionicons name="mail-outline" size={80} color={Theme.text.tertiary} />
+      <Text style={[styles.emptyTitle, { color: Theme.accent.primary }]}>
         Inbox пуст
       </Text>
-      <Text style={[styles.emptyText, { color: isDark ? '#64748b' : '#9CA3AF' }]}>
+      <Text style={[styles.emptyText, { color: Theme.text.secondary }]}>
         Здесь будут отображаться анонимные пожелания от других пользователей
       </Text>
     </View>
@@ -169,61 +163,47 @@ export default function InboxPage() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <AnimatedGradient
-        lightColors={['#e0e7ff', '#ddd6fe', '#e9d5ff']}
-        darkColors={['#1a1a2e', '#16213e', '#0f3460', '#1a1a2e']}
-        isDark={isDark}
+      <LinearGradient
+        colors={[Theme.background.primary, Theme.background.secondary]}
+        style={StyleSheet.absoluteFill}
       />
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: isDark ? 'rgba(26, 26, 46, 0.95)' : '#ffffff' }]}>
+      <View style={[styles.header, { backgroundColor: 'rgba(0, 0, 0, 0.8)' }]}>
         <View style={styles.headerContent}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="mail" size={24} color={isDark ? '#818cf8' : '#8b5cf6'} />
+          <View style={[styles.headerIcon, { backgroundColor: 'rgba(255, 107, 0, 0.12)', borderColor: 'rgba(255, 107, 0, 0.2)' }]}>
+            <Ionicons name="mail" size={24} color={Theme.accent.primary} />
           </View>
           <View style={styles.headerText}>
-            <Text style={[styles.headerTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Inbox</Text>
-            <Text style={[styles.headerSubtitle, { color: isDark ? '#94a3b8' : '#64748b' }]}>
+            <Text style={[styles.headerTitle, { color: Theme.text.primary }]}>Inbox</Text>
+            <Text style={[styles.headerSubtitle, { color: Theme.text.secondary }]}>
               Анонимные пожелания
             </Text>
           </View>
-          <TouchableOpacity onPress={onRefresh} style={[styles.refreshButton, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(139, 92, 246, 0.1)' }]}>
-            <Ionicons name="refresh" size={20} color={isDark ? '#818cf8' : '#8b5cf6'} />
+          <TouchableOpacity onPress={onRefresh} style={[styles.refreshButton, { backgroundColor: 'rgba(255, 107, 0, 0.1)', borderColor: 'rgba(255, 107, 0, 0.2)' }]}>
+            <Ionicons name="refresh" size={20} color={Theme.accent.primary} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Send Section */}
       <View style={[styles.sendSection, { 
-        backgroundColor: isDark
-          ? Platform.OS === 'ios'
-            ? 'rgba(30, 41, 59, 0.6)'
-            : '#1e293b'
-          : Platform.OS === 'ios'
-          ? '#ffffff'
-          : '#f8fafc',
-        borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : '#e2e8f0',
-        shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0,
+        backgroundColor: Theme.background.card,
+        borderColor: 'rgba(255, 107, 0, 0.25)',
+        shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
         elevation: Platform.OS === 'ios' ? 4 : 0,
       }]}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>
+        <Text style={[styles.sectionTitle, { color: Theme.text.primary }]}>
           Отправить пожелание 💬
         </Text>
         {canSend ? (
           <>
-            <View style={[styles.inputContainer, { backgroundColor: isDark
-              ? Platform.OS === 'ios'
-                ? 'rgba(15, 23, 42, 0.6)'
-                : '#0f172a'
-              : Platform.OS === 'ios'
-              ? '#f8fafc'
-              : '#ffffff'
-            }]}>
+            <View style={[styles.inputContainer, { backgroundColor: Theme.background.secondary }]}>
               <TextInput
                 style={[styles.input, { 
-                  color: isDark ? '#f1f5f9' : '#0f172a',
+                  color: Theme.text.primary,
                 }]}
                 placeholder="Напишите доброе пожелание..."
-                placeholderTextColor={isDark ? '#475569' : '#94a3b8'}
+                placeholderTextColor={Theme.text.tertiary}
                 value={newMessage}
                 onChangeText={setNewMessage}
                 multiline
@@ -231,7 +211,7 @@ export default function InboxPage() {
               />
             </View>
             <View style={styles.inputFooter}>
-              <Text style={[styles.charCount, { color: isDark ? '#64748b' : '#94a3b8' }]}>
+              <Text style={[styles.charCount, { color: Theme.text.tertiary }]}>
                 {newMessage.length}/500
               </Text>
               <TouchableOpacity
@@ -240,7 +220,7 @@ export default function InboxPage() {
                 disabled={sendingMessage || !newMessage.trim()}
               >
                 <View style={[styles.sendButtonGradient, { 
-                  backgroundColor: sendingMessage || !newMessage.trim() ? (isDark ? '#475569' : '#cbd5e1') : (isDark ? '#6366f1' : '#8b5cf6')
+                  backgroundColor: sendingMessage || !newMessage.trim() ? Theme.text.tertiary : Theme.accent.primary
                 }]}>
                   {sendingMessage ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -253,11 +233,11 @@ export default function InboxPage() {
           </>
         ) : (
           <View style={styles.cooldownContainer}>
-            <Ionicons name="time-outline" size={32} color={isDark ? '#a78bfa' : '#6B46C1'} />
-            <Text style={[styles.cooldownText, { color: isDark ? '#94a3b8' : '#6B7280' }]}>
+            <Ionicons name="time-outline" size={32} color={Theme.accent.primary} />
+            <Text style={[styles.cooldownText, { color: Theme.text.secondary }]}>
               Можно отправить следующее пожелание через
             </Text>
-            <Text style={[styles.cooldownTime, { color: isDark ? '#a78bfa' : '#6B46C1' }]}>
+            <Text style={[styles.cooldownTime, { color: Theme.accent.primary }]}>
               {Math.floor(minutesLeft / 60)} ч {minutesLeft % 60} мин
             </Text>
           </View>
@@ -266,11 +246,11 @@ export default function InboxPage() {
 
       {/* Messages List */}
       <View style={styles.messagesSection}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#a78bfa' : '#6B46C1' }]}>
+        <Text style={[styles.sectionTitle, { color: Theme.accent.primary }]}>
           Полученные пожелания
         </Text>
         {loading && !refreshing ? (
-          <ActivityIndicator color={isDark ? '#a78bfa' : '#6B46C1'} size="large" style={{ marginTop: 20 }} />
+          <ActivityIndicator color={Theme.accent.primary} size="large" style={{ marginTop: 20 }} />
         ) : (
           <FlatList
             data={messages}
@@ -281,7 +261,7 @@ export default function InboxPage() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor={isDark ? '#a78bfa' : '#6B46C1'}
+                tintColor={Theme.accent.primary}
               />
             }
             contentContainerStyle={messages.length === 0 ? styles.emptyList : undefined}
@@ -310,9 +290,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
     borderWidth: 1.5,
-    borderColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: 'rgba(255, 107, 0, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -336,7 +316,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
+    borderColor: 'rgba(255, 107, 0, 0.2)',
   },
   sendSection: {
     margin: 20,
@@ -384,7 +364,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#6366f1',
+    shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,

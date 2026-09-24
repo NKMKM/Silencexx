@@ -14,8 +14,8 @@ import { BlurView } from 'expo-blur';
 import Animated, { FadeInLeft, FadeOutLeft, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useTheme } from '@/utils/ThemeContext';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
+import { Theme } from '@/constants/theme';
 
 interface Chat {
   id: number;
@@ -43,8 +43,7 @@ export function ChatSidebar({
   onNewChat,
   onDeleteChat,
 }: ChatSidebarProps) {
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const [isRendered, setIsRendered] = React.useState(visible);
   const swipeableRefs = useRef<{ [key: number]: Swipeable | null }>({});
 
@@ -71,6 +70,20 @@ export function ChatSidebar({
   const handleNewChat = () => {
     onNewChat();
     onClose();
+  };
+
+  const formatTime = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (mins < 1) return 'Сейчас';
+    if (mins < 60) return `${mins} мин`;
+    if (hours < 24) return `${hours} ч`;
+    if (days < 7) return `${days} дн`;
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
   };
 
   const handleDeleteChat = (id: number) => {
@@ -143,16 +156,12 @@ export function ChatSidebar({
           style={styles.sidebar}
         >
           <BlurView
-            intensity={85}
-            tint={isDark ? 'dark' : 'light'}
+            intensity={90}
+            tint="dark"
             style={styles.blurContainer}
           >
             <LinearGradient
-              colors={
-                isDark
-                  ? ['rgba(30, 41, 59, 0.7)', 'rgba(15, 23, 42, 0.5)']
-                  : ['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.5)']
-              }
+              colors={[Theme.background.secondary, Theme.background.primary]}
               style={styles.gradient}
             >
               {/* Header */}
@@ -161,16 +170,16 @@ export function ChatSidebar({
                   <Text
                     style={[
                       styles.headerTitle,
-                      { color: isDark ? '#e2e8f0' : '#1e293b' },
+                      { color: Theme.text.primary },
                     ]}
                   >
                     Чаты
                   </Text>
-                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                  <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: Theme.background.card }]}>
                     <Ionicons
                       name="close"
                       size={24}
-                      color={isDark ? '#94a3b8' : '#64748b'}
+                      color={Theme.text.secondary}
                     />
                   </TouchableOpacity>
                 </View>
@@ -178,7 +187,7 @@ export function ChatSidebar({
                 {/* New Chat Button */}
                 <TouchableOpacity onPress={handleNewChat}>
                   <LinearGradient
-                    colors={['#3b82f6', '#8b5cf6']}
+                    colors={Theme.accent.gradient as any}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.newChatButton}
@@ -207,30 +216,29 @@ export function ChatSidebar({
                       onPress={() => handleSelectChat(chat.id)}
                       style={[
                         styles.chatItem,
+                        { backgroundColor: Theme.glass.background },
                         currentChatId === chat.id && {
-                          backgroundColor: isDark
-                            ? 'rgba(139, 92, 246, 0.2)'
-                            : 'rgba(139, 92, 246, 0.1)',
-                          borderColor: isDark
-                            ? 'rgba(139, 92, 246, 0.5)'
-                            : 'rgba(139, 92, 246, 0.3)',
+                          backgroundColor: Theme.accent.primarySoft,
+                          borderColor: Theme.accent.primary,
+                          borderWidth: 1.5,
                         },
                       ]}
                     >
                       <View style={styles.chatItemContent}>
-                        <Ionicons
-                          name="chatbubble-outline"
-                          size={18}
-                          color={
-                            currentChatId === chat.id
-                              ? isDark
-                                ? '#a78bfa'
-                                : '#8b5cf6'
-                              : isDark
-                              ? '#64748b'
-                              : '#94a3b8'
-                          }
-                        />
+                        <View style={[
+                          styles.chatIconContainer,
+                          currentChatId === chat.id && { backgroundColor: 'rgba(255, 107, 0, 0.2)' }
+                        ]}>
+                          <Ionicons
+                            name="chatbubble-outline"
+                            size={18}
+                            color={
+                              currentChatId === chat.id
+                                ? Theme.accent.primary
+                                : Theme.text.tertiary
+                            }
+                          />
+                        </View>
                         <View style={styles.chatItemText}>
                           <Text
                             style={[
@@ -238,12 +246,8 @@ export function ChatSidebar({
                               {
                                 color:
                                   currentChatId === chat.id
-                                    ? isDark
-                                      ? '#c4b5fd'
-                                      : '#7c3aed'
-                                    : isDark
-                                    ? '#cbd5e1'
-                                    : '#475569',
+                                    ? Theme.accent.primary
+                                    : Theme.text.primary,
                               },
                             ]}
                             numberOfLines={1}
@@ -253,13 +257,16 @@ export function ChatSidebar({
                           <Text
                             style={[
                               styles.chatPreview,
-                              { color: isDark ? '#64748b' : '#94a3b8' },
+                              { color: Theme.text.tertiary },
                             ]}
                             numberOfLines={1}
                           >
                             {chat.preview}
                           </Text>
                         </View>
+                        <Text style={styles.chatTime}>
+                          {formatTime(chat.timestamp)}
+                        </Text>
                       </View>
                     </TouchableOpacity>
                   </Swipeable>
@@ -274,6 +281,7 @@ export function ChatSidebar({
 }
 
 const styles = StyleSheet.create({
+  // AURORA Sidebar Design — Floating, glassmorphic
   container: {
     flex: 1,
   },
@@ -282,7 +290,7 @@ const styles = StyleSheet.create({
   },
   backdropOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(3, 0, 20, 0.85)',
   },
   sidebar: {
     position: 'absolute',
@@ -290,6 +298,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 300,
+    backgroundColor: Theme.glass.backgroundDark,
   },
   blurContainer: {
     flex: 1,
@@ -299,100 +308,113 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 0,
+    paddingHorizontal: Theme.spacing.gutter,
+    paddingBottom: Theme.spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.glass.border,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: Theme.spacing.xl,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontSize: Theme.typography.size.xxl,
+    fontWeight: Theme.typography.weight.bold,
+    letterSpacing: Theme.typography.tracking.wide,
+    color: Theme.text.primary,
   },
   closeButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(100, 116, 139, 0.1)',
+    padding: 10,
+    borderRadius: Theme.radius.full,
+    backgroundColor: Theme.glass.background,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
   },
   newChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    borderRadius: 16,
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    gap: Theme.spacing.md,
+    paddingVertical: Theme.spacing.lg,
+    borderRadius: Theme.radius.lg,
+    ...Theme.shadow.glow,
   },
   newChatText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: Theme.typography.size.md,
+    fontWeight: Theme.typography.weight.semibold,
     letterSpacing: 0.3,
   },
   chatsList: {
     flex: 1,
-    padding: 16,
+    padding: Theme.spacing.lg,
   },
   chatItemWrapper: {
-    marginBottom: 10,
+    marginBottom: Theme.spacing.md,
   },
   chatItem: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    borderRadius: Theme.radius.lg,
+    padding: Theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: Theme.glass.border,
+    backgroundColor: Theme.glass.background,
+    ...Theme.shadow.sm,
   },
   chatItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Theme.spacing.md,
+  },
+  chatIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatItemText: {
     flex: 1,
   },
+  chatTime: {
+    fontSize: 11,
+    color: Theme.text.tertiary,
+    fontWeight: '500',
+  },
   chatTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: Theme.typography.size.base,
+    fontWeight: Theme.typography.weight.semibold,
     marginBottom: 4,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    color: Theme.text.primary,
   },
   chatPreview: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Theme.typography.size.sm,
+    lineHeight: 20,
+    color: Theme.text.tertiary,
   },
   deleteAction: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 84,
-    marginBottom: 8,
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    width: 80,
+    marginBottom: Theme.spacing.md,
+    borderTopRightRadius: Theme.radius.lg,
+    borderBottomRightRadius: Theme.radius.lg,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: Theme.spacing.md,
+    backgroundColor: Theme.status.error,
   },
   deleteText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
+    fontSize: Theme.typography.size.xs,
+    fontWeight: Theme.typography.weight.bold,
+    marginTop: 4,
   },
   deleteButton: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: Theme.spacing.sm,
+    borderRadius: Theme.radius.sm,
+    backgroundColor: Theme.status.errorBg,
   },
 });

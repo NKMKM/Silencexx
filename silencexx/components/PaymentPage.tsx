@@ -14,35 +14,43 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/utils/ThemeContext';
+import { Theme } from '@/constants/theme';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
 import { Separator } from './ui/Separator';
-import { FloatingClouds } from './FloatingClouds';
+import { api } from '@/services/api';
 
 interface PaymentPageProps {
   planName: string;
   planPrice: string;
+  tierSlug?: string;
   onNavigateBack?: () => void;
   onPaymentSuccess?: () => void;
 }
 
 type PaymentMethod = 'card' | 'apple' | 'google' | 'sbp';
 
-export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSuccess }: PaymentPageProps) {
+export function PaymentPage({ 
+  planName, 
+  planPrice, 
+  tierSlug = 'plus',
+  onNavigateBack, 
+  onPaymentSuccess 
+}: PaymentPageProps) {
   const router = useRouter();
-  const { activeTheme } = useTheme();
-  const isDark = activeTheme === 'dark';
+  const isDark = true; // Force dark theme
   const insets = useSafeAreaInsets();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [cardNumber, setCardNumber] = useState('');
   const [cardName, setCardName] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvv, setCvv] = useState('');
   const [email, setEmail] = useState('');
+  const [transactionId, setTransactionId] = useState<string | null>(null);
 
   const formatCardNumber = (value: string) => {
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
@@ -82,11 +90,78 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
     }
   };
 
-  const handleSubmit = () => {
+  const validateForm = (): boolean => {
+    if (!email || !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+
+    if (paymentMethod === 'card') {
+      if (!cardNumber || cardNumber.replace(/\s/g, '').length !== 16) {
+        setError('Please enter a valid 16-digit card number');
+        return false;
+      }
+      if (!cardName || cardName.trim().length < 3) {
+        setError('Please enter the cardholder name');
+        return false;
+      }
+      if (!expiry || expiry.length !== 5) {
+        setError('Please enter expiry date (MM/YY)');
+        return false;
+      }
+      if (!cvv || cvv.length !== 3) {
+        setError('Please enter a valid 3-digit CVV');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+
+    if (!validateForm()) {
+      return;
+    }
+
     setIsProcessing(true);
-    setTimeout(() => {
+
+    try {
+      // Step 1: Create payment
+      const paymentResponse = await api.post('/payments/create', {
+        tierSlug,
+        paymentMethod,
+        email,
+      });
+
+      if (!paymentResponse.data?.success) {
+        setError(paymentResponse.data?.error || 'Failed to create payment');
+        setIsProcessing(false);
+        return;
+      }
+
+      const transId = paymentResponse.data.transactionId;
+      setTransactionId(transId);
+
+      // Step 2: Simulate payment processing (in real app, this would use Stripe/YooKassa)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 3: Confirm payment
+      const confirmResponse = await api.post('/payments/confirm', {
+        transactionId: transId,
+      });
+
+      if (!confirmResponse.data?.success) {
+        setError(confirmResponse.data?.error || 'Payment failed');
+        setIsProcessing(false);
+        return;
+      }
+
       setIsProcessing(false);
       setIsSuccess(true);
+
+      // Wait 2 seconds before redirecting
       setTimeout(() => {
         if (onPaymentSuccess) {
           onPaymentSuccess();
@@ -94,7 +169,11 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
           router.back();
         }
       }, 2000);
-    }, 2000);
+    } catch (err) {
+      console.error('Payment error:', err);
+      setError(err instanceof Error ? err.message : 'Payment processing failed');
+      setIsProcessing(false);
+    }
   };
 
   const handleNavigateBack = () => {
@@ -149,7 +228,7 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
           onPress={handleNavigateBack}
           style={[styles.backButton, isDark && styles.backButtonDark]}
         >
-          <Ionicons name="arrow-back" size={20} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+          <Ionicons name="arrow-back" size={20} color={Theme.accent.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>
           Оформление подписки
@@ -161,6 +240,23 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Error Alert */}
+        {error && (
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <LinearGradient
+              colors={isDark ? ['rgba(220, 38, 38, 0.2)', 'rgba(185, 28, 28, 0.2)'] : ['rgba(220, 38, 38, 0.15)', 'rgba(185, 28, 28, 0.15)']}
+              style={styles.errorAlert}
+            >
+              <View style={styles.errorContent}>
+                <Ionicons name="alert-circle" size={20} color={isDark ? '#ef4444' : '#dc2626'} />
+                <Text style={[styles.errorText, isDark && styles.errorTextDark]}>
+                  {error}
+                </Text>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        )}
+
         {/* Order Summary */}
         <Animated.View entering={FadeInDown.duration(400).delay(100)}>
           <LinearGradient
@@ -215,7 +311,7 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
                   <Ionicons
                     name={method.icon}
                     size={24}
-                    color={paymentMethod === method.id ? (isDark ? '#818cf8' : '#6366f1') : isDark ? '#9ca3af' : '#64748b'}
+                    color={paymentMethod === method.id ? Theme.accent.primary : (isDark ? '#9ca3af' : '#64748b')}
                   />
                   <Text
                     style={[
@@ -300,7 +396,7 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={['#8b5cf6', '#ec4899']}
+                    colors={Theme.accent.gradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.submitGradient}
@@ -352,7 +448,7 @@ export function PaymentPage({ planName, planPrice, onNavigateBack, onPaymentSucc
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={['#8b5cf6', '#ec4899']}
+                  colors={Theme.accent.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.submitGradient}
@@ -516,12 +612,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 41, 55, 0.5)',
   },
   paymentMethodActive: {
-    borderColor: '#818cf8',
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    borderColor: Theme.accent.primary,
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
   },
   paymentMethodActiveDark: {
-    borderColor: '#818cf8',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: Theme.accent.primary,
+    backgroundColor: 'rgba(255, 107, 0, 0.2)',
   },
   paymentMethodText: {
     fontSize: 12,
@@ -532,11 +628,11 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   paymentMethodTextActive: {
-    color: '#6366f1',
+    color: Theme.accent.primary,
     fontWeight: '600',
   },
   paymentMethodTextActiveDark: {
-    color: '#818cf8',
+    color: Theme.accent.secondary,
   },
   formContainer: {
     gap: 16,
@@ -601,12 +697,12 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#6366f1',
+    backgroundColor: Theme.accent.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   alternativeIconDark: {
-    backgroundColor: '#818cf8',
+    backgroundColor: Theme.accent.secondary,
   },
   alternativeTitle: {
     fontSize: 18,
@@ -674,6 +770,27 @@ const styles = StyleSheet.create({
   },
   successTitleDark: {
     color: '#f1f5f9',
+  },
+  errorAlert: {
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+  },
+  errorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#dc2626',
+    fontWeight: '500',
+  },
+  errorTextDark: {
+    color: '#ef4444',
   },
   successText: {
     fontSize: 14,

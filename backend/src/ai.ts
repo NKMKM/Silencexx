@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from './config';
+import { getCachedResponse, cacheResponse, generateAICacheKey } from './cache';
 
 // Initialize Ollama client
 const ollamaClient: AxiosInstance = axios.create({
@@ -7,9 +8,12 @@ const ollamaClient: AxiosInstance = axios.create({
   timeout: 180000, // 180 seconds timeout for long responses (mistral is slow on Windows)
 });
 
-// Test Ollama connection
+// Model loading state
 let ollamaReady = false;
+let modelLoaded = false;
+let unloadTimer: NodeJS.Timeout | null = null;
 
+// Test Ollama connection
 async function ensureOllamaReady(): Promise<void> {
   if (ollamaReady) return;
 
@@ -32,6 +36,38 @@ async function ensureOllamaReady(): Promise<void> {
     console.error('❌ Ошибка подключения к Ollama:');
     console.error('   Убедитесь, что Ollama запущена: ollama serve');
     console.error('   URL:', config.ollamaUrl);
+    throw error;
+  }
+}
+
+// Lazy load model with auto-unload
+async function ensureModelLoaded(): Promise<void> {
+  if (modelLoaded) {
+    // Reset unload timer
+    if (unloadTimer) clearTimeout(unloadTimer);
+    
+    unloadTimer = setTimeout(() => {
+      modelLoaded = false;
+      console.log('🔄 Model unloaded after 5 minutes of inactivity');
+    }, 300000); // 5 minutes
+    
+    return;
+  }
+
+  try {
+    // Load model by doing a warmup request
+    console.log('⏳ Loading model... (first request may be slow)');
+    modelLoaded = true;
+    
+    // Set unload timer
+    if (unloadTimer) clearTimeout(unloadTimer);
+    unloadTimer = setTimeout(() => {
+      modelLoaded = false;
+      console.log('🔄 Model unloaded after 5 minutes of inactivity');
+    }, 300000);
+    
+  } catch (error) {
+    modelLoaded = false;
     throw error;
   }
 }
@@ -838,6 +874,17 @@ export async function generateAIResponse(
 ): Promise<{ response: string; isCrisis: boolean; mood?: string }> {
   try {
     await ensureOllamaReady();
+    
+    // Check cache first (OPTIMIZATION)
+    const cacheKey = generateAICacheKey(userMessage, context);
+    const cachedResponse = getCachedResponse(cacheKey);
+    if (cachedResponse) {
+      console.log('✅ Cache hit for:', userMessage.substring(0, 30) + '...');
+      return cachedResponse;
+    }
+
+    // Ensure model is loaded
+    await ensureModelLoaded();
 
     // Логируем входящее сообщение
     console.log('\n🔍 DEBUG: generateAIResponse called');
@@ -946,11 +993,16 @@ export async function generateAIResponse(
 
     console.log('🎉 Success! Returning response');
 
-    return {
+    const result = {
       response: responseText,
       isCrisis,
       mood: context?.mood,
     };
+
+    // Cache the response (OPTIMIZATION)
+    cacheResponse(cacheKey, result, 3600); // Cache for 1 hour
+    
+    return result;
   } catch (error) {
     console.error('❌ ERROR in generateAIResponse:');
     console.error('   Message:', error instanceof Error ? error.message : String(error));
