@@ -1,0 +1,13 @@
+# Production-ready WhisperX requirements
+# Fixed versions for stability
+
+# PyTorch 2.5.1 - last stable before weights_only breaking change
+torch==2.5.1
+torchaudio==2.5.1
+
+# WhisperX and dependencies
+git+https://github.com/m-bain/whisperx.git
+
+# Core dependencies
+numpy<2.0.0
+omegaconf

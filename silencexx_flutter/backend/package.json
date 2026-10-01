@@ -1,0 +1,52 @@
+{
+  "name": "cloudmind-backend",
+  "version": "1.0.0",
+  "description": "CloudMind AI Backend with Ollama Integration",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "dev:ngrok": "node start-with-ngrok.js",
+    "update-ngrok": "node update-ngrok-url.js",
+    "migrate": "node run-migration.js",
+    "setup-db": "node setup-database.js",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "mental-health",
+    "ollama",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/pg": "^8.15.6",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "bull": "^4.16.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "node-cache": "^5.1.2",
+    "nodemailer": "^7.0.13",
+    "pg": "^8.16.3",
+    "redis": "^5.10.0",
+    "undici": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^20.10.6",
+    "@types/nodemailer": "^7.0.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
