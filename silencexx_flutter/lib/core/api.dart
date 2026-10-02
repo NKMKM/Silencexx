@@ -23,9 +23,7 @@ class Api {
   static String get defaultUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
-    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.0.2.2:3000/api'
-        : 'http://localhost:3000/api';
+    return 'https://frying-liver-gotten.ngrok-free.dev/api';
   }
 
   final http.Client client;

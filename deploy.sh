@@ -1,4 +1,4 @@
-#!/bin/bash
+	#!/bin/bash
 
 # 🚀 SilenceXX - One Command Deployment Script
 # Run this to set up everything in one go

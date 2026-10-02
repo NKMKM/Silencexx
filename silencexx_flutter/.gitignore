@@ -30,11 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/*
-!/build/web-final/
-!/build/web-final/**
-!/build/web/
-!/build/web/**
+/build/
 /coverage/
 
 # Symbolication related
@@ -64,3 +60,4 @@ app.*.map.json
 **/*.jks
 **/*.keystore
 **/key.properties
+**/*.backup

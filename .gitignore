@@ -53,8 +53,6 @@ backend/google-android_api.json
 # Git submodules (if silencexx should not be nested)
 # Remove this line if silencexx is intentionally a submodule
 
-# The independent Flutter migration includes a ready-to-serve Web build.
-!silencexx_flutter/build/
-silencexx_flutter/build/*
-!silencexx_flutter/build/web-final/
-!silencexx_flutter/build/web-final/**
+# Flutter and native build output is generated locally.
+**/build/
+**/*.backup

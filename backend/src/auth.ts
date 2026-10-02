@@ -428,6 +428,12 @@ export const login = async (req: Request, res: Response) => {
 
     // Проверка пароля для email
     if (method === 'email') {
+      if (!user.password_hash) {
+        return res.status(401).json({
+          success: false,
+          error: 'Неверный email или пароль',
+        });
+      }
       const isValidPassword = await comparePassword(password, user.password_hash);
       
       if (!isValidPassword) {
