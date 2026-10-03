@@ -1,9 +1,9 @@
-import 'dart:math' as math;
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'theme/app_colors.dart';
 import 'theme/app_gradients.dart';
+import 'theme/app_motion.dart';
 import 'theme/app_radius.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
@@ -13,7 +13,7 @@ ThemeData auroraTheme(Brightness brightness) {
   final foreground = dark ? AppColors.textPrimary : AppColors.lightTextPrimary;
   final muted = dark ? AppColors.textSecondary : AppColors.lightTextSecondary;
   final surface = dark ? AppColors.surface : AppColors.lightSurface;
-  final outline = dark ? AppColors.border : const Color(0x1F39253A);
+  final outline = dark ? AppColors.border : const Color(0x1F303A6B);
   final scheme =
       ColorScheme.fromSeed(
         seedColor: AppColors.primary,
@@ -33,6 +33,15 @@ ThemeData auroraTheme(Brightness brightness) {
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+        TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+      },
+    ),
     scaffoldBackgroundColor: dark
         ? Colors.transparent
         : AppColors.lightBackground,
@@ -50,7 +59,7 @@ ThemeData auroraTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? AppColors.surfaceRaised : const Color(0xFFF2EEF3),
+      fillColor: dark ? AppColors.surfaceRaised : const Color(0xFFEEF0FA),
       hintStyle: TextStyle(color: dark ? AppColors.textTertiary : muted),
       labelStyle: TextStyle(color: muted),
       prefixIconColor: muted,
@@ -98,7 +107,7 @@ ThemeData auroraTheme(Brightness brightness) {
         foregroundColor: Colors.white,
         disabledBackgroundColor: dark
             ? AppColors.surfaceHighest
-            : const Color(0xFFE9E3EA),
+            : const Color(0xFFE7E9F4),
         disabledForegroundColor: muted,
         minimumSize: const Size(48, 50),
         padding: const EdgeInsets.symmetric(
@@ -109,6 +118,8 @@ ThemeData auroraTheme(Brightness brightness) {
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        animationDuration: AppMotion.control,
+        splashFactory: InkRipple.splashFactory,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -123,6 +134,8 @@ ThemeData auroraTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
+        animationDuration: AppMotion.control,
+        splashFactory: InkRipple.splashFactory,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -135,6 +148,8 @@ ThemeData auroraTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
+        animationDuration: AppMotion.control,
+        splashFactory: InkRipple.splashFactory,
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -145,7 +160,20 @@ ThemeData auroraTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
+        animationDuration: AppMotion.fast,
+        splashFactory: InkRipple.splashFactory,
       ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: dark ? AppColors.surfaceRaised : surface,
+      elevation: dark ? 16 : 8,
+      shadowColor: Colors.black.withValues(alpha: dark ? .32 : .12),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: outline),
+      ),
+      menuPadding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: dark
@@ -253,38 +281,24 @@ class CosmicBackdrop extends StatelessWidget {
       const DecoratedBox(
         decoration: BoxDecoration(gradient: AppGradients.cosmic),
       ),
-      const Positioned.fill(child: CustomPaint(painter: _StarPainter())),
+      Positioned.fill(
+        child: IgnorePointer(
+          child: Align(
+            alignment: const Alignment(.9, -.8),
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x249B8CFF), Color(0x009B8CFF)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       child,
     ],
   );
-}
-
-class _StarPainter extends CustomPainter {
-  const _StarPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    final random = math.Random(42);
-    for (var i = 0; i < 38; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      paint.color = Colors.white.withValues(alpha: i % 9 == 0 ? .18 : .075);
-      canvas.drawCircle(Offset(x, y), i % 9 == 0 ? .85 : .5, paint);
-    }
-    final glowPaint = Paint()
-      ..shader =
-          const RadialGradient(
-            colors: [Color(0x129B78FF), Color(0x009B78FF)],
-          ).createShader(
-            Rect.fromCircle(
-              center: Offset(size.width * .94, size.height * .12),
-              radius: math.max(size.width, size.height) * .42,
-            ),
-          );
-    canvas.drawRect(Offset.zero & size, glowPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _StarPainter oldDelegate) => false;
 }

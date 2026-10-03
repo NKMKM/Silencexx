@@ -145,19 +145,20 @@ class _AuthScreenState extends State<AuthScreen> {
                         height: 62,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(AppRadius.lg),
-                          gradient: AppGradients.accent,
                           boxShadow: AppShadows.accent,
                         ),
-                        child: const Icon(
-                          Icons.auto_awesome_rounded,
-                          size: 28,
-                          color: Colors.white,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          child: Image.asset(
+                            'assets/images/cloudmind_icon.png',
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'SilenceXX',
+                      'CloudMind',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineLarge,
                     ),

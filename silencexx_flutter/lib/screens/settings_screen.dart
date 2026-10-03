@@ -21,7 +21,7 @@ class SettingsScreen extends StatelessWidget {
             backgroundColor: AppColors.surfaceRaised,
             child: Icon(Icons.person_outline, color: AppColors.primaryBright),
           ),
-          title: Text('${context.app.user?['name'] ?? 'SilenceXX'}'),
+          title: Text('${context.app.user?['name'] ?? 'CloudMind'}'),
           subtitle: Text(context.tr('Ваше пространство', 'Your space')),
         ),
       ),
@@ -102,7 +102,7 @@ class SettingsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppSpacing.xl),
       Text(
-        'SilenceXX · Flutter 1.0.0',
+        'CloudMind · Flutter 1.0.0',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodySmall,
       ),

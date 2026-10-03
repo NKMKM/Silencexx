@@ -2,10 +2,13 @@ import axios, { AxiosInstance } from 'axios';
 import { config } from './config';
 import { getCachedResponse, cacheResponse, generateAICacheKey } from './cache';
 
+const AI_TIMEOUT_MS = 180000;
+const MAX_HISTORY_MESSAGES = 12;
+
 // Initialize Ollama client
 const ollamaClient: AxiosInstance = axios.create({
   baseURL: config.ollamaUrl,
-  timeout: 180000, // 180 seconds timeout for long responses (mistral is slow on Windows)
+  timeout: AI_TIMEOUT_MS,
 });
 
 // Model loading state
@@ -929,7 +932,9 @@ export async function generateAIResponse(
 
     // Конвертируем историю сообщений в правильный формат для Ollama
     const messages: MessageContent[] = [
-      ...((context?.conversationHistory || []) as MessageContent[]),
+      ...((context?.conversationHistory || []) as MessageContent[]).slice(
+        -MAX_HISTORY_MESSAGES,
+      ),
       { role: 'user', content: enhancedMessage }
     ];
 
@@ -939,7 +944,10 @@ export async function generateAIResponse(
     let responseText = '';
     try {
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Ollama timeout (180s)')), 180000)
+        setTimeout(
+          () => reject(new Error('Ollama timeout (180s)')),
+          AI_TIMEOUT_MS,
+        )
       );
 
       const responsePromise = ollamaClient.post('/api/chat', {
@@ -952,11 +960,13 @@ export async function generateAIResponse(
           ...messages
         ],
         stream: false,
+        keep_alive: '5m',
         options: {
           temperature: 0.5,  // Lower temperature = more consistent grammar
           top_p: 0.85,       // More focused responses
           top_k: 30,         // Smaller vocabulary pool for better accuracy
-          repeat_penalty: 1.2  // Avoid repetition
+          repeat_penalty: 1.2,  // Avoid repetition
+          num_predict: 320,
         }
       });
 

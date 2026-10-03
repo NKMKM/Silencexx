@@ -135,8 +135,8 @@ class _InboxScreenState extends State<InboxScreen> {
               onTap: () async {
                 try {
                   await context.app.api.call(
-                    '/inbox/${item['id']}/mark-read',
-                    method: 'POST',
+                    '/inbox/messages/${item['id']}/read',
+                    method: 'PATCH',
                   );
                   reload();
                 } catch (e) {

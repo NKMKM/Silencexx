@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_motion.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
 
@@ -115,6 +116,12 @@ class _JournalScreenState extends State<JournalScreen> {
                 if (response['aiFeedback'] != null) {
                   await showDialog<void>(
                     context: context,
+                    animationStyle: const AnimationStyle(
+                      duration: AppMotion.overlay,
+                      reverseDuration: AppMotion.control,
+                      curve: AppMotion.enter,
+                      reverseCurve: AppMotion.exit,
+                    ),
                     builder: (context) => AlertDialog(
                       title: Text(
                         context.tr('Запись сохранена', 'Entry saved'),

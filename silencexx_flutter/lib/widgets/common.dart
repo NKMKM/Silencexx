@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
-import '../core/theme/app_gradients.dart';
+import '../core/theme/app_motion.dart';
 import '../core/theme/app_radius.dart';
-import '../core/theme/app_shadows.dart';
 import '../core/theme/app_spacing.dart';
 
 void showError(BuildContext context, Object error) {
@@ -32,6 +31,12 @@ void showError(BuildContext context, Object error) {
 
 Future<void> showSupport(BuildContext context) => showDialog<void>(
   context: context,
+  animationStyle: const AnimationStyle(
+    duration: AppMotion.overlay,
+    reverseDuration: AppMotion.control,
+    curve: AppMotion.enter,
+    reverseCurve: AppMotion.exit,
+  ),
   builder: (context) => AlertDialog(
     icon: const Icon(
       Icons.favorite_outline_rounded,
@@ -56,6 +61,12 @@ Future<void> showSupport(BuildContext context) => showDialog<void>(
 Future<bool> confirm(BuildContext context, String title) async =>
     await showDialog<bool>(
       context: context,
+      animationStyle: const AnimationStyle(
+        duration: AppMotion.overlay,
+        reverseDuration: AppMotion.control,
+        curve: AppMotion.enter,
+        reverseCurve: AppMotion.exit,
+      ),
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.help_outline_rounded, color: AppColors.info),
         title: Text(title),
@@ -106,19 +117,15 @@ class SectionCard extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        gradient: dark ? AppGradients.card : null,
-        color: dark ? null : AppColors.lightSurface,
         border: Border.all(
-          color: dark ? AppColors.border : const Color(0x1F39253A),
+          color: dark ? AppColors.border : const Color(0x142D3554),
         ),
-        boxShadow: dark ? AppShadows.card : const [],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: child,
-      ),
+      child: child,
     );
   }
 }
@@ -282,6 +289,36 @@ class _AsyncPanelState extends State<AsyncPanel> {
   );
 }
 
+class PressScale extends StatefulWidget {
+  const PressScale({super.key, required this.child, this.scale = .975});
+
+  final Widget child;
+  final double scale;
+
+  @override
+  State<PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<PressScale> {
+  bool pressed = false;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: (_) => setState(() => pressed = true),
+    onPointerUp: (_) => setState(() => pressed = false),
+    onPointerCancel: (_) => setState(() => pressed = false),
+    child: AnimatedScale(
+      scale: pressed && !MediaQuery.disableAnimationsOf(context)
+          ? widget.scale
+          : 1,
+      duration: AppMotion.press,
+      curve: AppMotion.spring,
+      child: widget.child,
+    ),
+  );
+}
+
 class ActionButton extends StatefulWidget {
   const ActionButton({
     super.key,
@@ -302,37 +339,41 @@ class _ActionButtonState extends State<ActionButton> {
   bool busy = false;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    onPressed: busy
-        ? null
-        : () async {
-            setState(() => busy = true);
-            try {
-              await widget.action();
-            } catch (error) {
-              if (context.mounted) showError(context, error);
-            } finally {
-              if (mounted) setState(() => busy = false);
-            }
-          },
-    icon: AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      child: busy
-          ? const SizedBox(
-              key: ValueKey('busy'),
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
+  Widget build(BuildContext context) => PressScale(
+    child: FilledButton.icon(
+      onPressed: busy
+          ? null
+          : () async {
+              setState(() => busy = true);
+              try {
+                await widget.action();
+              } catch (error) {
+                if (context.mounted) showError(context, error);
+              } finally {
+                if (mounted) setState(() => busy = false);
+              }
+            },
+      icon: AnimatedSwitcher(
+        duration: AppMotion.control,
+        switchInCurve: AppMotion.enter,
+        switchOutCurve: AppMotion.exit,
+        child: busy
+            ? const SizedBox(
+                key: ValueKey('busy'),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(
+                widget.icon ?? Icons.check_rounded,
+                key: const ValueKey('icon'),
               ),
-            )
-          : Icon(
-              widget.icon ?? Icons.check_rounded,
-              key: const ValueKey('icon'),
-            ),
+      ),
+      label: Text(widget.label),
     ),
-    label: Text(widget.label),
   );
 }
 

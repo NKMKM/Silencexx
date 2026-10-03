@@ -71,7 +71,7 @@ class Reminders {
     }
     await plugin.zonedSchedule(
       1,
-      'SilenceXX',
+      'CloudMind',
       body,
       next,
       const NotificationDetails(

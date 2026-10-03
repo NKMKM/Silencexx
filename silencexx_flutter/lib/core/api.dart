@@ -30,7 +30,7 @@ class Api {
   final String baseUrl;
   String? token;
   VoidCallback? onUnauthorized;
-  static const timeout = Duration(seconds: 200);
+  static const timeout = Duration(seconds: 180);
 
   Future<Json> call(String path, {String method = 'GET', Json? body}) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path'));

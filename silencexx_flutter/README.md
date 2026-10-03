@@ -1,4 +1,4 @@
-# SilenceXX — Flutter
+# CloudMind — Flutter
 
 Перенесённый клиент Flutter (Android, iOS, Web) и отдельная копия Node.js backend.
 Исходное React Native приложение находится в соседней папке `../silencexx`.

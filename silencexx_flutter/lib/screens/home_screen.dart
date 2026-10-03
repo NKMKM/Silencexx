@@ -4,10 +4,12 @@ import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_gradients.dart';
+import '../core/theme/app_motion.dart';
 import '../core/theme/app_radius.dart';
 import '../core/theme/app_shadows.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 import 'chat_screen.dart';
 import 'inbox_screen.dart';
 import 'journal_screen.dart';
@@ -29,92 +31,173 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final labels = [
       context.tr('Главная', 'Home'),
+      context.tr('Чат', 'Chat'),
       context.tr('Дневник', 'Journal'),
-      context.tr('Задания', 'Tasks'),
-      context.tr('Почта', 'Inbox'),
       context.tr('Настройки', 'Settings'),
     ];
     const icons = [
       Icons.auto_awesome_rounded,
+      Icons.forum_rounded,
       Icons.calendar_month_rounded,
-      Icons.task_alt_rounded,
-      Icons.inbox_outlined,
       Icons.tune_rounded,
     ];
     return Scaffold(
       extendBody: true,
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 31,
-              height: 31,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                gradient: AppGradients.accent,
-                boxShadow: AppShadows.accent,
-              ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                size: 18,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(tab == 0 ? 'SilenceXX' : labels[tab]),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.xs),
-            child: IconButton.filledTonal(
-              tooltip: context.tr('Мне тревожно', 'I feel anxious'),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PanicScreen()),
-              ),
-              icon: const Icon(Icons.favorite_border_rounded),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: switch (tab) {
-          0 => Dashboard(onTabSelected: (value) => setState(() => tab = value)),
-          1 => const JournalScreen(),
-          2 => const TasksScreen(),
-          3 => const InboxScreen(),
-          _ => const SettingsScreen(),
-        },
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.sm,
-            AppSpacing.xs,
-            AppSpacing.sm,
-            AppSpacing.xs,
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: .96),
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              border: Border.all(color: AppColors.border),
-              boxShadow: AppShadows.ambient,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              child: NavigationBar(
-                selectedIndex: tab,
-                onDestinationSelected: (value) => setState(() => tab = value),
-                destinations: [
-                  for (var i = 0; i < labels.length; i++)
-                    NavigationDestination(
-                      icon: Icon(icons[i]),
-                      label: labels[i],
+      appBar: tab == 1
+          ? null
+          : AppBar(
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 31,
+                    height: 31,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      boxShadow: AppShadows.accent,
                     ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      child: Image.asset(
+                        'assets/images/cloudmind_icon.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(tab == 0 ? 'CloudMind' : labels[tab]),
+                ],
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.xs),
+                  child: IconButton.filledTonal(
+                    tooltip: context.tr('Мне тревожно', 'I feel anxious'),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PanicScreen()),
+                    ),
+                    icon: const Icon(Icons.favorite_border_rounded),
+                  ),
+                ),
+              ],
+            ),
+      body: SafeArea(
+        child: AnimatedSwitcher(
+          duration: AppMotion.screen,
+          switchInCurve: AppMotion.enter,
+          switchOutCurve: AppMotion.exit,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, .018),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: KeyedSubtree(
+            key: ValueKey(tab),
+            child: switch (tab) {
+              0 => Dashboard(
+                onTabSelected: (value) => setState(() => tab = value),
+              ),
+              1 => ChatScreen(onExit: () => setState(() => tab = 0)),
+              2 => const JournalScreen(),
+              3 => const SettingsScreen(),
+              _ => const SettingsScreen(),
+            },
+          ),
+        ),
+      ),
+      bottomNavigationBar: tab == 1
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: GlassSurface(
+                  radius: AppRadius.xl,
+                  opacity: .34,
+                  blur: 9,
+                  padding: const EdgeInsets.all(6),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < labels.length; i++)
+                        Expanded(
+                          child: _NavigationItem(
+                            icon: icons[i],
+                            label: labels[i],
+                            selected: tab == i,
+                            onTap: () => setState(() => tab = i),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _NavigationItem extends StatelessWidget {
+  const _NavigationItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: .62);
+    return PressScale(
+      scale: .96,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(18),
+            child: AnimatedContainer(
+              duration: AppMotion.control,
+              curve: AppMotion.enter,
+              height: 56,
+              decoration: BoxDecoration(
+                color: selected
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: .13)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20, color: color),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -154,26 +237,22 @@ class _DashboardState extends State<Dashboard> {
     builder: (context, data, reload) {
       final name = '${context.app.user?['name'] ?? ''}'.trim();
       final chatList = rows(data, 'chats');
-      final wide = MediaQuery.sizeOf(context).width > 620;
-
       return PageBody(
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Text(
-            context.tr('ВАШЕ ПРОСТРАНСТВО', 'YOUR QUIET SPACE'),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.primaryBright,
-              letterSpacing: 2.2,
-              fontWeight: FontWeight.w700,
+            context.tr('Место для себя', 'A moment for yourself'),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             context.tr(
               name.isEmpty ? 'Рады вас видеть' : 'Привет, $name',
               name.isEmpty ? 'A little space for you' : 'Welcome back, $name',
             ),
-            style: Theme.of(context).textTheme.headlineMedium,
+            style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 6),
           Text(
@@ -182,14 +261,12 @@ class _DashboardState extends State<Dashboard> {
               'Take a breath. There is room to sort through your thoughts.',
             ),
           ),
-          const SizedBox(height: 22),
-          _ConversationHero(onTap: () => open()),
+          const SizedBox(height: 20),
+          _ConversationHero(onTap: () => widget.onTabSelected(1)),
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
-              final width = wide
-                  ? (constraints.maxWidth - 12) / 2
-                  : constraints.maxWidth;
+              final width = (constraints.maxWidth - 12) / 2;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -204,7 +281,7 @@ class _DashboardState extends State<Dashboard> {
                         'Thoughts and mood',
                       ),
                       accent: AppColors.secondary,
-                      onTap: () => widget.onTabSelected(1),
+                      onTap: () => widget.onTabSelected(2),
                     ),
                   ),
                   SizedBox(
@@ -214,7 +291,10 @@ class _DashboardState extends State<Dashboard> {
                       title: context.tr('Маленькие шаги', 'Small steps'),
                       detail: context.tr('Задания на сегодня', 'Today’s tasks'),
                       accent: AppColors.primaryBright,
-                      onTap: () => widget.onTabSelected(2),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const TasksScreen()),
+                      ),
                     ),
                   ),
                   SizedBox(
@@ -237,14 +317,17 @@ class _DashboardState extends State<Dashboard> {
                       title: context.tr('Сообщения', 'Messages'),
                       detail: context.tr('Ваше пространство', 'A note for you'),
                       accent: AppColors.textSecondary,
-                      onTap: () => widget.onTabSelected(3),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const InboxScreen()),
+                      ),
                     ),
                   ),
                 ],
               );
             },
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 28),
           Row(
             children: [
               Expanded(
@@ -347,65 +430,104 @@ class _ConversationHero extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(AppSpacing.lg),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(AppRadius.xxl),
-      gradient: AppGradients.hero,
-      border: Border.all(color: AppColors.border),
-      boxShadow: AppShadows.ambient,
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.primary.withValues(alpha: .10),
-            border: Border.all(color: AppColors.primary.withValues(alpha: .20)),
-          ),
-          child: const Icon(
-            Icons.nights_stay_outlined,
-            color: AppColors.primaryBright,
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          context.tr('Давайте поговорим', 'Let’s talk'),
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 7),
-        Text(
-          context.tr(
-            'Поделитесь тем, что чувствуете, в своём темпе.',
-            'Share what is on your mind, at your own pace.',
-          ),
-        ),
-        const SizedBox(height: 19),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: onTap,
-              icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-              label: Text(context.tr('Новый разговор', 'Start a conversation')),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PanicScreen()),
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark
+        ? AppColors.textPrimary
+        : AppColors.lightTextPrimary;
+    final muted = dark ? AppColors.textSecondary : AppColors.lightTextSecondary;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        gradient: dark
+            ? AppGradients.hero
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFE8EBFC), Color(0xFFF2EDFB)],
               ),
-              icon: const Icon(Icons.favorite_border_rounded, size: 18),
-              label: Text(context.tr('Нужна поддержка', 'I need support')),
-            ),
-          ],
+        border: Border.all(
+          color: dark ? AppColors.border : const Color(0x203E634B),
         ),
-      ],
-    ),
-  );
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -34,
+            top: -45,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: dark ? .08 : .10),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.forum_outlined,
+                    color: dark
+                        ? AppColors.primaryBright
+                        : AppColors.primaryPressed,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  context.tr('Можно начать с малого', 'Start wherever you are'),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: foreground,
+                    fontSize: 22,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  context.tr(
+                    'Расскажи, что у тебя на душе. Я рядом.',
+                    'Tell me what is on your mind. I’m here.',
+                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: onTap,
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: Text(
+                    context.tr('Начать разговор', 'Start a conversation'),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PanicScreen()),
+                  ),
+                  icon: const Icon(Icons.favorite_border_rounded, size: 17),
+                  label: Text(
+                    context.tr('Мне нужна поддержка', 'I need support'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BentoTile extends StatelessWidget {
@@ -424,54 +546,64 @@ class _BentoTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
-    borderRadius: BorderRadius.circular(AppRadius.lg),
-    child: InkWell(
-      onTap: onTap,
+  Widget build(BuildContext context) => PressScale(
+    child: Material(
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Ink(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: AppColors.border),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              accent.withValues(alpha: .075),
-              AppColors.surface.withValues(alpha: 0),
-            ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.border),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accent.withValues(alpha: .10),
+                Theme.of(context).colorScheme.surface,
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 41,
-              height: 41,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Icon(icon, color: accent, size: 20),
+          child: SizedBox(
+            height: 128,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Icon(icon, color: accent, size: 20),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.arrow_outward_rounded, color: accent, size: 17),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 3),
-                  Text(detail, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_rounded,
-              color: accent.withValues(alpha: .8),
-              size: 18,
-            ),
-          ],
+          ),
         ),
       ),
     ),

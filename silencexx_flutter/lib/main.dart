@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api.dart';
 import 'core/app_state.dart';
 import 'core/theme.dart';
-import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
@@ -28,7 +27,7 @@ class SilenceApp extends StatelessWidget {
     child: ListenableBuilder(
       listenable: state,
       builder: (context, _) => MaterialApp(
-        title: 'SilenceXX',
+        title: 'CloudMind',
         debugShowCheckedModeBanner: false,
         builder: (context, child) =>
             CosmicBackdrop(child: child ?? const SizedBox.shrink()),
@@ -40,20 +39,24 @@ class SilenceApp extends StatelessWidget {
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         key: ValueKey(state.authenticated),
         home: !state.ready
-            ? const Scaffold(
+            ? Scaffold(
                 body: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.auto_awesome,
-                        size: 52,
-                        color: AppColors.primaryBright,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset(
+                          'assets/images/cloudmind_icon.png',
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      SizedBox(height: AppSpacing.md),
-                      Text('SilenceXX'),
-                      SizedBox(height: AppSpacing.xl),
-                      SizedBox(
+                      const SizedBox(height: AppSpacing.md),
+                      const Text('CloudMind'),
+                      const SizedBox(height: AppSpacing.xl),
+                      const SizedBox(
                         width: 24,
                         height: 24,
                         child: CircularProgressIndicator(strokeWidth: 2.2),
