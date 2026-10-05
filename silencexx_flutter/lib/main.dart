@@ -6,7 +6,10 @@ import 'core/app_state.dart';
 import 'core/theme.dart';
 import 'core/theme/app_spacing.dart';
 import 'screens/auth_screen.dart';
+import 'screens/disclaimer_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/wellness_onboarding_screen.dart';
+import 'widgets/common.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +40,6 @@ class SilenceApp extends StatelessWidget {
         locale: Locale(state.language),
         supportedLocales: const [Locale('ru'), Locale('en')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        key: ValueKey(state.authenticated),
         home: !state.ready
             ? Scaffold(
                 body: Center(
@@ -56,11 +58,7 @@ class SilenceApp extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                       const Text('CloudMind'),
                       const SizedBox(height: AppSpacing.xl),
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2.2),
-                      ),
+                      const AppSkeleton(width: 140, height: 6),
                     ],
                   ),
                 ),
@@ -93,9 +91,30 @@ class SilenceApp extends StatelessWidget {
                   ),
                 ),
               )
-            : state.authenticated
-            ? const HomeScreen()
-            : const AuthScreen(),
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(.025, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: !state.disclaimerAccepted
+                    ? const DisclaimerScreen(key: ValueKey('disclaimer'))
+                    : state.authenticated
+                    ? state.needsOnboarding
+                          ? const WellnessOnboardingScreen(
+                              key: ValueKey('wellness-onboarding'),
+                            )
+                          : const HomeScreen(key: ValueKey('chat'))
+                    : const AuthScreen(key: ValueKey('auth')),
+              ),
       ),
     ),
   );

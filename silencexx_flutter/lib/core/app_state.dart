@@ -14,6 +14,7 @@ class AppState extends ChangeNotifier {
       (m) => m.name == preferences.getString('theme'),
       orElse: () => ThemeMode.dark,
     );
+    disclaimerAccepted = preferences.getBool('disclaimer_accepted') ?? false;
     api.onUnauthorized = expireSession;
   }
 
@@ -22,6 +23,8 @@ class AppState extends ChangeNotifier {
   final FlutterSecureStorage storage;
   Json? user;
   bool ready = false;
+  late bool disclaimerAccepted;
+  bool needsOnboarding = false;
   String? startupError;
   late String language;
   late ThemeMode themeMode;
@@ -58,7 +61,40 @@ class AppState extends ChangeNotifier {
     await storage.write(key: 'auth_token', value: token);
     api.token = token;
     user = response['user'] as Json?;
+    needsOnboarding =
+        response['isNewUser'] == true &&
+        preferences.getBool('wellness_onboarding_completed') != true;
     startupError = null;
+    notifyListeners();
+  }
+
+  Future<void> finishOnboarding({List<String> interests = const []}) async {
+    await preferences.setStringList('wellness_interests', interests);
+    await preferences.setBool('wellness_onboarding_completed', true);
+    needsOnboarding = false;
+    notifyListeners();
+  }
+
+  Future<void> accountDeleted() async {
+    api.token = null;
+    user = null;
+    needsOnboarding = false;
+    await storage.delete(key: 'auth_token');
+    for (final key in [
+      'wellness_interests',
+      'wellness_onboarding_completed',
+      'reminder_enabled',
+      'reminder_hour',
+      'reminder_minute',
+    ]) {
+      await preferences.remove(key);
+    }
+    notifyListeners();
+  }
+
+  Future<void> acceptDisclaimer() async {
+    await preferences.setBool('disclaimer_accepted', true);
+    disclaimerAccepted = true;
     notifyListeners();
   }
 
@@ -75,8 +111,11 @@ class AppState extends ChangeNotifier {
     } finally {
       api.token = null;
       user = null;
-      await storage.delete(key: 'auth_token');
-      notifyListeners();
+      try {
+        await storage.delete(key: 'auth_token');
+      } finally {
+        notifyListeners();
+      }
     }
   }
 

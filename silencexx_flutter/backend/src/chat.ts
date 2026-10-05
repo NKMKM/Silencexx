@@ -89,6 +89,11 @@ export const getChatList = async (req: Request, res: Response) => {
     
     console.log(`👤 Getting chats for user ID: ${userId}`);
 
+    const parsedLimit = Number.parseInt(String(req.query.limit ?? '50'), 10);
+    const parsedOffset = Number.parseInt(String(req.query.offset ?? '0'), 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(parsedLimit, 100)) : 50;
+    const offset = Number.isFinite(parsedOffset) ? Math.max(0, parsedOffset) : 0;
+
     // Оптимизированный запрос с UNION и подзапросами
     const chatsQuery = `
       WITH last_messages AS (
@@ -123,16 +128,20 @@ export const getChatList = async (req: Request, res: Response) => {
       LEFT JOIN latest_per_chat lpc ON c.id = lpc.chat_id
       WHERE c.user_id = $1 AND (c.is_temporary = false OR c.is_temporary IS NULL)
       ORDER BY last_message_date DESC
-      LIMIT 50
+      LIMIT $2 OFFSET $3
     `;
 
     try {
-        const result = await query(chatsQuery, [userId]);
+        const [result, count] = await Promise.all([
+          query(chatsQuery, [userId, limit, offset]),
+          query(`SELECT COUNT(*)::int AS total FROM chat_id c WHERE c.user_id = $1 AND (c.is_temporary = false OR c.is_temporary IS NULL)`, [userId]),
+        ]);
         console.log(`✅ Found ${result.rows.length} chats`);
 
         res.json({
           success: true,
           chats: result.rows,
+          total: count.rows[0].total,
         });
     } catch (dbError: any) {
         console.error('❌ Database error in getChatList:', dbError.message);

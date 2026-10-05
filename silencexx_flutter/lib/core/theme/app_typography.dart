@@ -14,16 +14,16 @@ abstract final class AppTypography {
         .copyWith(
           headlineLarge: TextStyle(
             color: primary,
-            fontSize: 30,
+            fontSize: 36,
             height: 1.12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             letterSpacing: -1.15,
           ),
           headlineMedium: TextStyle(
             color: primary,
-            fontSize: 26,
+            fontSize: 30,
             height: 1.16,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             letterSpacing: -.85,
           ),
           headlineSmall: TextStyle(
@@ -53,13 +53,18 @@ abstract final class AppTypography {
             fontWeight: FontWeight.w600,
           ),
           bodyLarge: TextStyle(color: primary, fontSize: 16, height: 1.45),
-          bodyMedium: TextStyle(color: secondary, fontSize: 14, height: 1.45),
-          bodySmall: TextStyle(color: secondary, fontSize: 12, height: 1.4),
+          bodyMedium: TextStyle(color: secondary, fontSize: 15, height: 1.55),
+          bodySmall: TextStyle(color: secondary, fontSize: 13, height: 1.45),
           labelLarge: TextStyle(
             color: primary,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
+        )
+        .apply(
+          fontFamily: ThemeData(
+            brightness: brightness,
+          ).textTheme.bodyMedium?.fontFamily,
         );
   }
 }

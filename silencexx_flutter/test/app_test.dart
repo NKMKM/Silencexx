@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,12 +7,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:silencexx/core/api.dart';
 import 'package:silencexx/core/app_state.dart';
 import 'package:silencexx/main.dart';
+import 'package:silencexx/screens/auth_screen.dart';
+import 'package:silencexx/screens/chat_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
+    TestWidgetsFlutterBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
   });
 
   Future<AppState> state(
@@ -65,72 +72,85 @@ void main() {
     app.api.close();
   });
 
-  testWidgets(
-    'email login reaches the dashboard and sends the expected API body',
-    (tester) async {
-      tester.view.resetPhysicalSize();
-      final app = await state((request) async {
-        if (request.url.path.endsWith('/auth/login')) {
-          expect(jsonDecode(request.body), {
-            'method': 'email',
-            'contact': 'test@example.test',
-            'password': 'password123',
-          });
-          return http.Response(
-            '{"success":true,"token":"test-token","user":{"id":1,"name":"Test"}}',
-            200,
-          );
-        }
-        return http.Response('{"success":true,"chats":[]}', 200);
-      });
-      await app.restore();
-      await tester.pumpWidget(SilenceApp(state: app));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextFormField).at(0),
-        'test@example.test',
-      );
-      await tester.enterText(find.byType(TextFormField).at(1), 'password123');
-      await tester.ensureVisible(find.text('Войти'));
-      await tester.tap(find.text('Войти'));
-      await tester.pumpAndSettle();
-      expect(find.text('Новый разговор'), findsOneWidget);
-      expect(app.authenticated, isTrue);
-      app.api.close();
-    },
-  );
-
-  testWidgets('phone login requires OTP before accepting the session', (
+  testWidgets('provider sign-in has no legacy phone, email or password form', (
     tester,
   ) async {
+    final app = await state(
+      (_) async => http.Response('{"success":true}', 200),
+    );
+    await app.preferences.setBool('disclaimer_accepted', true);
+    app.disclaimerAccepted = true;
+    await app.restore();
+    await tester.pumpWidget(SilenceApp(state: app));
+    await tester.pumpAndSettle();
+    expect(find.byType(AuthScreen), findsOneWidget);
+    expect(find.text('Продолжить с Google'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+    expect(find.text('Телефон'), findsNothing);
+    expect(find.text('Пароль'), findsNothing);
+    app.api.close();
+  });
+
+  testWidgets('a restored accepted session opens the chat directly', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'disclaimer_accepted': true});
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'saved-token'});
     final app = await state((request) async {
-      if (request.url.path.endsWith('/auth/login')) {
-        return http.Response('{"success":true,"requiresOTP":true}', 200);
-      }
-      if (request.url.path.endsWith('/auth/verify-otp')) {
-        expect(jsonDecode(request.body)['code'], '123456');
+      if (request.url.path.endsWith('/auth/profile')) {
         return http.Response(
-          '{"success":true,"token":"phone-token","user":{"id":2}}',
+          '{"success":true,"user":{"id":1,"name":"Test"}}',
           200,
         );
       }
-      return http.Response('{"success":true,"chats":[]}', 200);
+      return http.Response('{"success":true,"chats":[],"messages":[]}', 200);
     });
     await app.restore();
     await tester.pumpWidget(SilenceApp(state: app));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.phone));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField), '+40123456789');
-    await tester.tap(find.text('Войти'));
-    await tester.pumpAndSettle();
-    expect(app.authenticated, isFalse);
-    expect(find.text('Код подтверждения'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField), '123456');
-    await tester.ensureVisible(find.text('Подтвердить'));
-    await tester.tap(find.text('Подтвердить'));
-    await tester.pumpAndSettle();
-    expect(app.authenticated, isTrue);
+    expect(find.byType(ChatScreen), findsOneWidget);
+    expect(find.byType(AuthScreen), findsNothing);
+    expect(find.text('Твоё пространство для себя'), findsNothing);
     app.api.close();
   });
+
+  test('logout removes the locally saved session', () async {
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'saved-token'});
+    final app = await state((request) async {
+      expect(request.url.path, endsWith('/auth/logout'));
+      return http.Response('{"success":true}', 200);
+    });
+    await app.restore();
+    await app.logout();
+    expect(app.authenticated, isFalse);
+    expect(await const FlutterSecureStorage().read(key: 'auth_token'), isNull);
+    app.api.close();
+  });
+
+  test(
+    'new account onboarding is optional and account deletion clears local state',
+    () async {
+      final app = await state(
+        (_) async => http.Response('{"success":true}', 200),
+      );
+      await app.acceptAuth({
+        'token': 'new-user-token',
+        'isNewUser': true,
+        'user': {'id': 3},
+      });
+      expect(app.needsOnboarding, isTrue);
+      await app.finishOnboarding(interests: ['reflection', 'talk']);
+      expect(app.preferences.getStringList('wellness_interests'), [
+        'reflection',
+        'talk',
+      ]);
+      await app.preferences.setBool('reminder_enabled', true);
+
+      await app.accountDeleted();
+      expect(app.authenticated, isFalse);
+      expect(app.preferences.getStringList('wellness_interests'), isNull);
+      expect(app.preferences.getBool('reminder_enabled'), isNull);
+      app.api.close();
+    },
+  );
 }

@@ -74,6 +74,12 @@ class Api {
         return http.Response.fromStream(await client.send(request));
       })().timeout(timeout);
       if (response.statusCode == 401 && token != null) onUnauthorized?.call();
+      if (response.body.contains('ERR_NGROK_3200')) {
+        throw ApiException(
+          'Сервер временно недоступен. Повторите попытку позже. / Server is offline. Please try again later.',
+          status: response.statusCode,
+        );
+      }
       Json data;
       try {
         data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);

@@ -29,8 +29,9 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final highContrast = MediaQuery.highContrastOf(context);
     final borderRadius = BorderRadius.circular(radius);
-    final tint = dark ? const Color(0xFF202744) : const Color(0xFFF9FAFF);
+    final tint = dark ? AppColors.surfaceRaised : const Color(0xFFF9FAFF);
     return RepaintBoundary(
       child: Container(
         margin: margin,
@@ -39,8 +40,8 @@ class GlassSurface extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: dark ? .30 : .08),
-              blurRadius: 26,
-              offset: const Offset(0, 12),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
             BoxShadow(
               color: AppColors.primary.withValues(alpha: dark ? .08 : .05),
@@ -52,12 +53,21 @@ class GlassSurface extends StatelessWidget {
         child: ClipRRect(
           borderRadius: borderRadius,
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+            filter: ImageFilter.blur(
+              sigmaX: highContrast ? 0 : blur,
+              sigmaY: highContrast ? 0 : blur,
+            ),
             child: AnimatedContainer(
-              duration: AppMotion.control,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : AppMotion.control,
               curve: AppMotion.enter,
               decoration: BoxDecoration(
-                color: tint.withValues(alpha: opacity + (focused ? .06 : 0)),
+                color: tint.withValues(
+                  alpha: highContrast
+                      ? 1
+                      : (opacity + (focused ? .06 : 0)).clamp(0, 1),
+                ),
                 borderRadius: borderRadius,
                 border: Border.all(
                   color: focused
@@ -72,7 +82,7 @@ class GlassSurface extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: dark
                       ? [
-                          Colors.white.withValues(alpha: .105),
+                          Colors.white.withValues(alpha: .065),
                           AppColors.primary.withValues(alpha: .035),
                           AppColors.secondary.withValues(alpha: .045),
                         ]
@@ -97,7 +107,7 @@ class GlassSurface extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             stops: const [0, .12, .68, 1],
                             colors: [
-                              Colors.white.withValues(alpha: dark ? .13 : .46),
+                              Colors.white.withValues(alpha: dark ? .065 : .46),
                               Colors.white.withValues(alpha: dark ? .045 : .12),
                               Colors.transparent,
                               AppColors.primary.withValues(alpha: .055),
@@ -132,7 +142,18 @@ class _BreathingIconState extends State<BreathingIcon>
   late final AnimationController controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 4),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      controller.stop();
+      controller.value = 0;
+    } else {
+      controller.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {

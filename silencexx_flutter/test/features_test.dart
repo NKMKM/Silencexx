@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:silencexx/core/api.dart';
 import 'package:silencexx/core/app_state.dart';
 import 'package:silencexx/main.dart';
+import 'package:silencexx/screens/home_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,9 @@ void main() {
     WidgetTester tester,
     Future<http.Response> Function(http.Request) handler,
   ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     final app = AppState(
@@ -24,8 +28,16 @@ void main() {
     app.api.token = 'token';
     app.user = {'id': 1, 'name': 'Test'};
     app.ready = true;
+    app.disclaimerAccepted = true;
+    app.language = 'ru';
     await tester.pumpWidget(SilenceApp(state: app));
     await tester.pumpAndSettle();
+    expect(
+      find.byType(HomeScreen),
+      findsOneWidget,
+      reason:
+          'ready=${app.ready}, authenticated=${app.authenticated}, disclaimer=${app.disclaimerAccepted}, onboarding=${app.needsOnboarding}',
+    );
     addTearDown(app.api.close);
     return app;
   }
@@ -35,6 +47,52 @@ void main() {
     200,
     headers: {'content-type': 'application/json; charset=utf-8'},
   );
+
+  Future<void> selectSection(WidgetTester tester, String label) async {
+    if (find.text(label).hitTestable().evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Открыть меню'));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('journal draft survives tab switching on a narrow screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final app = await boot(tester, (request) async {
+      if (request.url.path.endsWith('/journal/list')) {
+        return response({'dates': []});
+      }
+      if (request.url.path.endsWith('/journal/entry')) {
+        return response({'entry': null});
+      }
+      return response({'chats': []});
+    });
+    await selectSection(tester, 'Дневник');
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Мой черновик');
+    await selectSection(tester, 'Настройки');
+    await selectSection(tester, 'Дневник');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'Мой черновик',
+    );
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await app.setTheme(ThemeMode.light);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'daily task moves from locked to opened to completed with server IDs',
@@ -61,8 +119,7 @@ void main() {
         }
         return response({'chats': []});
       });
-      await tester.tap(find.text('Задания'));
-      await tester.pumpAndSettle();
+      await selectSection(tester, 'Маленькие шаги');
       await tester.tap(find.text('Открыть задание'));
       await tester.pumpAndSettle();
       expect(
@@ -100,15 +157,24 @@ void main() {
       }
       return response({'chats': []});
     });
-    await tester.tap(find.text('Дневник'));
+    await selectSection(tester, 'Дневник');
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'Хороший день');
     await tester.ensureVisible(find.text('Сохранить запись'));
     await tester.tap(find.text('Сохранить запись'));
     await tester.pumpAndSettle();
     expect(saved?['content'], 'Хороший день');
     expect(find.byType(TextField), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Хороший день'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('Хороший день'), findsOneWidget);
   });
 
@@ -128,7 +194,8 @@ void main() {
       }
       return response({'chats': []});
     });
-    await tester.tap(find.text('Почта'));
+    await selectSection(tester, 'Сообщения');
+    await tester.tap(find.text('Написать'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Хорошего дня!');
     await tester.ensureVisible(find.text('Отправить пожелание'));
@@ -150,7 +217,12 @@ void main() {
     tester,
   ) async {
     final app = await boot(tester, (_) async => response({'chats': []}));
-    await tester.tap(find.text('Настройки'));
+    await selectSection(tester, 'Настройки');
+    await tester.scrollUntilVisible(
+      find.text('Язык'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Язык'));
     await tester.pumpAndSettle();

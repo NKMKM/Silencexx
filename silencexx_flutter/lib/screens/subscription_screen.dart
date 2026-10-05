@@ -4,6 +4,7 @@ import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
+import '../widgets/design.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
@@ -28,16 +29,36 @@ class SubscriptionScreen extends StatelessWidget {
         final limits = data['limits'] as Json? ?? {};
         return PageBody(
           children: [
+            PageIntro(
+              title: context.tr('Больше пространства', 'More room for you'),
+              description: context.tr(
+                'Ваш тариф и доступные возможности — в одном месте.',
+                'Your plan and available features in one place.',
+              ),
+            ),
             SectionCard(
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.workspace_premium_outlined, color: AppColors.primaryBright),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      '${subscription['name'] ?? 'Free'}',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
+                  AppBadge(label: context.tr('Ваш тариф', 'Your plan')),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const QuietOrbit(
+                        size: 72,
+                        child: Icon(
+                          Icons.workspace_premium_outlined,
+                          color: AppColors.primaryBright,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          '${subscription['name'] ?? 'Free'}',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -49,29 +70,9 @@ class SubscriptionScreen extends StatelessWidget {
                   'Days remaining: ${subscription['daysUntilExpiry']}',
                 ),
               ),
-            SectionCard(
-              child: Column(
-                children: [
-                  for (final pair in [
-                    ('Chat', context.tr('Сообщения', 'Messages')),
-                    ('Voice', context.tr('Голос', 'Voice')),
-                    (
-                      'Analysis',
-                      context.tr('Анализ настроения', 'Mood analysis'),
-                    ),
-                    ('Journal', context.tr('Дневник', 'Journal')),
-                  ])
-                    ListTile(
-                      title: Text(pair.$2),
-                      trailing: Text(
-                        '${limits['daily${pair.$1}Used'] ?? 0} / ${limits['daily${pair.$1}Limit'] == -1 ? '∞' : limits['daily${pair.$1}Limit'] ?? '—'}',
-                      ),
-                    ),
-                ],
-              ),
-            ),
             if (subscription['slug'] != 'free' && subscription['slug'] != null)
               ActionButton(
+                secondary: true,
                 label: context.tr('Отменить подписку', 'Cancel subscription'),
                 action: () async {
                   final api = context.app.api;
@@ -96,10 +97,15 @@ class SubscriptionScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${plan['name']} · ${plan['price_monthly']} ₽ / ${context.tr('мес.', 'month')}',
+                      '${plan['name']}',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${plan['price_monthly']} ₽ / ${context.tr('мес.', 'month')}',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 14),
                     Text('${plan['description'] ?? ''}'),
                     Text(
                       context.tr(
@@ -125,11 +131,41 @@ class SubscriptionScreen extends StatelessWidget {
                   ],
                 ),
               ),
+            FormGroup(
+              title: context.tr('Использование сегодня', 'Today’s usage'),
+              children: [
+                for (final pair in [
+                  ('Chat', context.tr('Сообщения', 'Messages')),
+                  ('Voice', context.tr('Голос', 'Voice')),
+                  (
+                    'Analysis',
+                    context.tr('Анализ настроения', 'Mood analysis'),
+                  ),
+                  ('Journal', context.tr('Дневник', 'Journal')),
+                ])
+                  ListTile(
+                    title: Text(pair.$2),
+                    trailing: Text(
+                      '${limits['daily${pair.$1}Used'] ?? 0} / ${limits['daily${pair.$1}Limit'] == -1 ? '∞' : limits['daily${pair.$1}Limit'] ?? '—'}',
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.xl),
             Text(
               context.tr('История платежей', 'Payment history'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: 12),
+            if (rows(data, 'payments').isEmpty)
+              AppEmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: context.tr('Платежей пока нет', 'No payments yet'),
+                description: context.tr(
+                  'Чеки и история оплаты появятся здесь.',
+                  'Your receipts and payment history will appear here.',
+                ),
+              ),
             for (final payment in rows(data, 'payments'))
               ListTile(
                 title: Text(
@@ -167,11 +203,45 @@ class _PaymentScreenState extends State<PaymentScreen> {
     appBar: AppBar(
       title: Text(context.tr('Оформление подписки', 'Choose subscription')),
     ),
-    body: PageBody(
+    body: ActionPage(
+      action: ActionButton(
+        label: context.tr(
+          'Активировать в демо-режиме',
+          'Activate in demo mode',
+        ),
+        action: () async {
+          if (!RegExp(r'^\S+@\S+\.\S+$').hasMatch(email.text.trim())) {
+            throw ApiException(
+              context.tr('Введите email.', 'Enter an email address.'),
+            );
+          }
+          final api = context.app.api;
+          if (transactionId == null) {
+            final payment = await api.call(
+              '/payments/create',
+              method: 'POST',
+              body: {
+                'tierSlug': widget.plan['slug'],
+                'paymentMethod': 'card',
+                'email': email.text.trim(),
+              },
+            );
+            transactionId = payment['transactionId'] as String;
+          }
+          await api.call(
+            '/payments/confirm',
+            method: 'POST',
+            body: {'transactionId': transactionId},
+          );
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
       children: [
-        Text(
-          '${widget.plan['name']} · ${widget.plan['price_monthly']} ₽',
-          style: Theme.of(context).textTheme.headlineSmall,
+        PageIntro(
+          eyebrow: context.tr('Выбранный тариф', 'Selected plan'),
+          title: '${widget.plan['name']}',
+          description:
+              '${widget.plan['price_monthly']} ₽ / ${context.tr('мес.', 'month')}',
         ),
         const SizedBox(height: AppSpacing.lg),
         SectionCard(
@@ -189,38 +259,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           decoration: const InputDecoration(labelText: 'Email'),
         ),
         const SizedBox(height: AppSpacing.md),
-        ActionButton(
-          label: context.tr(
-            'Активировать в демо-режиме',
-            'Activate in demo mode',
-          ),
-          action: () async {
-            if (!RegExp(r'^\S+@\S+\.\S+$').hasMatch(email.text.trim())) {
-              throw ApiException(
-                context.tr('Введите email.', 'Enter an email address.'),
-              );
-            }
-            final api = context.app.api;
-            if (transactionId == null) {
-              final payment = await api.call(
-                '/payments/create',
-                method: 'POST',
-                body: {
-                  'tierSlug': widget.plan['slug'],
-                  'paymentMethod': 'card',
-                  'email': email.text.trim(),
-                },
-              );
-              transactionId = payment['transactionId'] as String;
-            }
-            await api.call(
-              '/payments/confirm',
-              method: 'POST',
-              body: {'transactionId': transactionId},
-            );
-            if (context.mounted) Navigator.pop(context);
-          },
-        ),
       ],
     ),
   );

@@ -7,6 +7,7 @@ import 'theme/app_motion.dart';
 import 'theme/app_radius.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
+import '../widgets/design.dart';
 
 ThemeData auroraTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
@@ -27,6 +28,19 @@ ThemeData auroraTheme(Brightness brightness) {
         error: AppColors.error,
         onError: Colors.white,
         onSurface: foreground,
+        surfaceContainerLowest: dark
+            ? AppColors.background
+            : AppColors.lightBackground,
+        surfaceContainerLow: dark
+            ? AppColors.backgroundSoft
+            : const Color(0xFFF5F4F7),
+        surfaceContainer: surface,
+        surfaceContainerHigh: dark
+            ? AppColors.surfaceRaised
+            : const Color(0xFFEEECF2),
+        surfaceContainerHighest: dark
+            ? AppColors.surfaceHighest
+            : const Color(0xFFE8E5ED),
       );
 
   return ThemeData(
@@ -35,19 +49,55 @@ ThemeData auroraTheme(Brightness brightness) {
     colorScheme: scheme,
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.android: CalmPageTransitions(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: ZoomPageTransitionsBuilder(),
-        TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+        TargetPlatform.macOS: CalmPageTransitions(),
+        TargetPlatform.windows: CalmPageTransitions(),
+        TargetPlatform.linux: CalmPageTransitions(),
       },
     ),
     scaffoldBackgroundColor: dark
-        ? Colors.transparent
+        ? AppColors.background
         : AppColors.lightBackground,
     canvasColor: dark ? AppColors.background : AppColors.lightBackground,
     dividerColor: dark ? AppColors.divider : const Color(0x14000000),
     textTheme: AppTypography.textTheme(brightness),
+    scrollbarTheme: ScrollbarThemeData(
+      thickness: const WidgetStatePropertyAll(3),
+      radius: const Radius.circular(8),
+      thumbColor: WidgetStatePropertyAll(muted.withValues(alpha: .25)),
+    ),
+    listTileTheme: ListTileThemeData(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      iconColor: muted,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: dark ? AppColors.surfaceHighest : const Color(0xFF29272F),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      waitDuration: const Duration(milliseconds: 500),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        side: WidgetStatePropertyAll(BorderSide(color: outline)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primary.withValues(alpha: .18)
+              : surface,
+        ),
+        foregroundColor: WidgetStatePropertyAll(foreground),
+      ),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
@@ -59,7 +109,7 @@ ThemeData auroraTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? AppColors.surfaceRaised : const Color(0xFFEEF0FA),
+      fillColor: dark ? AppColors.backgroundSoft : const Color(0xFFF0EEF4),
       hintStyle: TextStyle(color: dark ? AppColors.textTertiary : muted),
       labelStyle: TextStyle(color: muted),
       prefixIconColor: muted,
@@ -117,7 +167,7 @@ ThemeData auroraTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        textStyle: AppTypography.textTheme(brightness).labelLarge,
         animationDuration: AppMotion.control,
         splashFactory: InkRipple.splashFactory,
       ),
@@ -263,7 +313,7 @@ ThemeData auroraTheme(Brightness brightness) {
     ),
     textSelectionTheme: const TextSelectionThemeData(
       cursorColor: AppColors.primaryBright,
-      selectionColor: Color(0x665A2341),
+      selectionColor: Color(0x667866C6),
       selectionHandleColor: AppColors.primary,
     ),
   );

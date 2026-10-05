@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
 import '../core/app_state.dart';
@@ -6,6 +8,128 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
 import '../core/theme/app_radius.dart';
 import '../core/theme/app_spacing.dart';
+import 'design.dart';
+import 'glass.dart';
+
+class AppDialog extends StatelessWidget {
+  const AppDialog({
+    super.key,
+    required this.title,
+    this.content,
+    this.icon,
+    this.actions = const [],
+  });
+  final Widget title;
+  final Widget? content, icon;
+  final List<Widget> actions;
+  @override
+  Widget build(BuildContext context) => Dialog(
+    backgroundColor: Colors.transparent,
+    surfaceTintColor: Colors.transparent,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    elevation: 0,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: GlassSurface(
+        radius: 28,
+        opacity: .94,
+        blur: 12,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (icon != null) ...[icon!, const SizedBox(width: 12)],
+                Expanded(
+                  child: DefaultTextStyle(
+                    style: Theme.of(context).textTheme.titleLarge!,
+                    child: title,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: context.tr('Закрыть', 'Close'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                ),
+              ],
+            ),
+            if (content != null) ...[
+              const SizedBox(height: 20),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: DefaultTextStyle(
+                    style: Theme.of(context).textTheme.bodyMedium!,
+                    child: content!,
+                  ),
+                ),
+              ),
+            ],
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                spacing: 12,
+                overflowSpacing: 8,
+                children: actions,
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<T?> showAppDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  AnimationStyle? animationStyle,
+}) {
+  final reduced = MediaQuery.disableAnimationsOf(context);
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withValues(alpha: .46),
+    transitionDuration: reduced
+        ? Duration.zero
+        : (animationStyle?.duration ?? AppMotion.overlay),
+    pageBuilder: (context, animation, secondaryAnimation) => Stack(
+      children: [
+        if (!MediaQuery.highContrastOf(context))
+          Positioned.fill(
+            child: IgnorePointer(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        builder(context),
+      ],
+    ),
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = animation.drive(CurveTween(curve: AppMotion.enter));
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, .015),
+            end: Offset.zero,
+          ).animate(curved),
+          child: ScaleTransition(
+            scale: Tween(begin: .96, end: 1.0).animate(curved),
+            child: child,
+          ),
+        ),
+      );
+    },
+  );
+}
 
 void showError(BuildContext context, Object error) {
   if (!context.mounted) return;
@@ -25,11 +149,17 @@ void showError(BuildContext context, Object error) {
     ),
   );
   if (error is ApiException && error.data['isCrisis'] == true) {
-    showSupport(context);
+    showSupport(
+      context,
+      resources: error.data['helplines'] as List? ?? const [],
+    );
   }
 }
 
-Future<void> showSupport(BuildContext context) => showDialog<void>(
+Future<void> showSupport(
+  BuildContext context, {
+  List resources = const [],
+}) => showAppDialog<void>(
   context: context,
   animationStyle: const AnimationStyle(
     duration: AppMotion.overlay,
@@ -37,29 +167,63 @@ Future<void> showSupport(BuildContext context) => showDialog<void>(
     curve: AppMotion.enter,
     reverseCurve: AppMotion.exit,
   ),
-  builder: (context) => AlertDialog(
+  builder: (context) => AppDialog(
     icon: const Icon(
       Icons.favorite_outline_rounded,
       color: AppColors.primaryBright,
     ),
-    title: Text(context.tr('Поддержка рядом', 'Support is available')),
-    content: Text(
-      context.tr(
-        'Вы можете связаться с близким человеком или специалистом. Если есть непосредственная опасность, обратитесь в местную экстренную службу. Приложение не заменяет профессиональную помощь.',
-        'You can reach out to someone you trust or a professional. If you are in immediate danger, contact your local emergency services. This app does not replace professional care.',
-      ),
+    title: Text(context.tr('Ты не один(одна)', 'You’re not alone')),
+    content: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          context.tr(
+            'Мне жаль, что сейчас так тяжело. Если тебе угрожает непосредственная опасность, обратись в местную экстренную службу. Если можешь, позови близкого человека и побудь рядом с ним.',
+            'I’m sorry this feels so hard right now. If you may be in immediate danger, contact your local emergency service. If you can, reach someone you trust and stay with them.',
+          ),
+        ),
+        if (resources.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          for (final item in resources.whereType<Map>())
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.open_in_new_rounded),
+              title: Text(
+                '${item['name'] ?? context.tr('Ресурс поддержки', 'Support resource')}',
+              ),
+              subtitle: Text('${item['number'] ?? item['url'] ?? ''}'),
+              onTap: () async {
+                final number = '${item['number'] ?? ''}'.trim();
+                final url = '${item['url'] ?? ''}'.trim();
+                final uri = Uri.tryParse(url.isNotEmpty ? url : 'tel:$number');
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          context.tr(
+            'Это приложение не заменяет помощь квалифицированного специалиста или экстренную службу.',
+            'This app is not a replacement for qualified professional or emergency help.',
+          ),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: Text(context.tr('Понятно', 'OK')),
+        child: Text(context.tr('Продолжить разговор', 'Continue talking')),
       ),
     ],
   ),
 );
 
 Future<bool> confirm(BuildContext context, String title) async =>
-    await showDialog<bool>(
+    await showAppDialog<bool>(
       context: context,
       animationStyle: const AnimationStyle(
         duration: AppMotion.overlay,
@@ -67,7 +231,7 @@ Future<bool> confirm(BuildContext context, String title) async =>
         curve: AppMotion.enter,
         reverseCurve: AppMotion.exit,
       ),
-      builder: (context) => AlertDialog(
+      builder: (context) => AppDialog(
         icon: const Icon(Icons.help_outline_rounded, color: AppColors.info),
         title: Text(title),
         actions: [
@@ -90,42 +254,87 @@ class PageBody extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.topCenter,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 880),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenHorizontal,
-          AppSpacing.sm,
-          AppSpacing.screenHorizontal,
-          AppSpacing.xxl,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final horizontal = constraints.maxWidth >= 760
+          ? 40.0
+          : AppSpacing.screenHorizontal;
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 40),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            children: children,
+          ),
         ),
-        children: children,
-      ),
-    ),
+      );
+    },
   );
 }
 
-class SectionCard extends StatelessWidget {
-  const SectionCard({super.key, required this.child});
-
+class SectionCard extends StatefulWidget {
+  const SectionCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(24),
+    this.onTap,
+  });
   final Widget child;
+  final EdgeInsetsGeometry padding;
+  final VoidCallback? onTap;
+  @override
+  State<SectionCard> createState() => _SectionCardState();
+}
 
+class _SectionCardState extends State<SectionCard> {
+  bool hovered = false;
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(
-          color: dark ? AppColors.border : const Color(0x142D3554),
+    final interactive = widget.onTap != null;
+    return MouseRegion(
+      onEnter: (_) {
+        if (interactive) setState(() => hovered = true);
+      },
+      onExit: (_) {
+        if (interactive) setState(() => hovered = false);
+      },
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : AppMotion.control,
+        curve: AppMotion.enter,
+        transform: Matrix4.translationValues(0, hovered ? -2 : 0, 0),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? .10 : .025),
+              blurRadius: hovered ? 20 : 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: hovered
+              ? Theme.of(context).colorScheme.surfaceContainerHigh
+              : Theme.of(context).colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: dark ? AppColors.border : const Color(0x102D3554),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            child: Padding(padding: widget.padding, child: widget.child),
+          ),
         ),
       ),
-      child: child,
     );
   }
 }
@@ -210,26 +419,92 @@ class AppEmptyState extends StatelessWidget {
 
 class AppLoadingState extends StatelessWidget {
   const AppLoadingState({super.key, this.label});
-
   final String? label;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label ?? context.tr('Загрузка', 'Loading'),
+    liveRegion: true,
+    child: Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: AppSkeleton(width: 140, height: 16),
+              ),
+              const SizedBox(height: 16),
+              const AppSkeleton(height: 36),
+              const SizedBox(height: 28),
+              const AppSkeleton(height: 140),
+              const SizedBox(height: 16),
+              const AppSkeleton(height: 72),
+              if (label != null) ...[
+                const SizedBox(height: 20),
+                Text(
+                  label!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class AppSkeleton extends StatefulWidget {
+  const AppSkeleton({super.key, required this.height, this.width});
+  final double height;
+  final double? width;
+  @override
+  State<AppSkeleton> createState() => _AppSkeletonState();
+}
+
+class _AppSkeletonState extends State<AppSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      controller.stop();
+    } else {
+      controller.repeat(reverse: true);
+    }
+  }
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.2),
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => Opacity(
+        opacity: .45 + controller.value * .30,
+        child: Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: .09),
+            borderRadius: BorderRadius.circular(16),
           ),
-          if (label != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(label!, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ],
+        ),
       ),
     ),
   );
@@ -251,7 +526,9 @@ class _AsyncPanelState extends State<AsyncPanel> {
   void reload() {
     if (!mounted) return;
     final request = widget.load();
-    setState(() => future = request);
+    setState(() {
+      future = request;
+    });
   }
 
   @override
@@ -284,7 +561,7 @@ class _AsyncPanelState extends State<AsyncPanel> {
           ),
         );
       }
-      return widget.builder(context, snapshot.data!, reload);
+      return PageReveal(child: widget.builder(context, snapshot.data!, reload));
     },
   );
 }
@@ -301,20 +578,32 @@ class PressScale extends StatefulWidget {
 
 class _PressScaleState extends State<PressScale> {
   bool pressed = false;
+  bool hovered = false;
 
   @override
-  Widget build(BuildContext context) => Listener(
-    behavior: HitTestBehavior.translucent,
-    onPointerDown: (_) => setState(() => pressed = true),
-    onPointerUp: (_) => setState(() => pressed = false),
-    onPointerCancel: (_) => setState(() => pressed = false),
-    child: AnimatedScale(
-      scale: pressed && !MediaQuery.disableAnimationsOf(context)
-          ? widget.scale
-          : 1,
-      duration: AppMotion.press,
-      curve: AppMotion.spring,
-      child: widget.child,
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => hovered = true),
+    onExit: (_) => setState(() {
+      hovered = false;
+      pressed = false;
+    }),
+    child: Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => setState(() => pressed = true),
+      onPointerUp: (_) => setState(() => pressed = false),
+      onPointerCancel: (_) => setState(() => pressed = false),
+      child: AnimatedScale(
+        scale: MediaQuery.disableAnimationsOf(context)
+            ? 1
+            : pressed
+            ? widget.scale
+            : hovered
+            ? 1.012
+            : 1,
+        duration: AppMotion.press,
+        curve: AppMotion.spring,
+        child: widget.child,
+      ),
     ),
   );
 }
@@ -325,8 +614,10 @@ class ActionButton extends StatefulWidget {
     required this.label,
     required this.action,
     this.icon,
+    this.secondary = false,
   });
 
+  final bool secondary;
   final String label;
   final Future<void> Function() action;
   final IconData? icon;
@@ -341,6 +632,14 @@ class _ActionButtonState extends State<ActionButton> {
   @override
   Widget build(BuildContext context) => PressScale(
     child: FilledButton.icon(
+      style: widget.secondary
+          ? FilledButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest,
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+            )
+          : null,
       onPressed: busy
           ? null
           : () async {
@@ -379,3 +678,108 @@ class _ActionButtonState extends State<ActionButton> {
 
 String dateKey(DateTime date) =>
     '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+/// Shared page hierarchy: introduction, grouped content, then a primary action.
+class PageIntro extends StatelessWidget {
+  const PageIntro({
+    super.key,
+    required this.title,
+    required this.description,
+    this.eyebrow,
+  });
+  final String title, description;
+  final String? eyebrow;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 16, bottom: 28),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (eyebrow != null) ...[
+          Text(
+            eyebrow!,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Text(title, style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 10),
+        Text(description, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    ),
+  );
+}
+
+class FormGroup extends StatelessWidget {
+  const FormGroup({super.key, required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 10),
+          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The action stays reachable while the content scrolls, including with a keyboard.
+class ActionPage extends StatelessWidget {
+  const ActionPage({super.key, required this.children, required this.action});
+  final List<Widget> children;
+  final Widget action;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxHeight <
+          280 * MediaQuery.textScalerOf(context).scale(14) / 14) {
+        return PageBody(
+          children: [...children, const SizedBox(height: 20), action],
+        );
+      }
+      return Column(
+        children: [
+          Expanded(child: PageBody(children: children)),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: GlassSurface(
+                radius: 24,
+                opacity: .8,
+                blur: 10,
+                margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: Center(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: SizedBox(width: double.infinity, child: action),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}

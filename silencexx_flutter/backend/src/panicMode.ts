@@ -90,7 +90,7 @@ If you need to talk more, I'm here."`;
 Please consider:
 - Calling a trusted person (friend, family)
 - Contacting a professional (psychologist, helpline)
-- In emergency, call 112 or your local crisis number
+- If there is immediate danger, contact the local emergency service or a configured crisis resource. Never guess a phone number.
 
 I'm here to help, but I have limits. Professional help is trained for this. You don't have to do this alone."`;
     }

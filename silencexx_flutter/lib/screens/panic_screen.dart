@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
-import '../core/theme/app_gradients.dart';
+import '../widgets/design.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
 
@@ -123,20 +123,61 @@ class _PanicScreenState extends State<PanicScreen> {
     ];
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Я рядом', 'I am here'))),
-      body: PageBody(
+      body: ActionPage(
+        action: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (step < 10)
+              ActionButton(
+                label: step == -1
+                    ? context.tr('Начать', 'Begin')
+                    : step == 9
+                    ? context.tr('Завершить', 'Finish')
+                    : context.tr('Продолжить', 'Continue'),
+                action: advance,
+              )
+            else
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(context.tr('Вернуться', 'Go back')),
+              ),
+            TextButton.icon(
+              onPressed: () => showSupport(context),
+              icon: const Icon(Icons.people_outline),
+              label: Text(
+                context.tr('Обратиться за поддержкой', 'Reach out for support'),
+              ),
+            ),
+          ],
+        ),
         children: [
+          if (step == -1 || step == 10)
+            Center(
+              child: QuietOrbit(
+                size: 180,
+                child: Icon(
+                  step == 10 ? Icons.check_rounded : Icons.spa_outlined,
+                  color: AppColors.primaryBright,
+                  size: 36,
+                ),
+              ),
+            ),
           if (step >= 0 && step < 10)
             ClipRRect(
               borderRadius: BorderRadius.circular(99),
               child: LinearProgressIndicator(value: step / 10, minHeight: 4),
             ),
-          const SizedBox(height: AppSpacing.xl),
-          const Icon(
-            Icons.favorite_outline,
-            size: 56,
-            color: AppColors.primaryBright,
+          PageIntro(
+            eyebrow: step >= 0 && step < 10
+                ? context.tr('Шаг ${step + 1} из 10', 'Step ${step + 1} of 10')
+                : context.tr('В своём темпе', 'At your own pace'),
+            title: context.tr('Побудем здесь', 'Stay here a moment'),
+            description: context.tr(
+              'Один небольшой шаг за раз. Можно остановиться в любой момент.',
+              'One small step at a time. You can stop whenever you want.',
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
           Text(
             step < 0
                 ? context.tr(
@@ -150,13 +191,17 @@ class _PanicScreenState extends State<PanicScreen> {
                   )
                 : prompts[step],
             style: Theme.of(context).textTheme.headlineSmall,
-            textAlign: TextAlign.center,
+            textAlign: TextAlign.start,
           ),
           const SizedBox(height: AppSpacing.lg),
           if (response.isNotEmpty && step < 10)
             SectionCard(child: Text(response)),
           if (step == 0 || step == 9) ...[
-            Text('${level.round()} / 10', textAlign: TextAlign.center),
+            Text(
+              '${level.round()} / 10',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
             Slider(
               value: level,
               min: 1,
@@ -179,28 +224,6 @@ class _PanicScreenState extends State<PanicScreen> {
                 ),
               ),
             ),
-          const SizedBox(height: 20),
-          if (step < 10)
-            ActionButton(
-              label: step == -1
-                  ? context.tr('Начать', 'Begin')
-                  : step == 9
-                  ? context.tr('Завершить', 'Finish')
-                  : context.tr('Продолжить', 'Continue'),
-              action: advance,
-            )
-          else
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.tr('Вернуться', 'Go back')),
-            ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () => showSupport(context),
-            child: Text(
-              context.tr('Обратиться за поддержкой', 'Reach out for support'),
-            ),
-          ),
         ],
       ),
     );
@@ -237,33 +260,45 @@ class _BreathingCircleState extends State<BreathingCircle> {
       children: [
         const SizedBox(height: AppSpacing.xxl),
         SizedBox(
-          height: 180,
+          height: 220,
           child: Center(
-            child: AnimatedContainer(
-              duration: Duration(
-                seconds: phase < 4
-                    ? 4
-                    : phase < 6
-                    ? 2
-                    : 6,
-              ),
-              curve: Curves.easeInOut,
-              width: phase < 6 ? 170 : 100,
-              height: phase < 6 ? 170 : 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: AppGradients.accent,
-              ),
-              child: Center(
-                child: Text(
-                  phase < 4
-                      ? context.tr('Вдох', 'Breathe in')
-                      : phase < 6
-                      ? context.tr('Пауза', 'Pause')
-                      : context.tr('Выдох', 'Breathe out'),
-                  style: const TextStyle(color: Colors.white, fontSize: 20),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedScale(
+                  scale: phase < 6 ? 1 : .65,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : Duration(
+                          seconds: phase < 4
+                              ? 4
+                              : phase < 6
+                              ? 2
+                              : 6,
+                        ),
+                  curve: Curves.easeInOut,
+                  child: const QuietOrbit(size: 220),
                 ),
-              ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.air_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 28,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      phase < 4
+                          ? context.tr('Вдох', 'Breathe in')
+                          : phase < 6
+                          ? context.tr('Пауза', 'Pause')
+                          : context.tr('Выдох', 'Breathe out'),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

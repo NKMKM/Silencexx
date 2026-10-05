@@ -1,15 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import '../core/api.dart';
+import '../core/auth_service.dart';
 import '../core/app_state.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_gradients.dart';
-import '../core/theme/app_radius.dart';
-import '../core/theme/app_shadows.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
+import '../widgets/design.dart';
+import '../widgets/glass.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -18,448 +15,195 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final form = GlobalKey<FormState>();
-  final contact = TextEditingController();
-  final name = TextEditingController();
-  final password = TextEditingController();
-  final code = TextEditingController();
-  bool register = false, phone = false, otp = false, accepted = false;
-  @override
-  void dispose() {
-    contact.dispose();
-    name.dispose();
-    password.dispose();
-    code.dispose();
-    super.dispose();
-  }
+  bool loading = false;
+  String? provider;
 
-  Future<void> submit() async {
-    if (!form.currentState!.validate()) return;
-    final app = context.app;
-    if (register && !accepted && !otp) {
-      throw ApiException(
-        context.tr(
-          'Примите условия использования.',
-          'Please accept the terms.',
-        ),
-      );
+  Future<void> authenticate(String name, Future<void> Function() action) async {
+    if (loading) return;
+    setState(() {
+      loading = true;
+      provider = name;
+    });
+    try {
+      await action();
+    } on SignInWithAppleAuthorizationException catch (error) {
+      if (error.code != AuthorizationErrorCode.canceled && mounted) {
+        showError(context, error);
+      }
+    } catch (error) {
+      if (mounted) {
+        showError(context, error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          provider = null;
+        });
+      }
     }
-    final response = await app.api.call(
-      otp
-          ? '/auth/verify-otp'
-          : register
-          ? '/auth/register'
-          : '/auth/login',
-      method: 'POST',
-      body: otp
-          ? {'contact': contact.text.trim(), 'code': code.text.trim()}
-          : {
-              'method': phone ? 'phone' : 'email',
-              'contact': contact.text.trim(),
-              if (register) 'name': name.text.trim(),
-              'password': password.text,
-            },
-    );
-    if (response['requiresOTP'] == true) {
-      if (mounted) setState(() => otp = true);
-    } else {
-      await app.acceptAuth(response);
-    }
-  }
-
-  Future<void> google() async {
-    const clientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
-    const serverId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
-    final app = context.app;
-    final account = await GoogleSignIn(
-      clientId: clientId.isEmpty ? null : clientId,
-      serverClientId: serverId.isEmpty ? null : serverId,
-      scopes: ['email', 'profile'],
-    ).signIn();
-    if (account == null) return;
-    final auth = await account.authentication;
-    if (auth.idToken == null) {
-      throw const ApiException('Google did not return an ID token');
-    }
-    await app.acceptAuth(
-      await app.api.call(
-        '/auth/oauth/google',
-        method: 'POST',
-        body: {
-          'idToken': auth.idToken,
-          'email': account.email,
-          'name': account.displayName,
-          'googleId': account.id,
-        },
-      ),
-    );
-  }
-
-  Future<void> apple() async {
-    final app = context.app;
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-    );
-    await app.acceptAuth(
-      await app.api.call(
-        '/auth/oauth/apple',
-        method: 'POST',
-        body: {
-          'identityToken': credential.identityToken,
-          'appleId': credential.userIdentifier,
-          'email': credential.email,
-          'name': '${credential.givenName ?? ''} ${credential.familyName ?? ''}'
-              .trim(),
-        },
-      ),
-    );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Form(
-              key: form,
-              child: Container(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.xxl),
-                  gradient: AppGradients.card,
-                  border: Border.all(color: AppColors.border),
-                  boxShadow: AppShadows.ambient,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 62,
-                        height: 62,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppRadius.lg),
-                          boxShadow: AppShadows.accent,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(AppRadius.lg),
-                          child: Image.asset(
-                            'assets/images/cloudmind_icon.png',
-                            fit: BoxFit.cover,
-                          ),
+  Widget build(BuildContext context) {
+    final auth = AuthService(context.app);
+    final appleAvailable =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    return Scaffold(
+      body: SafeArea(
+        child: AuthFrame(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: PageReveal(
+                child: GlassSurface(
+                  radius: 32,
+                  opacity: .68,
+                  blur: 16,
+                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(
+                        child: QuietOrbit(
+                          size: 88,
+                          child: Icon(Icons.auto_awesome_outlined, size: 26),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'CloudMind',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    Text(
-                      context.tr(
-                        'Твой спокойный разум',
-                        'A little space for peace',
+                      const SizedBox(height: 18),
+                      Text(
+                        context.tr('С возвращением', 'Welcome back'),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-                    Text(
-                      otp
-                          ? context.tr('Код подтверждения', 'Verification code')
-                          : register
-                          ? context.tr('Создать аккаунт', 'Create account')
-                          : context.tr('С возвращением', 'Welcome back'),
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    if (!otp) ...[
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: false, label: Text('Email')),
-                          ButtonSegment(value: true, icon: Icon(Icons.phone)),
-                        ],
-                        selected: {phone},
-                        onSelectionChanged: (v) =>
-                            setState(() => phone = v.first),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.tr(
+                          'Здесь можно спокойно подумать, поделиться и поговорить.',
+                          'A calmer space to think, reflect and talk.',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      if (register) ...[
-                        TextFormField(
-                          controller: name,
-                          decoration: InputDecoration(
-                            labelText: context.tr('Имя', 'Name'),
-                          ),
-                          validator: (v) => (v?.trim().length ?? 0) < 2
-                              ? context.tr(
-                                  'Минимум 2 символа',
-                                  'At least 2 characters',
-                                )
-                              : null,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextFormField(
-                        controller: contact,
-                        keyboardType: phone
-                            ? TextInputType.phone
-                            : TextInputType.emailAddress,
-                        autofillHints: [
-                          phone
-                              ? AutofillHints.telephoneNumber
-                              : AutofillHints.email,
-                        ],
-                        decoration: InputDecoration(
-                          labelText: phone
-                              ? context.tr('Телефон', 'Phone')
-                              : 'Email',
-                        ),
-                        validator: (v) =>
-                            v == null ||
-                                (phone
-                                    ? !RegExp(
-                                        r'^\+?[0-9\s()-]{7,}$',
-                                      ).hasMatch(v)
-                                    : !RegExp(
-                                        r'^\S+@\S+\.\S+$',
-                                      ).hasMatch(v.trim()))
-                            ? context.tr(
-                                'Проверьте адрес или номер',
-                                'Check your email or phone number',
-                              )
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      if (!phone || register)
-                        TextFormField(
-                          controller: password,
-                          obscureText: true,
-                          autofillHints: [
-                            register
-                                ? AutofillHints.newPassword
-                                : AutofillHints.password,
-                          ],
-                          decoration: InputDecoration(
-                            labelText: context.tr('Пароль', 'Password'),
-                          ),
-                          validator: (v) =>
-                              (v?.length ?? 0) < (register ? 8 : 1)
-                              ? context.tr(
-                                  'Введите пароль (при регистрации от 8 символов)',
-                                  'Enter password (8+ characters for registration)',
-                                )
-                              : null,
-                        ),
-                      if (register)
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          value: accepted,
-                          onChanged: (v) => setState(() => accepted = v!),
-                          title: Text(
-                            context.tr(
-                              'Я понимаю: приложение не заменяет профессиональную помощь.',
-                              'I understand this app does not replace professional care.',
+                      const SizedBox(height: 28),
+                      if (appleAvailable) ...[
+                        SizedBox(
+                          height: 54,
+                          child: SignInWithAppleButton(
+                            onPressed: loading
+                                ? () {}
+                                : () => authenticate(
+                                    'apple',
+                                    auth.signInWithApple,
+                                  ),
+                            text: context.tr(
+                              'Продолжить с Apple',
+                              'Continue with Apple',
+                            ),
+                            style:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? SignInWithAppleButtonStyle.white
+                                : SignInWithAppleButtonStyle.black,
+                            borderRadius: const BorderRadius.all(
+                              Radius.circular(16),
                             ),
                           ),
                         ),
-                    ] else ...[
-                      Text(contact.text),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: code,
-                        keyboardType: TextInputType.number,
-                        autofillHints: const [AutofillHints.oneTimeCode],
-                        decoration: InputDecoration(
-                          labelText: context.tr('Код из SMS', 'SMS code'),
-                        ),
-                        validator: (v) => (v?.length ?? 0) != 6
-                            ? context.tr('Введите 6 цифр', 'Enter 6 digits')
-                            : null,
-                      ),
-                      ActionButton(
-                        label: context.tr(
-                          'Отправить код повторно',
-                          'Resend code',
-                        ),
-                        action: () async {
-                          await context.app.api.call(
-                            '/auth/resend-otp',
-                            method: 'POST',
-                            body: {'contact': contact.text.trim()},
-                          );
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    ActionButton(
-                      label: otp
-                          ? context.tr('Подтвердить', 'Verify')
-                          : register
-                          ? context.tr('Зарегистрироваться', 'Register')
-                          : context.tr('Войти', 'Sign in'),
-                      action: submit,
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() {
-                        otp = false;
-                        register = !register;
-                      }),
-                      child: Text(
-                        register
-                            ? context.tr(
-                                'Уже есть аккаунт? Войти',
-                                'Already registered? Sign in',
-                              )
-                            : context.tr('Создать аккаунт', 'Create account'),
-                      ),
-                    ),
-                    if (!register && !otp)
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ResetPasswordScreen(),
+                        const SizedBox(height: 12),
+                      ],
+                      SizedBox(
+                        height: 54,
+                        child: OutlinedButton.icon(
+                          onPressed: loading
+                              ? null
+                              : () => authenticate(
+                                  'google',
+                                  auth.signInWithGoogle,
+                                ),
+                          icon: const _GoogleMark(),
+                          label: Text(
+                            context.tr(
+                              'Продолжить с Google',
+                              'Continue with Google',
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          context.tr('Забыли пароль?', 'Forgot password?'),
+                      ),
+                      if (loading) ...[
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              context.tr(
+                                'Подключаем ${provider ?? ''}…',
+                                'Connecting to ${provider ?? ''}…',
+                              ),
+                            ),
+                          ],
                         ),
+                      ],
+                      const SizedBox(height: 28),
+                      const Divider(),
+                      const SizedBox(height: 14),
+                      Text(
+                        context.tr(
+                          'О ваших разговорах',
+                          'About your conversations',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleSmall,
                       ),
-                    if (!kIsWeb &&
-                        const bool.fromEnvironment('ENABLE_GOOGLE_SIGN_IN'))
-                      ActionButton(
-                        label: 'Google',
-                        action: google,
-                        icon: Icons.login,
+                      const SizedBox(height: 6),
+                      Text(
+                        context.tr(
+                          'Сообщения передаются серверу приложения для формирования ответов и могут сохраняться в истории аккаунта.',
+                          'Messages are sent to the app’s server to generate replies and may be saved in your account history.',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
-                    if (!kIsWeb &&
-                        defaultTargetPlatform == TargetPlatform.iOS &&
-                        const bool.fromEnvironment('ENABLE_APPLE_SIGN_IN'))
-                      ActionButton(
-                        label: 'Apple',
-                        action: apple,
-                        icon: Icons.apple,
+                      const SizedBox(height: 16),
+                      Text(
+                        context.tr(
+                          'Продолжая, вы принимаете ограничения приложения, показанные перед входом. Информация о них также доступна в настройках.',
+                          'By continuing, you acknowledge the app limitations shown before sign-in. You can review them again in Settings.',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall,
                       ),
-                    TextButton(
-                      onPressed: () => context.app.setLanguage(
-                        context.app.language == 'ru' ? 'en' : 'ru',
-                      ),
-                      child: const Text('Русский / English'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
-
-class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({super.key});
-  @override
-  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
-}
-
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  final email = TextEditingController(),
-      token = TextEditingController(),
-      password = TextEditingController();
-  bool sent = false;
-  @override
-  void dispose() {
-    email.dispose();
-    token.dispose();
-    password.dispose();
-    super.dispose();
+    );
   }
+}
 
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(context.tr('Восстановление пароля', 'Reset password')),
-    ),
-    body: PageBody(
-      children: [
-        SectionCard(
-          child: Column(
-            children: [
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              ActionButton(
-                label: context.tr('Получить письмо', 'Send reset email'),
-                action: () async {
-                  await context.app.api.call(
-                    '/auth/request-password-reset',
-                    method: 'POST',
-                    body: {'email': email.text.trim()},
-                  );
-                  if (mounted) setState(() => sent = true);
-                },
-              ),
-              if (sent) ...[
-                const SizedBox(height: 20),
-                Text(
-                  context.tr(
-                    'Если адрес зарегистрирован, письмо отправлено. Вставьте токен из ссылки в письме.',
-                    'If the address is registered, an email has been sent. Paste the token from its reset link.',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: token,
-                  decoration: InputDecoration(
-                    labelText: context.tr('Токен', 'Token'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: password,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: context.tr('Новый пароль', 'New password'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ActionButton(
-                  label: context.tr('Сохранить пароль', 'Save password'),
-                  action: () async {
-                    if (password.text.length < 8 || token.text.trim().isEmpty) {
-                      throw ApiException(
-                        context.tr(
-                          'Введите токен и пароль от 8 символов.',
-                          'Enter a token and a password of at least 8 characters.',
-                        ),
-                      );
-                    }
-                    await context.app.api.call(
-                      '/auth/reset-password-with-token',
-                      method: 'POST',
-                      body: {
-                        'token': token.text.trim(),
-                        'newPassword': password.text,
-                      },
-                    );
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+  Widget build(BuildContext context) => const Text(
+    'G',
+    style: TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 20,
+      color: Color(0xff4285F4),
     ),
   );
 }

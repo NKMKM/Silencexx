@@ -5,6 +5,7 @@ import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
+import '../widgets/design.dart';
 
 class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key});
@@ -14,23 +15,66 @@ class TasksScreen extends StatelessWidget {
     builder: (context, data, reload) {
       final task = data['task'] as Json;
       final status = '${task['status']}';
-      return PageBody(
+      return ActionPage(
+        action: status == 'completed'
+            ? Text(
+                context.tr(
+                  'Выполнено. Вы позаботились о себе!',
+                  'Completed. You made time for yourself!',
+                ),
+                textAlign: TextAlign.center,
+              )
+            : ActionButton(
+                label: status == 'locked'
+                    ? context.tr('Открыть задание', 'Open task')
+                    : context.tr('Я выполнил(а)', 'Mark complete'),
+                action: () async {
+                  await context.app.api.call(
+                    '/daily-task/${status == 'locked' ? 'open' : 'complete'}',
+                    method: 'PUT',
+                    body: {'taskId': task['id']},
+                  );
+                  reload();
+                },
+              ),
         children: [
-          Text(
-            context.tr('Маленький шаг для себя', 'A small step for yourself'),
-            style: Theme.of(context).textTheme.headlineSmall,
+          PageIntro(
+            eyebrow: context.tr('Практика на сегодня', 'Today’s practice'),
+            title: context.tr(
+              'Маленький шаг для себя',
+              'A small step for yourself',
+            ),
+            description: context.tr(
+              'Не нужно успевать всё. Начните с одного действия.',
+              'You don’t have to do everything. Start with one action.',
+            ),
           ),
-          const SizedBox(height: AppSpacing.md),
           SectionCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  status == 'completed' ? Icons.verified : Icons.spa_outlined,
-                  size: 44,
-                  color: status == 'completed'
-                      ? AppColors.success
-                      : AppColors.primaryBright,
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    QuietOrbit(
+                      size: 92,
+                      child: Icon(
+                        status == 'completed'
+                            ? Icons.check_rounded
+                            : Icons.spa_outlined,
+                        size: 30,
+                        color: AppColors.primaryBright,
+                      ),
+                    ),
+                    AppBadge(
+                      label: status == 'completed'
+                          ? context.tr('Готово', 'Complete')
+                          : context.tr('На сегодня', 'For today'),
+                      icon: Icons.today_outlined,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
@@ -54,27 +98,6 @@ class TasksScreen extends StatelessWidget {
                   Text('${task['description'] ?? ''}'),
                 ],
                 const SizedBox(height: AppSpacing.lg),
-                if (status == 'completed')
-                  Text(
-                    context.tr(
-                      'Выполнено. Вы позаботились о себе!',
-                      'Completed. You made time for yourself!',
-                    ),
-                  )
-                else
-                  ActionButton(
-                    label: status == 'locked'
-                        ? context.tr('Открыть задание', 'Open task')
-                        : context.tr('Я выполнил(а)', 'Mark complete'),
-                    action: () async {
-                      await context.app.api.call(
-                        '/daily-task/${status == 'locked' ? 'open' : 'complete'}',
-                        method: 'PUT',
-                        body: {'taskId': task['id']},
-                      );
-                      reload();
-                    },
-                  ),
               ],
             ),
           ),

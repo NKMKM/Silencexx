@@ -23,7 +23,8 @@ import {
   requestPasswordReset,
   resetPasswordWithToken,
   getEmailChangeStatus,
-  uploadAvatar
+  uploadAvatar,
+  deleteAccount,
 } from './auth';
 import { googleAuth, appleAuth } from './oauth';
 import { 
@@ -85,6 +86,18 @@ import { preloadCommonResponses } from './cache';
 
 const app = express();
 
+const configuredCrisisResources = () => {
+  try {
+    const resources = JSON.parse(process.env.CRISIS_RESOURCES_JSON ?? '[]');
+    return Array.isArray(resources) ? resources.filter((item) =>
+      item && typeof item === 'object' && typeof item.name === 'string' &&
+      (typeof item.number === 'string' || typeof item.url === 'string')) : [];
+  } catch {
+    console.warn('CRISIS_RESOURCES_JSON is invalid; returning no configured contacts.');
+    return [];
+  }
+};
+
 // Voice Architecture: Multer setup
 const upload = multer({ dest: 'uploads/' });
 
@@ -130,6 +143,7 @@ app.get('/api/auth/email-change-status', checkSessionActive, getEmailChangeStatu
 app.post('/api/auth/upload-avatar', checkSessionActive, upload.single('avatar') as any, uploadAvatar);
 app.get('/api/auth/sessions', checkSessionActive, getSessions);
 app.delete('/api/auth/sessions/:sessionId', checkSessionActive, deleteSession);
+app.delete('/api/auth/account', checkSessionActive, deleteAccount);
 app.post('/api/auth/logout', checkSessionActive, logout);
 
 // Chat History Routes
@@ -497,6 +511,7 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
       success: true,
       response: response.response,
       isCrisis: response.isCrisis,
+      helplines: response.isCrisis ? configuredCrisisResources() : [],
       mood: validatedMood, // Возвращаем валидированное значение mood
       suggestViewCalendar,
       requestId,
@@ -582,20 +597,7 @@ app.post('/api/detect-crisis', (req: Request, res: Response) => {
     res.json({
       success: true,
       isCrisis,
-      helplines: isCrisis
-        ? [
-            {
-              name: 'Телефон доверия',
-              number: '8-800-2000-122',
-              country: 'Россия',
-            },
-            {
-              name: 'Ясное утро',
-              number: '8-800-100-49-94',
-              country: 'Россия',
-            },
-          ]
-        : [],
+      helplines: isCrisis ? configuredCrisisResources() : [],
     });
   } catch (error) {
     console.error('Ошибка в /api/detect-crisis:', error);
@@ -850,10 +852,7 @@ app.post('/api/journal/entry', async (req: Request, res: Response) => {
         return res.status(422).json({
           success: false,
           isCrisis: true,
-          helplines: [
-            { name: 'Телефон доверия', number: '8-800-2000-122', country: 'Россия' },
-            { name: 'Ясное утро', number: '8-800-100-49-94', country: 'Россия' },
-          ],
+          helplines: configuredCrisisResources(),
           error: 'Обнаружены кризисные сигналы — требуются немедленные действия и поддержка',
         });
       }

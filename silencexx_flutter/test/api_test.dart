@@ -5,6 +5,25 @@ import 'package:http/testing.dart';
 import 'package:silencexx/core/api.dart';
 
 void main() {
+  test('offline tunnel produces an actionable server error', () async {
+    final api = Api(
+      client: MockClient(
+        (_) async => http.Response('<html>ERR_NGROK_3200</html>', 404),
+      ),
+    );
+    addTearDown(api.close);
+    await expectLater(
+      api.call('/auth/profile'),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          contains('Server is offline'),
+        ),
+      ),
+    );
+  });
+
   test(
     'sends UTF-8 JSON with the bearer token to the existing chat endpoint',
     () async {
