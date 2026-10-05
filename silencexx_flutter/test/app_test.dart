@@ -72,7 +72,7 @@ void main() {
     app.api.close();
   });
 
-  testWidgets('provider sign-in has no legacy phone, email or password form', (
+  testWidgets('email registration and provider sign-in are available', (
     tester,
   ) async {
     final app = await state(
@@ -85,9 +85,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(AuthScreen), findsOneWidget);
     expect(find.text('Продолжить с Google'), findsOneWidget);
-    expect(find.byType(TextFormField), findsNothing);
+    expect(find.text('Создать аккаунт'), findsOneWidget);
+    expect(find.text('Никнейм'), findsOneWidget);
+    expect(find.text('Повторите пароль'), findsOneWidget);
+    expect(find.text('У меня уже есть аккаунт'), findsOneWidget);
     expect(find.text('Телефон'), findsNothing);
-    expect(find.text('Пароль'), findsNothing);
+    expect(find.byType(TextFormField), findsNWidgets(4));
     app.api.close();
   });
 

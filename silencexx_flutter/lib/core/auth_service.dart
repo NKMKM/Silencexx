@@ -11,6 +11,41 @@ class AuthService {
   AuthService(this.app);
   final AppState app;
 
+  Future<void> registerWithEmail({
+    required String email,
+    required String nickname,
+    required String password,
+  }) async {
+    final response = await app.api.call(
+      '/auth/register',
+      method: 'POST',
+      body: {
+        'method': 'email',
+        'contact': email.trim().toLowerCase(),
+        'name': nickname.trim(),
+        'password': password,
+      },
+    );
+    response['isNewUser'] = true;
+    await app.acceptAuth(response);
+  }
+
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final response = await app.api.call(
+      '/auth/login',
+      method: 'POST',
+      body: {
+        'method': 'email',
+        'contact': email.trim().toLowerCase(),
+        'password': password,
+      },
+    );
+    await app.acceptAuth(response);
+  }
+
   Future<void> signInWithGoogle() async {
     if (kIsWeb) {
       throw const ApiException('Google sign-in is not configured for web.');

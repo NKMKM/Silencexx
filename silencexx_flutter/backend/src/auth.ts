@@ -63,6 +63,16 @@ export const isValidPassword = (password: string): boolean => {
   return hasLetter && hasNumber;
 };
 
+// Registration password policy: 8-72 printable ASCII characters with upper,
+// lower, and numeric characters. The same rules are shown by the app form.
+export const isValidRegistrationPassword = (password: string): boolean =>
+  password.length >= 8 && password.length <= 72 &&
+  /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) &&
+  /^[\x21-\x7E]+$/.test(password);
+
+export const isValidNickname = (nickname: string): boolean =>
+  /^[\p{L}\p{N}_.-]{3,24}$/u.test(nickname);
+
 // Валидация имени (латиница/кириллица, 2-50 символов)
 export const isValidName = (name: string): boolean => {
   if (name.length < 2 || name.length > 50) return false;
@@ -189,6 +199,8 @@ export const checkSessionActive = async (req: Request, res: Response, next: any)
 export const register = async (req: Request, res: Response) => {
   try {
     const { method, contact, name, password } = req.body;
+    const normalizedContact = typeof contact === 'string' ? contact.trim().toLowerCase() : '';
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
 
     // Валидация
     if (!method || !contact || !name || !password) {
@@ -198,7 +210,7 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    if (method === 'email' && !isValidEmail(contact)) {
+    if (method === 'email' && !isValidEmail(normalizedContact)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid email format. Use only Latin letters',
@@ -219,19 +231,28 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    if (!isValidName(name)) {
+    if (method === 'email' && !isValidRegistrationPassword(password)) {
       return res.status(400).json({
         success: false,
-        error: 'Name must be 2-50 characters',
+        error: 'Password must be 8-72 characters and include uppercase, lowercase and a number',
+      });
+    }
+
+    if (method === 'email' ? !isValidNickname(normalizedName) : !isValidName(normalizedName)) {
+      return res.status(400).json({
+        success: false,
+        error: method === 'email'
+          ? 'Nickname must be 3-24 letters, numbers, dots, underscores or hyphens'
+          : 'Name must be 2-50 characters',
       });
     }
 
     // Проверка существования пользователя
     const checkQuery = method === 'email'
-      ? 'SELECT id FROM user_description WHERE email = $1'
+      ? 'SELECT id FROM user_description WHERE LOWER(email) = $1'
       : 'SELECT id FROM user_description WHERE phone = $1';
     
-    const existing = await query(checkQuery, [contact]);
+    const existing = await query(checkQuery, [method === 'email' ? normalizedContact : contact]);
 
     if (existing.rows.length > 0) {
       return res.status(409).json({
@@ -248,7 +269,7 @@ export const register = async (req: Request, res: Response) => {
       `INSERT INTO user_description (name, ${method === 'email' ? 'email' : 'phone'}, registration)
        VALUES ($1, $2, NOW())
        RETURNING id`,
-      [name, contact]
+      [normalizedName, method === 'email' ? normalizedContact : contact]
     );
     
     const userDescId = userDescResult.rows[0].id;
@@ -338,9 +359,10 @@ export const register = async (req: Request, res: Response) => {
       token,
       user: {
         id: userId,
-        name,
-        contact,
+        name: normalizedName,
+        contact: method === 'email' ? normalizedContact : contact,
       },
+      isNewUser: true,
     });
 
   } catch (error) {
