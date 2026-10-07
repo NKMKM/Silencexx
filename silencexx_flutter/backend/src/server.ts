@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer'; // New architecture requirement
 import path from 'path';
 import { config } from './config';
+import { getDailyWish } from './dailyWish';
 import { generateAIResponse, detectCrisisKeywords, analyzeMood, aiTranscribeVoice } from './ai';
 import { 
   register, 
@@ -227,6 +228,7 @@ app.get('/api/inbox/received', checkSessionActive, getReceivedMessages);
 app.patch('/api/inbox/messages/:messageId/read', checkSessionActive, markMessageAsRead);
 
 // Daily Tasks
+app.get('/api/daily-wish', checkSessionActive, getDailyWish);
 app.get('/api/daily-task', checkSessionActive, getDailyTask);
 app.put('/api/daily-task/open', checkSessionActive, openDailyTask);
 app.put('/api/daily-task/complete', checkSessionActive, completeDailyTask);

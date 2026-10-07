@@ -1123,3 +1123,25 @@ export async function aiTranscribeVoice(
     throw new Error('Не удалось выполнить ИИ транскрипцию');
   }
 }
+
+/** A dedicated prompt keeps daily wishes independent of chat history and chat caching. */
+export async function generateDailyWish(language: 'ru' | 'en'): Promise<string> {
+  await ensureOllamaReady();
+  await ensureModelLoaded();
+  const response = await ollamaClient.post('/api/chat', {
+    model: config.ollamaModel,
+    stream: false,
+    messages: [{ role: 'system', content:
+      `Write a warm, kind wish for someone's day in ${language === 'ru' ? 'Russian' : 'English'} only. ` +
+      'Use 1–2 short sentences, at most 45 words. Address one person naturally. ' +
+      'Choose a gentle everyday theme such as calm, small joys, rest, connection or self-kindness. ' +
+      'Avoid assumptions about their life, medical advice, promises, pressure to be happy, disclaimers, headings, quotes and markdown. Return only the wish.'
+    }, { role: 'user', content: 'Please write my wish for today.' }],
+    options: { temperature: 0.9, num_predict: 180 },
+  });
+  const wish = response.data?.message?.content?.trim();
+  if (typeof wish !== 'string' || wish.length < 10 || wish.length > 600) {
+    throw new Error('Invalid daily wish response');
+  }
+  return wish;
+}

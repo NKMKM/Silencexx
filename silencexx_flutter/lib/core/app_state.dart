@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
+import 'home_widget_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState({
@@ -16,6 +17,18 @@ class AppState extends ChangeNotifier {
     );
     disclaimerAccepted = preferences.getBool('disclaimer_accepted') ?? false;
     api.onUnauthorized = expireSession;
+  }
+
+  @override
+  void notifyListeners() {
+    if (ready) {
+      HomeWidgetService.sync(
+        token: api.token,
+        language: language,
+        baseUrl: api.baseUrl,
+      );
+    }
+    super.notifyListeners();
   }
 
   final Api api;

@@ -58,5 +58,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>WidgetKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)com.silencexx.silencexx.widgets</string>
 </dict>
 </plist>
