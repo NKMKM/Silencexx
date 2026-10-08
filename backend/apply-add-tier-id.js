@@ -22,7 +22,7 @@ async function runMigration() {
     for (let i = 0; i < statements.length; i++) {
       const stmt = statements[i].trim();
       if (!stmt) continue;
-      
+
       try {
         const res = await pool.query(stmt);
         console.log(`✅ [${i+1}/${statements.length}] Executed`);
