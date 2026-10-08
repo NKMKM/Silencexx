@@ -1,3 +1,4 @@
+import { readConversation } from './conversation';
 import { Request, Response } from 'express';
 import { query } from './db';
 import { verifyToken } from './auth';
@@ -95,6 +96,8 @@ export const getChatList = async (req: Request, res: Response) => {
       FROM chat_id c
       LEFT JOIN LATERAL (
         SELECT message,senddate FROM (
+          (SELECT text AS message,created_at AS senddate FROM messages WHERE chat_id=c.id AND user_id=c.user_id ORDER BY created_at DESC LIMIT 1)
+          UNION ALL
           (SELECT message,senddate FROM user_chat WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
           UNION ALL
           (SELECT message,senddate FROM ai_response WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
@@ -174,79 +177,8 @@ export const getChatMessages = async (req: Request, res: Response) => {
     const chatUserId = chatCheck.rows[0].user_id;
     console.log(`✅ Chat verification passed: chat user_id = ${chatUserId}, request user_id = ${userId}`);
 
-    // ВТОРАЯ ПРОВЕРКА: Получаем сообщения из ВСЕХ источников
-    // Комбинируем данные из:
-    // 1. messages (новая таблица для голосовых)
-    // 2. user_chat (старая таблица для текстовых сообщений пользователя)
-    // 3. ai_response (старая таблица для ответов AI)
-    const messagesQuery = `
-      SELECT 
-        id::text as id,
-        chat_id,
-        role,
-        type,
-        text,
-        audio_url,
-        status,
-        created_at
-      FROM (
-        -- Новая таблица messages (голосовые и новые текстовые)
-        SELECT 
-          id::text as id,
-          chat_id,
-          role,
-          type,
-          text,
-          audio_url,
-          status,
-          created_at
-        FROM messages
-        WHERE chat_id = $1 AND user_id = $2
-        
-        UNION ALL
-        
-        -- Старые сообщения пользователя (user_chat)
-        SELECT 
-          id::text as id,
-          chat_id,
-          'user' as role,
-          'text' as type,
-          message as text,
-          NULL as audio_url,
-          'ready' as status,
-          senddate as created_at
-        FROM user_chat
-        WHERE chat_id = $1
-        
-        UNION ALL
-        
-        -- Старые ответы AI (ai_response)
-        SELECT 
-          id::text as id,
-          chat_id,
-          'assistant' as role,
-          'text' as type,
-          message as text,
-          NULL as audio_url,
-          'ready' as status,
-          senddate as created_at
-        FROM ai_response
-        WHERE chat_id = $1
-      ) AS all_messages
-      ORDER BY created_at ASC
-    `;
+    const result = { rows: await readConversation(chatId, userId) };
 
-    let result;
-    try {
-      result = await query(messagesQuery, [chatId, userId]);
-    } catch (dbError: any) {
-      console.error('❌ Database query error:', dbError);
-      return res.status(500).json({
-        success: false,
-        error: 'Ошибка базы данных при получении сообщений',
-      });
-    }
-    
     // Map result to match ApiMessage interface expected by frontend
     const mappedMessages = result.rows.map(row => {
         // Convert local audio path to full URL if audio_url exists

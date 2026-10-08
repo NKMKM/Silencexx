@@ -16,7 +16,8 @@
     "economics": "node scripts/economics.js",
     "usage:report": "node scripts/usage-report.js",
     "usage:recover": "node scripts/recover-ai-usage.js",
-    "test:security": "node --test tests/security.test.js"
+    "test:security": "node --test tests/security.test.js",
+    "db:check": "node scripts/check-db.js"
   },
   "keywords": [
     "ai",

@@ -1,3 +1,4 @@
+import { readConversation } from './conversation';
 import { getUserLimits, reserveDailyLimit } from './subscriptions';
 import { Request, Response } from 'express';
 import { query } from './db';
@@ -213,29 +214,10 @@ const processVoicePipeline = async (messageId: string, audioPath: string, chatId
         );
         console.log(`✅ [PIPELINE] Message ${messageId} updated with transcription`);
 
-        // Get ONLY messages from THIS chat (not from other chats)
-        // Limit to last 10 messages to avoid context pollution
-        const historyRes = await query(
-            `SELECT role, text FROM messages 
-             WHERE chat_id = $1 
-             AND user_id = $2 
-             AND status = 'ready' 
-             AND id != $3
-             AND text IS NOT NULL
-             AND text != ''
-             ORDER BY created_at DESC
-             LIMIT 10`,
-            [chatId, userId, messageId]
-        );
-        
-        // Reverse to get chronological order (oldest first)
-        const history = historyRes.rows.reverse().map((row: any) => ({
-            role: row.role as 'user' | 'assistant',
-            content: row.text || "" 
-        }));
-        
-        console.log(`🤖 [PIPELINE] Generating AI response with ${history.length} messages in history from chat ${chatId}`);
-        console.log(`📜 [PIPELINE] History preview:`, history.slice(0, 2).map(m => `${m.role}: ${m.content.substring(0, 50)}...`));
+        const history = (await readConversation(Number(chatId), Number(userId)))
+          .filter(row => row.id !== `messages:${messageId}` && row.status === 'ready' && row.text)
+          .slice(-12)
+          .map(row => ({ role: row.role as 'user' | 'assistant', content: row.text }));
 
         const aiResult = await generateAIResponse(transcribedText, {
             conversationHistory: history,

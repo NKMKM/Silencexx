@@ -1,3 +1,4 @@
+import { readConversation, saveConversationTurn } from './conversation';
 import { rateLimit } from 'express-rate-limit';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -445,9 +446,19 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
     }
 
     console.log(`⏳ [${requestId}] Calling generateAIResponse with mood=${validatedMood || 'undefined'}...`);
+    let verifiedHistory = conversationHistory;
+    const ownerId = res.locals.verifiedSession.userId as number;
+    if (chatId !== undefined && chatId !== null) {
+      if (!Number.isSafeInteger(Number(chatId)) || Number(chatId) <= 0) return res.status(400).json({ success: false, error: 'Invalid chat ID' });
+      const owner = await query('SELECT id FROM chat_id WHERE id=$1 AND user_id=$2', [Number(chatId),ownerId]);
+      if (!owner.rows.length) return res.status(403).json({ success: false, error: 'Chat not found or access denied' });
+      verifiedHistory = (await readConversation(Number(chatId), ownerId))
+        .filter(row => row.status === 'ready' && row.text && ['user','assistant'].includes(row.role))
+        .map(row => ({ role: row.role, content: row.text }));
+    }
     const response = await generateAIResponse(processedMessage, {
       mood: validatedMood, // Передаём валидированное значение
-      conversationHistory,
+      conversationHistory: verifiedHistory,
       userName,
       language,
     });
@@ -479,77 +490,9 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
     console.log(`🤖 [${requestId}] AI response length: ${response.response.length}`);
     console.log(`🤖 [${requestId}] AI preview: "${response.response.substring(0, 80)}..."`);
 
-    // ===== СОХРАНЕНИЕ СООБЩЕНИЙ В БД =====
-    if (chatId && userId) {
-      try {
-        console.log(`💾 [${requestId}] Saving messages to chat ${chatId} with mood=${validatedMood || 'null'}`);
-        
-        // Проверяем что чат принадлежит пользователю (двойная проверка безопасности)
-        const chatCheck = await query(
-          'SELECT id, is_first_message FROM chat_id WHERE id = $1 AND user_id = $2',
-          [chatId, userId]
-        );
-
-        if (chatCheck.rows.length > 0) {
-          const isFirstMessage = chatCheck.rows[0].is_first_message;
-          
-          // Сохраняем сообщение пользователя с user_id и mood
-          if (isVoiceMessage && audioUri) {
-            await query(
-              `INSERT INTO user_chat (chat_id, user_id, message, senddate, audio_uri, language, transcript, is_transcribed, mood) 
-               VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)`,
-              [chatId, userId, processedMessage, audioUri, language, transcript || processedMessage, isTranscribed || true, validatedMood || null]
-            );
-            // Sync to new messages table
-            await query(
-                `INSERT INTO messages (chat_id, user_id, role, type, text, audio_url, status, created_at)
-                 VALUES ($1, $2, 'user', 'voice', $3, $4, 'ready', NOW())`,
-                [chatId, userId, processedMessage, audioUri]
-            );
-          } else {
-            await query(
-              `INSERT INTO user_chat (chat_id, user_id, message, senddate, language, mood) 
-               VALUES ($1, $2, $3, NOW(), $4, $5)`,
-              [chatId, userId, processedMessage, language, validatedMood || null]
-            );
-            // Sync to new messages table
-             await query(
-                `INSERT INTO messages (chat_id, user_id, role, type, text, status, created_at)
-                 VALUES ($1, $2, 'user', 'text', $3, 'ready', NOW())`,
-                [chatId, userId, processedMessage]
-            );
-          }
-          
-          // Сохраняем ответ AI с user_id и mood
-          await query(
-            `INSERT INTO ai_response (chat_id, user_id, message, senddate, language, mood) 
-             VALUES ($1, $2, $3, NOW(), $4, $5)`,
-            [chatId, userId, response.response, language, validatedMood || null]
-          );
-           // Sync to new messages table
-           await query(
-                `INSERT INTO messages (chat_id, user_id, role, type, text, status, created_at)
-                 VALUES ($1, $2, 'assistant', 'text', $3, 'ready', NOW())`,
-                [chatId, userId, response.response]
-            );
-          
-          // Обновляем is_first_message флаг если это первое сообщение
-          if (isFirstMessage) {
-            await query(
-              'UPDATE chat_id SET is_first_message = false, updated_at = NOW() WHERE id = $1 AND user_id = $2',
-              [chatId, userId]
-            );
-            console.log(`✅ [${requestId}] First message flag updated to false`);
-          }
-          
-          console.log(`✅ [${requestId}] Messages saved to database with user isolation`);
-        } else {
-          console.warn(`⚠️ [${requestId}] Chat ${chatId} not found or access denied for user ${userId}`);
-        }
-      } catch (saveError) {
-        console.error(`❌ [${requestId}] Error saving messages:`, saveError);
-        // Не прерываем выполнение, если не удалось сохранить
-      }
+    if (chatId) {
+      await saveConversationTurn(Number(chatId), ownerId, processedMessage, response.response,
+        isVoiceMessage ? audioUri : undefined);
     }
 
     res.json({

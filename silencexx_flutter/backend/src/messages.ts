@@ -1,3 +1,4 @@
+import { readConversation } from './conversation';
 import { Request, Response } from 'express';
 import { query } from './db';
 import { verifyToken } from './auth';
@@ -80,20 +81,14 @@ export async function sendMessage(req: Request, res: Response) {
     const messageId = userMsgResult.rows[0].id;
     const sentAt = userMsgResult.rows[0].senddate;
 
-    // Get chat context for AI
-    const chatContext = await query(
-      `SELECT uc.message, uc.is_ai_response 
-       FROM user_chat uc
-       WHERE uc.chat_id = $1
-       ORDER BY uc.senddate DESC
-       LIMIT 20`,
-      [chatId]
-    );
+    const chatContext = (await readConversation(Number(chatId), userId))
+      .filter(row => row.id !== `user_chat:${messageId}` && row.status === 'ready' && row.text)
+      .slice(-12);
 
     // Queue AI response with priority based on subscription
     const aiContext = {
       chatId,
-      conversationHistory: chatContext.rows.reverse().map((row: any) => ({ role: row.is_ai_response ? 'assistant' : 'user', content: row.message })),
+      conversationHistory: chatContext.map(row => ({ role: row.role, content: row.text })),
       subscriptionTier: limits.tierName,
     };
 

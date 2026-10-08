@@ -73,7 +73,7 @@ class ConversationSession extends ChangeNotifier {
   }
 
   Future<void> load({bool refresh = false}) async {
-    if (loading || disposed || (!refresh && loaded)) return;
+    if (loading || busy || disposed || (!refresh && loaded)) return;
     if (id == null) {
       loaded = true;
       changed();
@@ -142,8 +142,8 @@ class ConversationSession extends ChangeNotifier {
         .reversed
         .map(
           (m) => {
-            'role': m['role'] == 'user' ? 'user' : 'model',
-            'text': m['text'],
+            'role': m['role'] == 'user' ? 'user' : 'assistant',
+            'content': m['text'],
           },
         )
         .toList();

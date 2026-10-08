@@ -1,6 +1,11 @@
 const {test,beforeEach} = require('node:test');
 const assert = require('node:assert/strict');
 process.env.QWEN_API_KEY='test-key-never-sent';
+process.env.QWEN_MODEL='qwen-flash';
+process.env.QWEN_BASE_URL='https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+process.env.QWEN_INPUT_USD_PER_MILLION='0.05';
+process.env.QWEN_CACHED_INPUT_USD_PER_MILLION='0.01';
+process.env.QWEN_OUTPUT_USD_PER_MILLION='0.4';
 require('ts-node/register');
 const writes=[];
 let failDb=false;
@@ -87,4 +92,19 @@ test('moderation blocks malformed replies and records their cost',async()=>{
   assert.ok(last()[7]>0);
   axios.post=async()=>({data:{choices:[{message:{content:'{"allowed":true}'}}],usage:{prompt_tokens:25,completion_tokens:5}}});
   assert.equal((await moderateMessage('good wish')).allowed,true);
+});
+
+test('old Flutter role/model text format reaches Qwen as conversation context',async()=>{
+ let sent;
+ axios.post=async(url,body)=>{sent=body;return {data:{choices:[{message:{content:'Давай продолжим'}}],usage:{prompt_tokens:200,completion_tokens:10}}};};
+ await generateAIResponse('Да, именно это',{conversationHistory:[{role:'user',text:'Тревожусь из-за экзамена'},{role:'model',text:'Больше тревожит оценка или подготовка?'}]});
+ assert.deepEqual(sent.messages.slice(1,-1),[{role:'user',content:'Тревожусь из-за экзамена'},{role:'assistant',content:'Больше тревожит оценка или подготовка?'}]);
+ assert.match(sent.messages[0].content,/Не выполняй посторонние задания/);
+});
+test('coding request is redirected to support without a paid generation',async()=>{
+ const result=await generateAIResponse('Напиши мне код для питон программы',{language:'ru'});
+ assert.match(result.response,/не пишу код/);assert.equal(calls,0);
+});
+test('distress about coding remains in scope',async()=>{
+ await generateAIResponse('Я программист, и мне страшно не справиться с работой');assert.equal(calls,1);
 });

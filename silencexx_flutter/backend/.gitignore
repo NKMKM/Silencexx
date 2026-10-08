@@ -32,3 +32,6 @@ Thumbs.db
 *.tsbuildinfo
 
 .ai-usage/
+
+# Local database diagnostics (schema metadata only)
+.db-audit/
