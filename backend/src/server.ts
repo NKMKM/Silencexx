@@ -98,8 +98,15 @@ const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024, 
 app.use(cors());
 app.use(express.json());
 app.disable('x-powered-by');
-const proxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
-if (Number.isInteger(proxyHops) && proxyHops > 0) app.set('trust proxy', proxyHops);
+const trustedProxy = process.env.TRUST_PROXY?.trim();
+if (trustedProxy) {
+  // Prefer an explicit proxy address/subnet (for example `loopback` for ngrok
+  // forwarding to this machine) over trusting an arbitrary number of hops.
+  app.set('trust proxy', trustedProxy);
+} else {
+  const proxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+  if (Number.isInteger(proxyHops) && proxyHops > 0) app.set('trust proxy', proxyHops);
+}
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false, message: { success: false, error: 'Too many requests. Please try later.' } }));
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false, message: { success: false, error: 'Too many requests. Please try later.' } });
 app.use(['/api/auth/login', '/api/auth/register', '/api/auth/request-password-reset', '/api/auth/reset-password-with-token', '/api/auth/oauth'], authLimiter);
