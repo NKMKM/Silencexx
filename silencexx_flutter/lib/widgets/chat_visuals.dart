@@ -145,7 +145,8 @@ class MessageContent extends StatelessWidget {
     onTapLink: (text, href, title) async {
       final uri = Uri.tryParse(href ?? '');
       if (uri == null || !['http', 'https', 'mailto'].contains(uri.scheme)) return;
-      try { if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) throw Exception(context.tr('Не удалось открыть ссылку', 'Could not open link')); }
+      final failureMessage = context.tr('Не удалось открыть ссылку', 'Could not open link');
+      try { if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) throw Exception(failureMessage); }
       catch (error) { if (context.mounted) showError(context, error); }
     },
   );

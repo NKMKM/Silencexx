@@ -1,3 +1,4 @@
+import { getUserLimits, reserveDailyLimit } from './subscriptions';
 import { Request, Response } from 'express';
 import { query } from './db';
 import * as fs from 'fs';
@@ -12,7 +13,6 @@ export const handleVoiceUpload = async (req: Request, res: Response) => {
   try {
       console.log('🎤 [VOICE] Received voice upload request');
       console.log('🎤 [VOICE] File:', req.file);
-      console.log('🎤 [VOICE] Body:', req.body);
       
       if (!req.file) {
           console.log('❌ [VOICE] No audio file provided');
@@ -40,6 +40,16 @@ export const handleVoiceUpload = async (req: Request, res: Response) => {
            return res.status(400).json({ error: 'ChatId and UserId required' });
       }
 
+      const owner = await query('SELECT id FROM chat_id WHERE id=$1 AND user_id=$2', [chatId, userId]);
+      if (!owner.rows.length) {
+          await fs.promises.unlink(req.file.path).catch(() => {});
+          return res.status(403).json({ error: 'Access denied' });
+      }
+      const limits = await getUserLimits(userId);
+      if (!limits || !await reserveDailyLimit(userId, 'voice_messages', limits.dailyVoiceLimit)) {
+          await fs.promises.unlink(req.file.path).catch(() => {});
+          return res.status(429).json({ error: 'Daily voice limit reached' });
+      }
       const audioUrl = req.file.path;
       
       // Check if file exists
@@ -145,7 +155,6 @@ const processVoicePipeline = async (messageId: string, audioPath: string, chatId
                      PYTHONIOENCODING: 'utf-8',  // Force UTF-8 for Russian text on Windows
                  }
              }, (err, stdout, stderr) => {
-                 console.log(`🔄 [PIPELINE] Python stdout:`, stdout || '(empty)');
                  if (stderr) {
                      console.log(`🔄 [PIPELINE] Python stderr:`, stderr);
                  }
@@ -189,17 +198,14 @@ const processVoicePipeline = async (messageId: string, audioPath: string, chatId
                          reject(new Error(json.error));
                      } else {
                          console.log(`✅ [PIPELINE] WhisperX success! Language: ${json.language}`);
-                         console.log(`✅ [PIPELINE] Transcribed text: "${json.text}"`);
                          resolve(json.text || "");
                      }
                  } catch (e) {
-                     console.error("❌ [PIPELINE] JSON parse error. Raw stdout:", stdout);
                      reject(e);
                  }
              });
         });
 
-        console.log(`📝 [PIPELINE] Final transcribed text: "${transcribedText.substring(0, 100)}..."`);
 
         await query(
             `UPDATE messages SET text = $1, status = 'ready' WHERE id = $2`, 

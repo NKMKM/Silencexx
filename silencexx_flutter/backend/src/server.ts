@@ -1,8 +1,11 @@
+import { rateLimit } from 'express-rate-limit';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import multer from 'multer'; // New architecture requirement
 import path from 'path';
 import { config } from './config';
+import { aiContext } from './aiContext';
+import { getAIUsage } from './aiUsage';
 import { getDailyWish } from './dailyWish';
 import { generateAIResponse, detectCrisisKeywords, analyzeMood, aiTranscribeVoice } from './ai';
 import { 
@@ -57,7 +60,7 @@ import './db'; // Initialize database connection
 import {
   checkChatLimit,
   checkFeatureAccess,
-  incrementLimitCounter,
+  reserveDailyLimit,
   getUserLimits,
 } from './subscriptions';
 import {
@@ -100,15 +103,57 @@ const configuredCrisisResources = () => {
 };
 
 // Voice Architecture: Multer setup
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 10 } });
 
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.disable('x-powered-by');
+const proxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (Number.isInteger(proxyHops) && proxyHops > 0) app.set('trust proxy', proxyHops);
+app.use('/api', rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false, message: { success: false, error: 'Too many requests. Please try later.' } }));
+const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false, message: { success: false, error: 'Too many requests. Please try later.' } });
+app.use(['/api/auth/login', '/api/auth/register', '/api/auth/request-password-reset', '/api/auth/reset-password-with-token', '/api/auth/oauth'], authLimiter);
+// Carry verified account identity through every asynchronous AI operation.
+app.use('/api', (req, _res, next) => {
+  let userId: number | undefined;
+  try { userId = verifyToken(req.headers.authorization?.replace(/^Bearer /, '') || '').userId; } catch { /* Route auth still applies. */ }
+  aiContext.run({ userId, feature: req.path.split('/').filter(Boolean)[0] || 'other' }, next);
+});
+const publicApiPaths = new Set([
+  '/auth/register', '/auth/login', '/auth/verify-otp', '/auth/resend-otp',
+  '/auth/reset-password', '/auth/request-password-reset', '/auth/reset-password-with-token',
+  '/auth/verify-email-change', '/auth/oauth/google', '/auth/oauth/apple',
+  '/supported-languages', '/subscriptions/available-plans', '/detect-crisis',
+]);
+app.use('/api', (req, res, next) => publicApiPaths.has(req.path) ? next() : checkSessionActive(req, res, next));
+app.get('/api/ai/usage', checkSessionActive, getAIUsage);
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.get('/uploads/:filename', async (req, res) => {
+  const filename = req.params.filename;
+  if (!/^[a-f0-9]{32}$/.test(filename)) return res.status(404).end();
+  try {
+    const avatar = await query('SELECT 1 FROM user_description WHERE avatar=$1 LIMIT 1', [filename]);
+    const send = () => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.sendFile(path.join(__dirname, '../uploads', filename), error => {
+        if (error && !res.headersSent) res.status(404).end();
+      });
+    };
+    if (avatar.rows.length) return send();
+    await checkSessionActive(req, res, async () => {
+      try {
+        const userId = res.locals.verifiedSession.userId;
+        const owned = await query('SELECT 1 FROM messages WHERE user_id=$1 AND audio_url=$2 LIMIT 1', [userId, `uploads/${filename}`]);
+        if (!owned.rows.length) return res.status(404).end();
+        send();
+      } catch { if (!res.headersSent) res.status(503).end(); }
+    });
+  } catch { if (!res.headersSent) res.status(503).end(); }
+});
 
 // Логирование запросов
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -157,12 +202,11 @@ app.get('/api/chats/:chatId/messages', checkSessionActive, getChatMessages);
 app.post('/api/messages/voice', checkSessionActive, upload.single('audio') as any, processVoiceMessage);
 
 // Test endpoint for WhisperX
-app.post('/api/test/voice', upload.single('audio') as any, async (req: Request, res: Response) => {
+app.post('/api/test/voice', (_req, res) => { res.status(404).json({ error: 'Not found' }); }, upload.single('audio') as any, async (req: Request, res: Response) => {
   try {
     console.log('\n🧪 [TEST] =======================================');
     console.log('🧪 [TEST] Voice upload test endpoint hit');
     console.log('🧪 [TEST] File:', req.file);
-    console.log('🧪 [TEST] Body:', req.body);
     
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No audio file received' });
@@ -223,7 +267,7 @@ app.post('/api/test/voice', upload.single('audio') as any, async (req: Request, 
 app.get('/api/supported-languages', getSupportedLanguages);
 
 // Inbox
-app.post('/api/anonymous-message', canSendMessage, sendAnonymousMessage);
+app.post('/api/anonymous-message', checkSessionActive, sendAnonymousMessage);
 app.get('/api/inbox/received', checkSessionActive, getReceivedMessages);
 app.patch('/api/inbox/messages/:messageId/read', checkSessionActive, markMessageAsRead);
 
@@ -312,10 +356,9 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
       console.log(`🎤 [${requestId}] Voice message without transcription, using AI to transcribe...`);
       try {
         processedMessage = await aiTranscribeVoice({ conversationHistory });
-        console.log(`✅ [${requestId}] AI Transcription: "${processedMessage.substring(0, 80)}..."`);
       } catch (error) {
-        console.warn(`⚠️ [${requestId}] AI Transcription failed, using fallback text`);
-        processedMessage = '🎙️ Голосовое сообщение (не распознано)';
+        console.warn(`⚠️ [${requestId}] Audio transcription unavailable; rejecting untranscribed audio`);
+        return res.status(422).json({ success: false, error: 'Audio must be transcribed through /api/voice/message before chat generation' });
       }
     }
 
@@ -397,7 +440,6 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
       console.warn(`⚠️ [${requestId}] Could not get user info:`, error);
     }
 
-    console.log(`📨 [${requestId}] User message: "${processedMessage.substring(0, 50)}..."`);
     if (conversationHistory) {
       console.log(`📜 [${requestId}] History size: ${conversationHistory.length}`);
     }
@@ -407,6 +449,7 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
       mood: validatedMood, // Передаём валидированное значение
       conversationHistory,
       userName,
+      language,
     });
 
     // Доп. рекомендация: предложить посмотреть календарь, если пользователь говорит о дневнике
@@ -520,46 +563,6 @@ app.post('/api/chat', checkSessionActive, checkChatLimit, async (req: Request, r
       subscription: subscriptionInfo, // Добавляем информацию о подписке в ответ
     });
     
-    // ===== УВЕЛИЧЕНИЕ СЧЁТЧИКА ЛИМИТА =====
-    // После успешного ответа уменьшаем лимит запросов пользователя
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (token && userId) {
-      try {
-        const decoded = verifyToken(token);
-        console.log(`📊 [${requestId}] Incrementing chat request counter for user ${decoded.userId}...`);
-        
-        const limitResult = await incrementLimitCounter(decoded.userId, 'chat_requests');
-        console.log(`✅ [${requestId}] Counter incremented:`, limitResult);
-        
-        // Логируем текущее состояние лимитов
-        try {
-          const limitsQuery = `
-            SELECT 
-              dl.chat_requests_used,
-              st.daily_chat_limit,
-              (st.daily_chat_limit - dl.chat_requests_used) as remaining_requests,
-              dl.reset_date
-            FROM daily_limits dl
-            JOIN user_subscriptions us ON dl.user_id = us.user_id
-            JOIN subscription_tiers st ON us.tier_id = st.id
-            WHERE dl.user_id = $1 AND dl.reset_date = CURRENT_DATE
-          `;
-          const currentLimits = await query(limitsQuery, [decoded.userId]);
-          if (currentLimits.rows.length > 0) {
-            const limits = currentLimits.rows[0];
-            console.log(`📈 [${requestId}] Current limits for user ${decoded.userId}:`);
-            console.log(`   Used: ${limits.chat_requests_used}/${limits.daily_chat_limit}`);
-            console.log(`   Remaining: ${limits.remaining_requests}`);
-            console.log(`   Reset at: ${limits.reset_date}`);
-          }
-        } catch (limitsError) {
-          console.warn(`⚠️ [${requestId}] Could not log current limits:`, limitsError);
-        }
-      } catch (e) {
-        console.warn(`⚠️ [${requestId}] Could not increment chat request counter:`, e);
-      }
-    }
-    
     console.log(`✨ [${requestId}] Response sent successfully\n`);
   } catch (error) {
     console.error(`\n❌ [${requestId}] ERROR in /api/chat:`);
@@ -631,6 +634,7 @@ const checkMoodAnalysisLimit = async (req: Request, res: Response, next: NextFun
       });
     }
 
+    if (!await reserveDailyLimit(decoded.userId, 'mood_analysis', access.limitsInfo!.dailyMoodAnalysisLimit)) return res.status(429).json({ success: false, error: 'Daily limit reached' });
     (req as any).userLimits = access.limitsInfo;
     (req as any).userId = decoded.userId;
     next();
@@ -658,10 +662,6 @@ app.post('/api/analyze-mood', checkSessionActive, checkMoodAnalysisLimit, async 
 
     const analysis = await analyzeMood(text);
 
-    // Увеличиваем счётчик анализа настроения
-    if ((req as any).userId) {
-      await incrementLimitCounter((req as any).userId, 'mood_analysis');
-    }
 
     res.json({
       success: true,
@@ -697,6 +697,7 @@ const checkJournalLimit = async (req: Request, res: Response, next: NextFunction
       });
     }
 
+    if (!await reserveDailyLimit(decoded.userId, 'journal_entries', access.limitsInfo!.dailyJournalLimit)) return res.status(429).json({ success: false, error: 'Daily limit reached' });
     (req as any).userLimits = access.limitsInfo;
     (req as any).userId = decoded.userId;
     next();
@@ -731,10 +732,6 @@ app.post('/api/journal', checkSessionActive, checkJournalLimit, async (req: Requ
       {}
     );
 
-    // Увеличиваем счётчик записей в журнал
-    if ((req as any).userId) {
-      await incrementLimitCounter((req as any).userId, 'journal_entries');
-    }
 
     res.json({
       success: true,
@@ -768,7 +765,7 @@ app.get('/api/journal/entry', async (req: Request, res: Response) => {
     }
 
     const entry = await query(
-      'SELECT id, diary_date, diary_content FROM diary WHERE user_id = $1 AND DATE(diary_date) = $2',
+      `SELECT id, diary_date, diary_content FROM diary WHERE user_id = $1 AND diary_date >= $2::date AND diary_date < $2::date + INTERVAL '1 day'`,
       [userId, date]
     );
 
@@ -815,7 +812,7 @@ app.get('/api/journal/list', async (req: Request, res: Response) => {
  * Правила: можно создать только одну запись в день; нельзя создавать записи для прошлых дат; редактирование не предусмотрено.
  * Body: { date: 'YYYY-MM-DD', content: string }
  */
-app.post('/api/journal/entry', async (req: Request, res: Response) => {
+app.post('/api/journal/entry', checkSessionActive, checkJournalLimit, async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -832,16 +829,18 @@ app.post('/api/journal/entry', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Дата должна быть в формате YYYY-MM-DD' });
     }
 
-    const today = new Date();
+    const offset = Number(req.body.utcOffsetMinutes ?? 0);
+    if (!Number.isInteger(offset) || offset < -840 || offset > 840 || content.length > 8000) return res.status(400).json({ success: false, error: 'Invalid offset or entry too long' });
+    const today = new Date(Date.now() + offset * 60000);
     const todayStr = today.toISOString().slice(0,10);
 
     // disallow creating for past dates
-    if (date < todayStr) {
-      return res.status(403).json({ success: false, error: 'Нельзя создавать записи за прошлые даты' });
+    if (date !== todayStr) {
+      return res.status(403).json({ success: false, error: 'Можно создать запись только за сегодняшний день' });
     }
 
     // allow only one entry per day
-    const existing = await query('SELECT id FROM diary WHERE user_id = $1 AND DATE(diary_date) = $2', [userId, date]);
+    const existing = await query(`SELECT id FROM diary WHERE user_id = $1 AND diary_date >= $2::date AND diary_date < $2::date + INTERVAL '1 day'`, [userId, date]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ success: false, error: 'Запись на эту дату уже существует' });
     }
@@ -997,6 +996,10 @@ app.get('/api/messages/status/:jobId', checkSessionActive, getMessageStatus);
 app.delete('/api/chat/:chatId/clear', checkSessionActive, clearChat);
 
 // 404 обработчик - должен быть последним!
+app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = error instanceof multer.MulterError ? 413 : error?.type === 'entity.parse.failed' ? 400 : 500;
+  res.status(status).json({ success: false, error: status === 413 ? 'Upload exceeds the allowed limits' : status === 400 ? 'Invalid JSON body' : 'Request failed' });
+});
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     error: 'Endpoint не найден',
@@ -1016,7 +1019,7 @@ app.listen(PORT, () => {
 ╠══════════════════════════════════════════════════════╣
 ║  Port: ${PORT}                                     ║
 ║  Environment: ${config.nodeEnv}                     ║
-║  Ollama API: ${config.ollamaUrl ? '✅ Готов' : '❌ Не настроен'}                              ║
+║  Qwen API: ${config.qwenApiKey ? '✅ Готов' : '❌ Нужен ключ'}                              ║
 ╠══════════════════════════════════════════════════════╣
 ║  Endpoints:                                          ║
 ║  ✓ GET  /health                                      ║

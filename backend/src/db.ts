@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
@@ -19,7 +20,8 @@ export const pool = new Pool({
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
   ssl: process.env.DB_HOST?.includes('aivencloud.com') ? {
-    rejectUnauthorized: false
+    rejectUnauthorized: true,
+    ...(process.env.DB_SSL_CA_FILE ? { ca: readFileSync(process.env.DB_SSL_CA_FILE, 'utf8') } : {})
   } : false
 });
 
@@ -39,10 +41,10 @@ export const query = async (text: string, params?: any[]) => {
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    console.log(`📊 Query executed in ${duration}ms`);
+    if (duration > 500) console.warn(`Slow DB query (${duration}ms)`);
     return res;
   } catch (error) {
-    console.error('❌ Database query error:', error);
+    console.error('Database query failed:', (error as { code?: string }).code || 'unknown');
     throw error;
   }
 };

@@ -132,7 +132,7 @@ void main() {
       expect(state.disclaimerAccepted, isTrue);
       expect(find.text('Продолжить с Google'), findsOneWidget);
       expect(find.text('Телефон'), findsNothing);
-      expect(find.text('Пароль'), findsNothing);
+      expect(find.text('Пароль'), findsOneWidget);
     },
   );
 

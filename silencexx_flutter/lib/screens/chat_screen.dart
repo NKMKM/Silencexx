@@ -220,7 +220,9 @@ class ChatScreenState extends State<ChatScreen> {
     try {
       if (!recording) {
         await target.checkLimit('Voice');
-        if (!await recorder.hasPermission())
+        final permissionGranted = await recorder.hasPermission();
+        if (!mounted) return;
+        if (!permissionGranted)
           throw ApiException(
             context.tr(
               'Разрешите доступ к микрофону.',
@@ -336,7 +338,9 @@ class ChatScreenState extends State<ChatScreen> {
           ],
         );
         if (file == null) return;
-        if (await file.length() > 200000)
+        final fileLength = await file.length();
+        if (!mounted) return;
+        if (fileLength > 200000)
           throw ApiException(
             context.tr(
               'Выберите текстовый файл до 200 КБ.',
@@ -344,6 +348,7 @@ class ChatScreenState extends State<ChatScreen> {
             ),
           );
         final bytes = await file.readAsBytes();
+        if (!mounted) return;
         final text = utf8.decode(bytes);
         if (text.length > 24000)
           throw ApiException(
@@ -363,7 +368,9 @@ class ChatScreenState extends State<ChatScreen> {
           imageQuality: 80,
         );
         if (image == null) return;
-        if (await image.length() > 10000000)
+        final imageLength = await image.length();
+        if (!mounted) return;
+        if (imageLength > 10000000)
           throw ApiException(
             context.tr(
               'Выберите изображение до 10 МБ.',
@@ -1317,7 +1324,9 @@ class _AudioBubbleState extends State<AudioBubble> {
           if (snapshot.data == PlayerState.playing) {
             await player.pause();
           } else {
-            await player.play(UrlSource(widget.url));
+            final bytes = await context.app.api.downloadMedia(widget.url);
+            if (!mounted) return;
+            await player.play(BytesSource(bytes));
           }
         } catch (e) {
           if (context.mounted) showError(context, e);

@@ -1,11 +1,14 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { query } from './db';
+import { pool, query } from './db';
 import { Request, Response } from 'express';
 import nodemailer from 'nodemailer';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (JWT_SECRET.length < 32 || JWT_SECRET === 'your-secret-key-change-in-production') {
+  throw new Error('JWT_SECRET must be a unique secret of at least 32 characters');
+}
 const JWT_EXPIRES_IN = '7d';
 const EMAIL_CHANGE_COOLDOWN_DAYS = 14;
 
@@ -29,13 +32,13 @@ const SESSION_CACHE_TTL = 30000; // 30 секунд
 
 // Генерация 6-значного OTP кода
 export const generateOTP = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 // Валидация email (только латиница)
 export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return emailRegex.test(email);
+  return typeof email === 'string' && email.length <= 254 && emailRegex.test(email);
 };
 
 // Валидация телефона (международный формат)
@@ -46,7 +49,7 @@ export const isValidPhone = (phone: string): boolean => {
 
 // Валидация пароля (минимум 8 символов, латиница + цифры, без кириллицы)
 export const isValidPassword = (password: string): boolean => {
-  if (password.length < 8) return false;
+  if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) return false;
   
   // Проверка на кириллицу
   const hasCyrillic = /[а-яА-ЯёЁ]/.test(password);
@@ -62,6 +65,16 @@ export const isValidPassword = (password: string): boolean => {
   
   return hasLetter && hasNumber;
 };
+
+// Registration password policy: 8-72 printable ASCII characters with upper,
+// lower, and numeric characters. The same rules are shown by the app form.
+export const isValidRegistrationPassword = (password: string): boolean =>
+  password.length >= 8 && password.length <= 72 &&
+  /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) &&
+  /^[\x21-\x7E]+$/.test(password);
+
+export const isValidNickname = (nickname: string): boolean =>
+  /^[\p{L}\p{N}_.-]{3,24}$/u.test(nickname);
 
 // Валидация имени (латиница/кириллица, 2-50 символов)
 export const isValidName = (name: string): boolean => {
@@ -89,7 +102,9 @@ export const generateToken = (userId: number, sessionId: number): string => {
 // Проверка JWT токена
 export const verifyToken = (token: string): any => {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (typeof payload === 'string' || !Number.isSafeInteger(payload.userId) || payload.userId <= 0 || !Number.isSafeInteger(payload.sessionId) || payload.sessionId <= 0) throw new Error('Invalid identity');
+    return payload;
   } catch (error) {
     throw new Error('Invalid token');
   }
@@ -97,83 +112,17 @@ export const verifyToken = (token: string): any => {
 
 // Middleware для проверки активности сессии
 export const checkSessionActive = async (req: Request, res: Response, next: any) => {
+  // One verification per request, including when a route repeats this middleware.
+  if (res.locals.verifiedSession) return next();
+  let decoded;
+  try { decoded = verifyToken(req.headers.authorization?.replace(/^Bearer /, '') || ''); }
+  catch { return res.status(401).json({ success: false, error: 'Unauthorized' }); }
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      return next(); // Если нет токена, пропускаем (другие middleware проверят)
-    }
-
-    let decoded;
-    try {
-      decoded = verifyToken(token);
-    } catch (error) {
-      console.log('⚠️  Invalid token format');
-      return next(); // Невалидный токен - пусть обработает основной обработчик
-    }
-
-    const sessionId = decoded.sessionId;
-
-    if (!sessionId) {
-      console.log('⚠️  No sessionId in token');
-      return next();
-    }
-
-    // Проверяем кэш
-    const cached = sessionCache.get(sessionId);
-    const now = Date.now();
-    
-    if (cached && (now - cached.cachedAt) < SESSION_CACHE_TTL) {
-      // Используем кэшированное значение
-      if (!cached.isActive) {
-        return res.status(401).json({
-          success: false,
-          error: 'Сессия неактивна. Пожалуйста, войдите снова.',
-          session_terminated: true,
-        });
-      }
-      return next(); // Сессия активна
-    }
-
-    // Проверяем активна ли сессия в БД
-    const sessionCheck = await query(
-      'SELECT is_active FROM session WHERE id = $1',
-      [sessionId]
-    );
-
-    if (sessionCheck.rows.length === 0) {
-      sessionCache.delete(sessionId); // Удаляем из кэша
-      console.log(`⚠️  Session ${sessionId} not found in database`);
-      return res.status(401).json({
-        success: false,
-        error: 'Сессия не найдена. Пожалуйста, войдите снова.',
-        session_terminated: true,
-      });
-    }
-
-    const isActive = sessionCheck.rows[0].is_active;
-    
-    // Обновляем кэш
-    sessionCache.set(sessionId, { isActive, cachedAt: now });
-
-    if (isActive === false) {
-      console.log(`🚪 Session ${sessionId} is inactive`);
-      return res.status(401).json({
-        success: false,
-        error: 'Сессия была завершена. Пожалуйста, войдите снова.',
-        session_terminated: true,
-      });
-    }
-
-    next();
-  } catch (error) {
-    console.error('❌ checkSessionActive error:', error);
-    // При ошибке базы данных возвращаем 500
-    return res.status(500).json({
-      success: false,
-      error: 'Ошибка проверки сессии',
-    });
-  }
+    const result = await query('SELECT id FROM session WHERE id=$1 AND user_id=$2 AND is_active=true', [decoded.sessionId, decoded.userId]);
+    if (!result.rows.length) return res.status(401).json({ success: false, error: 'Session terminated', session_terminated: true });
+    res.locals.verifiedSession = decoded;
+    return next();
+  } catch { return res.status(503).json({ success: false, error: 'Session verification unavailable' }); }
 };
 
 /**
@@ -188,7 +137,11 @@ export const checkSessionActive = async (req: Request, res: Response, next: any)
  */
 export const register = async (req: Request, res: Response) => {
   try {
+    if (req.body.method !== 'email') return res.status(400).json({ success: false, error: 'Only email authentication is supported' });
+
     const { method, contact, name, password } = req.body;
+    const normalizedContact = typeof contact === 'string' ? contact.trim().toLowerCase() : '';
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
 
     // Валидация
     if (!method || !contact || !name || !password) {
@@ -198,7 +151,7 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    if (method === 'email' && !isValidEmail(contact)) {
+    if (method === 'email' && !isValidEmail(normalizedContact)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid email format. Use only Latin letters',
@@ -219,19 +172,28 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    if (!isValidName(name)) {
+    if (method === 'email' && !isValidRegistrationPassword(password)) {
       return res.status(400).json({
         success: false,
-        error: 'Name must be 2-50 characters',
+        error: 'Password must be 8-72 characters and include uppercase, lowercase and a number',
+      });
+    }
+
+    if (method === 'email' ? !isValidNickname(normalizedName) : !isValidName(normalizedName)) {
+      return res.status(400).json({
+        success: false,
+        error: method === 'email'
+          ? 'Nickname must be 3-24 letters, numbers, dots, underscores or hyphens'
+          : 'Name must be 2-50 characters',
       });
     }
 
     // Проверка существования пользователя
     const checkQuery = method === 'email'
-      ? 'SELECT id FROM user_description WHERE email = $1'
+      ? 'SELECT id FROM user_description WHERE LOWER(email) = $1'
       : 'SELECT id FROM user_description WHERE phone = $1';
     
-    const existing = await query(checkQuery, [contact]);
+    const existing = await query(checkQuery, [method === 'email' ? normalizedContact : contact]);
 
     if (existing.rows.length > 0) {
       return res.status(409).json({
@@ -248,7 +210,7 @@ export const register = async (req: Request, res: Response) => {
       `INSERT INTO user_description (name, ${method === 'email' ? 'email' : 'phone'}, registration)
        VALUES ($1, $2, NOW())
        RETURNING id`,
-      [name, contact]
+      [normalizedName, method === 'email' ? normalizedContact : contact]
     );
     
     const userDescId = userDescResult.rows[0].id;
@@ -322,7 +284,6 @@ export const register = async (req: Request, res: Response) => {
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
       });
       
-      console.log(`📱 OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
       
       return res.json({
         success: true,
@@ -338,9 +299,10 @@ export const register = async (req: Request, res: Response) => {
       token,
       user: {
         id: userId,
-        name,
-        contact,
+        name: normalizedName,
+        contact: method === 'email' ? normalizedContact : contact,
       },
+      isNewUser: true,
     });
 
   } catch (error) {
@@ -363,6 +325,8 @@ export const register = async (req: Request, res: Response) => {
  */
 export const login = async (req: Request, res: Response) => {
   try {
+    if (req.body.method !== 'email') return res.status(400).json({ success: false, error: 'Only email authentication is supported' });
+
     const { method, contact, password } = req.body;
 
     console.log('🔐 Login attempt:', { method, contact });
@@ -428,12 +392,6 @@ export const login = async (req: Request, res: Response) => {
 
     // Проверка пароля для email
     if (method === 'email') {
-      if (!user.password_hash) {
-        return res.status(401).json({
-          success: false,
-          error: 'Неверный email или пароль',
-        });
-      }
       const isValidPassword = await comparePassword(password, user.password_hash);
       
       if (!isValidPassword) {
@@ -475,7 +433,6 @@ export const login = async (req: Request, res: Response) => {
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
       });
       
-      console.log(`📱 OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
       
       return res.json({
         success: true,
@@ -502,83 +459,8 @@ export const login = async (req: Request, res: Response) => {
  * - contact: string (phone)
  * - code: string (6-значный код)
  */
-export const verifyOTP = async (req: Request, res: Response) => {
-  try {
-    const { contact, code } = req.body;
-
-    if (!contact || !code) {
-      return res.status(400).json({
-        success: false,
-        error: 'Телефон и код обязательны',
-      });
-    }
-
-    const storedOTP = otpStore.get(contact);
-
-    if (!storedOTP) {
-      return res.status(400).json({
-        success: false,
-        error: 'OTP код не найден или истек',
-      });
-    }
-
-    if (Date.now() > storedOTP.expiresAt) {
-      otpStore.delete(contact);
-      return res.status(400).json({
-        success: false,
-        error: 'OTP код истек',
-      });
-    }
-
-    if (storedOTP.code !== code) {
-      return res.status(400).json({
-        success: false,
-        error: 'Неверный OTP код',
-      });
-    }
-
-    // Код верный - удалить из хранилища
-    otpStore.delete(contact);
-
-    // Найти пользователя с session_id
-    const userQuery = `
-      SELECT u.id, u.session_id, ud.name, ud.phone as contact
-      FROM users u
-      JOIN user_description ud ON u.user_desc_id = ud.id
-      WHERE ud.phone = $1
-    `;
-    
-    const result = await query(userQuery, [contact]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Пользователь не найден',
-      });
-    }
-
-    const user = result.rows[0];
-
-    // Генерация токена с sessionId
-    const token = generateToken(user.id, user.session_id);
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        contact: user.contact,
-      },
-    });
-
-  } catch (error) {
-    console.error('❌ OTP verification error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при проверке OTP',
-    });
-  }
+export const verifyOTP = async (_req: Request, res: Response) => {
+  return res.status(503).json({ success: false, error: 'Phone sign-in is unavailable until an SMS provider is configured' });
 };
 
 /**
@@ -588,37 +470,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
  * Body:
  * - contact: string (phone)
  */
-export const resendOTP = async (req: Request, res: Response) => {
-  try {
-    const { contact } = req.body;
-
-    if (!contact) {
-      return res.status(400).json({
-        success: false,
-        error: 'Телефон обязателен',
-      });
-    }
-
-    const otp = generateOTP();
-    otpStore.set(contact, {
-      code: otp,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
-    });
-    
-    console.log(`📱 Новый OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
-    
-    res.json({
-      success: true,
-      message: 'OTP код отправлен повторно',
-    });
-
-  } catch (error) {
-    console.error('❌ Resend OTP error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при отправке OTP',
-    });
-  }
+export const resendOTP = async (_req: Request, res: Response) => {
+  return res.status(503).json({ success: false, error: 'Phone sign-in is unavailable until an SMS provider is configured' });
 };
 
 /**
@@ -630,94 +483,8 @@ export const resendOTP = async (req: Request, res: Response) => {
  * - newPassword: string
  * - otpCode?: string (только для phone)
  */
-export const resetPassword = async (req: Request, res: Response) => {
-  try {
-    const { contact, newPassword, otpCode } = req.body;
-
-    if (!contact || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Контакт и новый пароль обязательны',
-      });
-    }
-
-    const isEmail = isValidEmail(contact);
-    const isPhone = isValidPhone(contact);
-
-    if (!isEmail && !isPhone) {
-      return res.status(400).json({
-        success: false,
-        error: 'Неверный формат контакта',
-      });
-    }
-
-    // Для телефона нужна проверка OTP
-    if (isPhone) {
-      if (!otpCode) {
-        // Отправить OTP
-        const otp = generateOTP();
-        otpStore.set(contact, {
-          code: otp,
-          expiresAt: Date.now() + 5 * 60 * 1000,
-        });
-        
-        console.log(`📱 OTP для сброса пароля ${contact}: ${otp}`);
-        
-        return res.json({
-          success: true,
-          requiresOTP: true,
-          message: 'OTP код отправлен',
-        });
-      }
-
-      // Проверить OTP
-      const storedOTP = otpStore.get(contact);
-      if (!storedOTP || storedOTP.code !== otpCode || Date.now() > storedOTP.expiresAt) {
-        return res.status(400).json({
-          success: false,
-          error: 'Неверный или истекший OTP код',
-        });
-      }
-      otpStore.delete(contact);
-    }
-
-    // Обновить пароль
-    const hashedPassword = await hashPassword(newPassword);
-    
-    const field = isEmail ? 'email' : 'phone';
-    const updateQuery = `
-      UPDATE session
-      SET session_key = $1
-      WHERE id = (
-        SELECT u.session_id
-        FROM users u
-        JOIN user_description ud ON u.user_desc_id = ud.id
-        WHERE ud.${field} = $2
-      )
-      RETURNING id
-    `;
-    
-    const result = await query(updateQuery, [hashedPassword, contact]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Пользователь не найден',
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Пароль успешно изменен',
-    });
-
-  } catch (error) {
-    console.error('❌ Reset password error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при сбросе пароля',
-    });
-  }
+export const resetPassword = async (_req: Request, res: Response) => {
+  return res.status(410).json({ success: false, error: 'Use /api/auth/request-password-reset and the email verification link' });
 };
 
 /**
@@ -764,7 +531,8 @@ export const getProfile = async (req: Request, res: Response) => {
         ud.name,
         ud.email,
         ud.phone,
-        ud.registration as "createdAt"
+          ud.registration as "createdAt",
+          CASE WHEN ud.avatar IS NOT NULL THEN '/uploads/' || ud.avatar ELSE NULL END AS avatar_url
       FROM users u
       JOIN user_description ud ON u.user_desc_id = ud.id
       WHERE u.id = $1
@@ -961,6 +729,128 @@ export const logout = async (req: Request, res: Response) => {
       success: false,
       error: 'Ошибка при выходе',
     });
+  }
+};
+
+const quoteIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+/** Permanently delete the authenticated account and rows connected to it by foreign keys. */
+export const deleteAccount = async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ success: false, error: 'Token not provided' });
+
+  let userId: number;
+  try { userId = verifyToken(token).userId; }
+  catch { return res.status(401).json({ success: false, error: 'Invalid token' }); }
+
+  const client = await pool.connect();
+  let sessionId: number | null = null;
+  try {
+    await client.query('BEGIN');
+    const account = await client.query(
+      `SELECT id, user_desc_id, user_role, session_id FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+    if (account.rowCount !== 1) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Account not found' });
+    }
+    const { user_desc_id: descriptionId, user_role: roleId } = account.rows[0];
+    sessionId = Number(account.rows[0].session_id);
+    const rootResult = await client.query(
+      `SELECT tableoid::oid::text AS oid, ctid::text AS tid FROM users WHERE id = $1`, [userId]);
+    type RowRef = { oid: string; tid: string; schema: string; table: string };
+    const root: RowRef = { ...rootResult.rows[0], schema: 'public', table: 'users' };
+    const keyOf = (row: RowRef) => `${row.oid}:${row.tid}`;
+    const nodes = new Map<string, RowRef>([[keyOf(root), root]]);
+    const edges = new Map<string, Set<string>>();
+    const queue = [root];
+
+    // Follow every FK that points at a row being deleted. This includes history tables
+    // added by later migrations without hard-coding a partial list of personal data.
+    for (let index = 0; index < queue.length; index++) {
+      const parent = queue[index];
+      const parentKey = keyOf(parent);
+      const constraints = await client.query(
+        `SELECT child.oid::text AS child_oid, child_ns.nspname AS child_schema,
+                child.relname AS child_table,
+                array_agg(child_col.attname ORDER BY key.ordinality) AS child_columns,
+                array_agg(parent_col.attname ORDER BY key.ordinality) AS parent_columns
+         FROM pg_constraint fk
+         JOIN pg_class child ON child.oid = fk.conrelid
+         JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
+         JOIN LATERAL unnest(fk.conkey, fk.confkey) WITH ORDINALITY
+           AS key(child_attnum, parent_attnum, ordinality) ON true
+         JOIN pg_attribute child_col ON child_col.attrelid = child.oid AND child_col.attnum = key.child_attnum
+         JOIN pg_attribute parent_col ON parent_col.attrelid = fk.confrelid AND parent_col.attnum = key.parent_attnum
+         WHERE fk.contype = 'f' AND fk.confrelid = $1::oid
+           AND child_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+         GROUP BY child.oid, child_ns.nspname, child.relname`, [parent.oid]);
+
+      for (const constraint of constraints.rows) {
+        const childSchema = String(constraint.child_schema);
+        const childTable = String(constraint.child_table);
+        const join = (constraint.child_columns as string[]).map((column, i) =>
+          `child.${quoteIdentifier(column)} = parent.${quoteIdentifier((constraint.parent_columns as string[])[i])}`,
+        ).join(' AND ');
+        const children = await client.query(
+          `SELECT child.tableoid::oid::text AS oid, child.ctid::text AS tid
+           FROM ${quoteIdentifier(childSchema)}.${quoteIdentifier(childTable)} child
+           JOIN ${quoteIdentifier(parent.schema)}.${quoteIdentifier(parent.table)} parent ON ${join}
+           WHERE parent.ctid = $1::tid AND parent.tableoid = $2::oid`, [parent.tid, parent.oid]);
+        for (const childRecord of children.rows) {
+          const child: RowRef = { ...childRecord, schema: childSchema, table: childTable };
+          const childKey = keyOf(child);
+          if (childKey !== parentKey) {
+            if (!edges.has(childKey)) edges.set(childKey, new Set());
+            edges.get(childKey)!.add(parentKey);
+          }
+          if (!nodes.has(childKey)) {
+            nodes.set(childKey, child);
+            queue.push(child);
+          }
+        }
+      }
+    }
+
+    // Delete children before parents. If the installed schema has a cyclic FK graph,
+    // fail safely and roll back rather than leave the account half-deleted.
+    const incoming = new Map([...nodes.keys()].map((key) => [key, 0]));
+    for (const parents of edges.values()) for (const parent of parents) {
+      incoming.set(parent, (incoming.get(parent) ?? 0) + 1);
+    }
+    const ready = [...incoming.entries()].filter(([, count]) => count === 0).map(([key]) => key);
+    const deletionOrder: string[] = [];
+    while (ready.length) {
+      const key = ready.pop()!;
+      deletionOrder.push(key);
+      for (const parent of edges.get(key) ?? []) {
+        const next = incoming.get(parent)! - 1;
+        incoming.set(parent, next);
+        if (next === 0) ready.push(parent);
+      }
+    }
+    if (deletionOrder.length !== nodes.size) throw new Error('Account data has a cyclic foreign-key graph');
+    for (const key of deletionOrder) {
+      const row = nodes.get(key)!;
+      await client.query(
+        `DELETE FROM ${quoteIdentifier(row.schema)}.${quoteIdentifier(row.table)} WHERE ctid = $1::tid AND tableoid = $2::oid`,
+        [row.tid, row.oid]);
+    }
+
+    await client.query(
+      `DELETE FROM session s WHERE s.id = $1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.session_id = s.id)`, [sessionId]);
+    await client.query(
+      `DELETE FROM roles r WHERE r.id = $1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_role = r.id)`, [roleId]);
+    await client.query(
+      `DELETE FROM user_description d WHERE d.id = $1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_desc_id = d.id)`, [descriptionId]);
+    await client.query('COMMIT');
+    if (sessionId != null) sessionCache.delete(sessionId);
+    return res.json({ success: true, message: 'Account and linked records deleted' });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Account deletion failed', error);
+    return res.status(500).json({ success: false, error: 'Could not safely delete account data' });
+  } finally {
+    client.release();
   }
 };
 /**
@@ -1237,7 +1127,6 @@ export const requestEmailChange = async (req: Request, res: Response) => {
     } catch (emailError) {
       console.error('❌ Email send error:', emailError);
       // В development режиме продолжаем работу
-      console.log(`📧 Verification link (dev): ${verificationLink}`);
     }
 
     res.json({
@@ -1394,7 +1283,6 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
       });
     } catch (emailError) {
       console.error('❌ Email send error:', emailError);
-      console.log(`📧 Reset link (dev): ${resetLink}`);
     }
 
     res.json({
@@ -1415,76 +1303,32 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
  * Сброс пароля по токену из email
  */
 export const resetPasswordWithToken = async (req: Request, res: Response) => {
-  try {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Токен и новый пароль обязательны',
-      });
-    }
-
-    if (!isValidPassword(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Пароль должен быть 8+ символов, латиница + цифры. Кириллица запрещена',
-      });
-    }
-
-    // Find token
-    const tokenResult = await query(
-      `SELECT * FROM password_reset_tokens 
-       WHERE token = $1 AND used_at IS NULL`,
-      [token]
-    );
-
-    if (tokenResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Токен не найден или уже использован',
-      });
-    }
-
-    const resetRequest = tokenResult.rows[0];
-
-    if (new Date(resetRequest.expires_at) < new Date()) {
-      return res.status(410).json({
-        success: false,
-        error: 'Срок действия ссылки истек',
-      });
-    }
-
-    // Update password
-    const newHash = await hashPassword(newPassword);
-    await query(
-      `UPDATE user_credentials SET password_hash = $1 WHERE user_id = $2`,
-      [newHash, resetRequest.user_id]
-    );
-
-    // Mark token as used
-    await query(
-      `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [resetRequest.id]
-    );
-
-    // Invalidate all sessions except current
-    await query(
-      `UPDATE session SET is_active = false WHERE user_id = $1`,
-      [resetRequest.user_id]
-    );
-
-    res.json({
-      success: true,
-      message: 'Пароль успешно изменен. Войдите с новым паролем.',
-    });
-  } catch (error) {
-    console.error('❌ Reset password with token error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при сбросе пароля',
-    });
+  const { token, newPassword } = req.body;
+  if (typeof token !== 'string' || token.length !== 64 || typeof newPassword !== 'string' || !isValidPassword(newPassword)) {
+    return res.status(400).json({ success: false, error: 'Invalid reset token or password' });
   }
+  let client;
+  try {
+    const hash = await hashPassword(newPassword);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const result = await client.query(`UPDATE password_reset_tokens SET used_at=NOW()
+      WHERE token=$1 AND used_at IS NULL AND expires_at>NOW() RETURNING user_id`, [token]);
+    if (result.rows.length !== 1) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'Reset token expired or already used' });
+    }
+    const userId = result.rows[0].user_id;
+    await client.query(`INSERT INTO user_credentials (user_id,password_hash) VALUES ($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET password_hash=EXCLUDED.password_hash`, [userId,hash]);
+    await client.query('UPDATE session SET is_active=false WHERE user_id=$1', [userId]);
+    await client.query('UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL', [userId]);
+    await client.query('COMMIT');
+    return res.json({ success: true, message: 'Password changed. Sign in again.' });
+  } catch {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return res.status(503).json({ success: false, error: 'Password reset unavailable' });
+  } finally { client?.release(); }
 };
 
 /**

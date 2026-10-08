@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { query } from './db';
 import { verifyToken } from './auth';
 import { queueAIRequest, getJobStatus } from './aiQueue';
-import { getUserLimits } from './subscriptions';
+import { getUserLimits, reserveDailyLimit } from './subscriptions';
 
 // Send a message
 export async function sendMessage(req: Request, res: Response) {
@@ -34,6 +34,9 @@ export async function sendMessage(req: Request, res: Response) {
       return res.status(400).json({ error: 'Chat ID required' });
     }
 
+    const owner = await query('SELECT id FROM chat_id WHERE id=$1 AND user_id=$2', [chatId, userId]);
+    if (!owner.rows.length) return res.status(403).json({ error: 'Access denied' });
+
     // Check rate limit (max 1 message per 300ms)
     const lastMessage = await query(
       `SELECT senddate FROM user_chat 
@@ -64,6 +67,8 @@ export async function sendMessage(req: Request, res: Response) {
       });
     }
 
+    if (!await reserveDailyLimit(userId, 'chat_requests', limits.dailyChatLimit)) return res.status(429).json({ error: 'Daily chat limit reached' });
+
     // Save user message
     const userMsgResult = await query(
       `INSERT INTO user_chat (chat_id, user_id, message, type, senddate)
@@ -88,7 +93,7 @@ export async function sendMessage(req: Request, res: Response) {
     // Queue AI response with priority based on subscription
     const aiContext = {
       chatId,
-      userMessages: chatContext.rows,
+      conversationHistory: chatContext.rows.reverse().map((row: any) => ({ role: row.is_ai_response ? 'assistant' : 'user', content: row.message })),
       subscriptionTier: limits.tierName,
     };
 
@@ -97,16 +102,10 @@ export async function sendMessage(req: Request, res: Response) {
       aiContext,
       userId,
       chatId,
-      limits.tierName === 'pro' ? 10 : limits.tierName === 'plus' ? 5 : 0 // Priority: pro highest
+      limits.tierName.toLowerCase() === 'pro' ? 1 : limits.tierName.toLowerCase() === 'plus' ? 5 : 10 // Priority: pro highest
     );
 
-    // Increment counter
-    await query(
-      `UPDATE users 
-       SET daily_chat_used = COALESCE(daily_chat_used, 0) + 1
-       WHERE id = $1`,
-      [userId]
-    );
+
 
     res.json({
       success: true,
@@ -142,7 +141,7 @@ export async function getMessages(req: Request, res: Response) {
 
     // Verify user owns this chat
     const chatCheck = await query(
-      `SELECT id FROM chats WHERE id = $1 AND user_id = $2`,
+      `SELECT id FROM chat_id WHERE id = $1 AND user_id = $2`,
       [chatId, userId]
     );
 
@@ -157,7 +156,7 @@ export async function getMessages(req: Request, res: Response) {
        WHERE chat_id = $1
        ORDER BY senddate DESC
        LIMIT $2 OFFSET $3`,
-      [chatId, parseInt(limit as string), parseInt(offset as string)]
+      [chatId, Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 50)), Math.max(0, Number.parseInt(String(offset), 10) || 0)]
     );
 
     res.json({
@@ -231,7 +230,7 @@ export async function getMessageStatus(req: Request, res: Response) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const status = await getJobStatus(jobId);
+    const status = await getJobStatus(jobId, decoded.userId);
     
     if (!status) {
       return res.status(404).json({ error: 'Job not found' });
@@ -267,7 +266,7 @@ export async function clearChat(req: Request, res: Response) {
 
     // Verify user owns this chat
     const chatCheck = await query(
-      `SELECT id FROM chats WHERE id = $1 AND user_id = $2`,
+      `SELECT id FROM chat_id WHERE id = $1 AND user_id = $2`,
       [chatId, userId]
     );
 

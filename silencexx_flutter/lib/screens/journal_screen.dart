@@ -146,6 +146,7 @@ class _JournalScreenState extends State<JournalScreen> {
                   method: 'POST',
                   body: {
                     'date': dateKey(selected),
+                    'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
                     'content': content.text.trim(),
                   },
                 );

@@ -60,7 +60,6 @@ export const createChat = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Ошибка при создании чата',
-      details: error?.message || error
     });
   }
 };
@@ -91,36 +90,16 @@ export const getChatList = async (req: Request, res: Response) => {
 
     // Оптимизированный запрос с UNION и подзапросами
     const chatsQuery = `
-      WITH last_messages AS (
-        SELECT 
-          chat_id,
-          message,
-          senddate,
-          'user' as sender
-        FROM user_chat
-        UNION ALL
-        SELECT 
-          chat_id,
-          message,
-          senddate,
-          'ai' as sender
-        FROM ai_response
-      ),
-      latest_per_chat AS (
-        SELECT DISTINCT ON (chat_id)
-          chat_id,
-          message as last_message,
-          senddate as last_message_date
-        FROM last_messages
-        ORDER BY chat_id, senddate DESC
-      )
-      SELECT 
-        c.id,
-        c.user_id,
-        COALESCE(lpc.last_message, '') as last_message,
-        COALESCE(lpc.last_message_date, NOW()) as last_message_date
+      SELECT c.id,c.user_id,COALESCE(lpc.message,'') AS last_message,
+        COALESCE(lpc.senddate,c.created_at) AS last_message_date
       FROM chat_id c
-      LEFT JOIN latest_per_chat lpc ON c.id = lpc.chat_id
+      LEFT JOIN LATERAL (
+        SELECT message,senddate FROM (
+          (SELECT message,senddate FROM user_chat WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
+          UNION ALL
+          (SELECT message,senddate FROM ai_response WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
+        ) latest ORDER BY senddate DESC LIMIT 1
+      ) lpc ON true
       WHERE c.user_id = $1 AND (c.is_temporary = false OR c.is_temporary IS NULL)
       ORDER BY last_message_date DESC
       LIMIT 50
@@ -143,7 +122,6 @@ export const getChatList = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Ошибка при получении списка чатов',
-      details: error.message
     });
   }
 };
@@ -266,7 +244,6 @@ export const getChatMessages = async (req: Request, res: Response) => {
       return res.status(500).json({
         success: false,
         error: 'Ошибка базы данных при получении сообщений',
-        details: dbError.message
       });
     }
     

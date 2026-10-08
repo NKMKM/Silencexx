@@ -5,7 +5,10 @@ import { pool, query } from './db';
 import { Request, Response } from 'express';
 import nodemailer from 'nodemailer';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (JWT_SECRET.length < 32 || JWT_SECRET === 'your-secret-key-change-in-production') {
+  throw new Error('JWT_SECRET must be a unique secret of at least 32 characters');
+}
 const JWT_EXPIRES_IN = '7d';
 const EMAIL_CHANGE_COOLDOWN_DAYS = 14;
 
@@ -29,13 +32,13 @@ const SESSION_CACHE_TTL = 30000; // 30 секунд
 
 // Генерация 6-значного OTP кода
 export const generateOTP = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 // Валидация email (только латиница)
 export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return emailRegex.test(email);
+  return typeof email === 'string' && email.length <= 254 && emailRegex.test(email);
 };
 
 // Валидация телефона (международный формат)
@@ -46,7 +49,7 @@ export const isValidPhone = (phone: string): boolean => {
 
 // Валидация пароля (минимум 8 символов, латиница + цифры, без кириллицы)
 export const isValidPassword = (password: string): boolean => {
-  if (password.length < 8) return false;
+  if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) return false;
   
   // Проверка на кириллицу
   const hasCyrillic = /[а-яА-ЯёЁ]/.test(password);
@@ -99,7 +102,9 @@ export const generateToken = (userId: number, sessionId: number): string => {
 // Проверка JWT токена
 export const verifyToken = (token: string): any => {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (typeof payload === 'string' || !Number.isSafeInteger(payload.userId) || payload.userId <= 0 || !Number.isSafeInteger(payload.sessionId) || payload.sessionId <= 0) throw new Error('Invalid identity');
+    return payload;
   } catch (error) {
     throw new Error('Invalid token');
   }
@@ -107,83 +112,17 @@ export const verifyToken = (token: string): any => {
 
 // Middleware для проверки активности сессии
 export const checkSessionActive = async (req: Request, res: Response, next: any) => {
+  // One verification per request, including when a route repeats this middleware.
+  if (res.locals.verifiedSession) return next();
+  let decoded;
+  try { decoded = verifyToken(req.headers.authorization?.replace(/^Bearer /, '') || ''); }
+  catch { return res.status(401).json({ success: false, error: 'Unauthorized' }); }
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      return next(); // Если нет токена, пропускаем (другие middleware проверят)
-    }
-
-    let decoded;
-    try {
-      decoded = verifyToken(token);
-    } catch (error) {
-      console.log('⚠️  Invalid token format');
-      return next(); // Невалидный токен - пусть обработает основной обработчик
-    }
-
-    const sessionId = decoded.sessionId;
-
-    if (!sessionId) {
-      console.log('⚠️  No sessionId in token');
-      return next();
-    }
-
-    // Проверяем кэш
-    const cached = sessionCache.get(sessionId);
-    const now = Date.now();
-    
-    if (cached && (now - cached.cachedAt) < SESSION_CACHE_TTL) {
-      // Используем кэшированное значение
-      if (!cached.isActive) {
-        return res.status(401).json({
-          success: false,
-          error: 'Сессия неактивна. Пожалуйста, войдите снова.',
-          session_terminated: true,
-        });
-      }
-      return next(); // Сессия активна
-    }
-
-    // Проверяем активна ли сессия в БД
-    const sessionCheck = await query(
-      'SELECT is_active FROM session WHERE id = $1',
-      [sessionId]
-    );
-
-    if (sessionCheck.rows.length === 0) {
-      sessionCache.delete(sessionId); // Удаляем из кэша
-      console.log(`⚠️  Session ${sessionId} not found in database`);
-      return res.status(401).json({
-        success: false,
-        error: 'Сессия не найдена. Пожалуйста, войдите снова.',
-        session_terminated: true,
-      });
-    }
-
-    const isActive = sessionCheck.rows[0].is_active;
-    
-    // Обновляем кэш
-    sessionCache.set(sessionId, { isActive, cachedAt: now });
-
-    if (isActive === false) {
-      console.log(`🚪 Session ${sessionId} is inactive`);
-      return res.status(401).json({
-        success: false,
-        error: 'Сессия была завершена. Пожалуйста, войдите снова.',
-        session_terminated: true,
-      });
-    }
-
-    next();
-  } catch (error) {
-    console.error('❌ checkSessionActive error:', error);
-    // При ошибке базы данных возвращаем 500
-    return res.status(500).json({
-      success: false,
-      error: 'Ошибка проверки сессии',
-    });
-  }
+    const result = await query('SELECT id FROM session WHERE id=$1 AND user_id=$2 AND is_active=true', [decoded.sessionId, decoded.userId]);
+    if (!result.rows.length) return res.status(401).json({ success: false, error: 'Session terminated', session_terminated: true });
+    res.locals.verifiedSession = decoded;
+    return next();
+  } catch { return res.status(503).json({ success: false, error: 'Session verification unavailable' }); }
 };
 
 /**
@@ -198,6 +137,8 @@ export const checkSessionActive = async (req: Request, res: Response, next: any)
  */
 export const register = async (req: Request, res: Response) => {
   try {
+    if (req.body.method !== 'email') return res.status(400).json({ success: false, error: 'Only email authentication is supported' });
+
     const { method, contact, name, password } = req.body;
     const normalizedContact = typeof contact === 'string' ? contact.trim().toLowerCase() : '';
     const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -343,7 +284,6 @@ export const register = async (req: Request, res: Response) => {
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
       });
       
-      console.log(`📱 OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
       
       return res.json({
         success: true,
@@ -385,6 +325,8 @@ export const register = async (req: Request, res: Response) => {
  */
 export const login = async (req: Request, res: Response) => {
   try {
+    if (req.body.method !== 'email') return res.status(400).json({ success: false, error: 'Only email authentication is supported' });
+
     const { method, contact, password } = req.body;
 
     console.log('🔐 Login attempt:', { method, contact });
@@ -491,7 +433,6 @@ export const login = async (req: Request, res: Response) => {
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
       });
       
-      console.log(`📱 OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
       
       return res.json({
         success: true,
@@ -518,83 +459,8 @@ export const login = async (req: Request, res: Response) => {
  * - contact: string (phone)
  * - code: string (6-значный код)
  */
-export const verifyOTP = async (req: Request, res: Response) => {
-  try {
-    const { contact, code } = req.body;
-
-    if (!contact || !code) {
-      return res.status(400).json({
-        success: false,
-        error: 'Телефон и код обязательны',
-      });
-    }
-
-    const storedOTP = otpStore.get(contact);
-
-    if (!storedOTP) {
-      return res.status(400).json({
-        success: false,
-        error: 'OTP код не найден или истек',
-      });
-    }
-
-    if (Date.now() > storedOTP.expiresAt) {
-      otpStore.delete(contact);
-      return res.status(400).json({
-        success: false,
-        error: 'OTP код истек',
-      });
-    }
-
-    if (storedOTP.code !== code) {
-      return res.status(400).json({
-        success: false,
-        error: 'Неверный OTP код',
-      });
-    }
-
-    // Код верный - удалить из хранилища
-    otpStore.delete(contact);
-
-    // Найти пользователя с session_id
-    const userQuery = `
-      SELECT u.id, u.session_id, ud.name, ud.phone as contact
-      FROM users u
-      JOIN user_description ud ON u.user_desc_id = ud.id
-      WHERE ud.phone = $1
-    `;
-    
-    const result = await query(userQuery, [contact]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Пользователь не найден',
-      });
-    }
-
-    const user = result.rows[0];
-
-    // Генерация токена с sessionId
-    const token = generateToken(user.id, user.session_id);
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        contact: user.contact,
-      },
-    });
-
-  } catch (error) {
-    console.error('❌ OTP verification error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при проверке OTP',
-    });
-  }
+export const verifyOTP = async (_req: Request, res: Response) => {
+  return res.status(503).json({ success: false, error: 'Phone sign-in is unavailable until an SMS provider is configured' });
 };
 
 /**
@@ -604,37 +470,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
  * Body:
  * - contact: string (phone)
  */
-export const resendOTP = async (req: Request, res: Response) => {
-  try {
-    const { contact } = req.body;
-
-    if (!contact) {
-      return res.status(400).json({
-        success: false,
-        error: 'Телефон обязателен',
-      });
-    }
-
-    const otp = generateOTP();
-    otpStore.set(contact, {
-      code: otp,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 минут
-    });
-    
-    console.log(`📱 Новый OTP для ${contact}: ${otp}`); // В продакшене отправить SMS
-    
-    res.json({
-      success: true,
-      message: 'OTP код отправлен повторно',
-    });
-
-  } catch (error) {
-    console.error('❌ Resend OTP error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при отправке OTP',
-    });
-  }
+export const resendOTP = async (_req: Request, res: Response) => {
+  return res.status(503).json({ success: false, error: 'Phone sign-in is unavailable until an SMS provider is configured' });
 };
 
 /**
@@ -646,94 +483,8 @@ export const resendOTP = async (req: Request, res: Response) => {
  * - newPassword: string
  * - otpCode?: string (только для phone)
  */
-export const resetPassword = async (req: Request, res: Response) => {
-  try {
-    const { contact, newPassword, otpCode } = req.body;
-
-    if (!contact || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Контакт и новый пароль обязательны',
-      });
-    }
-
-    const isEmail = isValidEmail(contact);
-    const isPhone = isValidPhone(contact);
-
-    if (!isEmail && !isPhone) {
-      return res.status(400).json({
-        success: false,
-        error: 'Неверный формат контакта',
-      });
-    }
-
-    // Для телефона нужна проверка OTP
-    if (isPhone) {
-      if (!otpCode) {
-        // Отправить OTP
-        const otp = generateOTP();
-        otpStore.set(contact, {
-          code: otp,
-          expiresAt: Date.now() + 5 * 60 * 1000,
-        });
-        
-        console.log(`📱 OTP для сброса пароля ${contact}: ${otp}`);
-        
-        return res.json({
-          success: true,
-          requiresOTP: true,
-          message: 'OTP код отправлен',
-        });
-      }
-
-      // Проверить OTP
-      const storedOTP = otpStore.get(contact);
-      if (!storedOTP || storedOTP.code !== otpCode || Date.now() > storedOTP.expiresAt) {
-        return res.status(400).json({
-          success: false,
-          error: 'Неверный или истекший OTP код',
-        });
-      }
-      otpStore.delete(contact);
-    }
-
-    // Обновить пароль
-    const hashedPassword = await hashPassword(newPassword);
-    
-    const field = isEmail ? 'email' : 'phone';
-    const updateQuery = `
-      UPDATE session
-      SET session_key = $1
-      WHERE id = (
-        SELECT u.session_id
-        FROM users u
-        JOIN user_description ud ON u.user_desc_id = ud.id
-        WHERE ud.${field} = $2
-      )
-      RETURNING id
-    `;
-    
-    const result = await query(updateQuery, [hashedPassword, contact]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Пользователь не найден',
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Пароль успешно изменен',
-    });
-
-  } catch (error) {
-    console.error('❌ Reset password error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при сбросе пароля',
-    });
-  }
+export const resetPassword = async (_req: Request, res: Response) => {
+  return res.status(410).json({ success: false, error: 'Use /api/auth/request-password-reset and the email verification link' });
 };
 
 /**
@@ -1376,7 +1127,6 @@ export const requestEmailChange = async (req: Request, res: Response) => {
     } catch (emailError) {
       console.error('❌ Email send error:', emailError);
       // В development режиме продолжаем работу
-      console.log(`📧 Verification link (dev): ${verificationLink}`);
     }
 
     res.json({
@@ -1533,7 +1283,6 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
       });
     } catch (emailError) {
       console.error('❌ Email send error:', emailError);
-      console.log(`📧 Reset link (dev): ${resetLink}`);
     }
 
     res.json({
@@ -1554,76 +1303,32 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
  * Сброс пароля по токену из email
  */
 export const resetPasswordWithToken = async (req: Request, res: Response) => {
-  try {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Токен и новый пароль обязательны',
-      });
-    }
-
-    if (!isValidPassword(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Пароль должен быть 8+ символов, латиница + цифры. Кириллица запрещена',
-      });
-    }
-
-    // Find token
-    const tokenResult = await query(
-      `SELECT * FROM password_reset_tokens 
-       WHERE token = $1 AND used_at IS NULL`,
-      [token]
-    );
-
-    if (tokenResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Токен не найден или уже использован',
-      });
-    }
-
-    const resetRequest = tokenResult.rows[0];
-
-    if (new Date(resetRequest.expires_at) < new Date()) {
-      return res.status(410).json({
-        success: false,
-        error: 'Срок действия ссылки истек',
-      });
-    }
-
-    // Update password
-    const newHash = await hashPassword(newPassword);
-    await query(
-      `UPDATE user_credentials SET password_hash = $1 WHERE user_id = $2`,
-      [newHash, resetRequest.user_id]
-    );
-
-    // Mark token as used
-    await query(
-      `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [resetRequest.id]
-    );
-
-    // Invalidate all sessions except current
-    await query(
-      `UPDATE session SET is_active = false WHERE user_id = $1`,
-      [resetRequest.user_id]
-    );
-
-    res.json({
-      success: true,
-      message: 'Пароль успешно изменен. Войдите с новым паролем.',
-    });
-  } catch (error) {
-    console.error('❌ Reset password with token error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при сбросе пароля',
-    });
+  const { token, newPassword } = req.body;
+  if (typeof token !== 'string' || token.length !== 64 || typeof newPassword !== 'string' || !isValidPassword(newPassword)) {
+    return res.status(400).json({ success: false, error: 'Invalid reset token or password' });
   }
+  let client;
+  try {
+    const hash = await hashPassword(newPassword);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const result = await client.query(`UPDATE password_reset_tokens SET used_at=NOW()
+      WHERE token=$1 AND used_at IS NULL AND expires_at>NOW() RETURNING user_id`, [token]);
+    if (result.rows.length !== 1) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'Reset token expired or already used' });
+    }
+    const userId = result.rows[0].user_id;
+    await client.query(`INSERT INTO user_credentials (user_id,password_hash) VALUES ($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET password_hash=EXCLUDED.password_hash`, [userId,hash]);
+    await client.query('UPDATE session SET is_active=false WHERE user_id=$1', [userId]);
+    await client.query('UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL', [userId]);
+    await client.query('COMMIT');
+    return res.json({ success: true, message: 'Password changed. Sign in again.' });
+  } catch {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return res.status(503).json({ success: false, error: 'Password reset unavailable' });
+  } finally { client?.release(); }
 };
 
 /**

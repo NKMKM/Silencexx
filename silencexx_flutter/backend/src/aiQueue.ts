@@ -1,6 +1,7 @@
 import Queue from 'bull';
 import { generateAIResponse } from './ai';
 import { query } from './db';
+import { aiContext } from './aiContext';
 
 // Create AI request queue with concurrency
 export const aiQueue = new Queue('ai-requests', {
@@ -9,12 +10,12 @@ export const aiQueue = new Queue('ai-requests', {
     port: parseInt(process.env.REDIS_PORT || '6379'),
   },
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 1, // A timeout may already be billed; do not automatically pay for another generation.
     backoff: {
       type: 'exponential',
       delay: 2000,
     },
-    removeOnComplete: true,
+    removeOnComplete: 100,
   },
 });
 
@@ -24,7 +25,8 @@ aiQueue.process('generate', 5, async (job) => {
     const { prompt, context, userId, chatId } = job.data;
     
     // Generate AI response
-    const response = await generateAIResponse(prompt, context);
+    const result = await aiContext.run({ userId: Number(userId), feature: 'queued_chat' }, () => generateAIResponse(prompt, context));
+    const response = result.response;
     
     // Store response in database
     if (chatId) {
@@ -54,7 +56,7 @@ aiQueue.on('failed', (job, err) => {
 
 // Handle completed jobs
 aiQueue.on('completed', (job, result) => {
-  console.log(`Job ${job.id} completed:`, result.response?.substring(0, 50));
+  console.log(`Job ${job.id} completed`);
 });
 
 // Queue an AI request with priority
@@ -86,10 +88,10 @@ export async function queueAIRequest(
 }
 
 // Get job status
-export async function getJobStatus(jobId: string) {
+export async function getJobStatus(jobId: string, userId: number) {
   try {
     const job = await aiQueue.getJob(jobId);
-    if (!job) return null;
+    if (!job || Number(job.data.userId) !== userId) return null;
     
     const state = await job.getState();
     const progress = job.progress();

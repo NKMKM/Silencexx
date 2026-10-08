@@ -337,7 +337,7 @@ export async function completePanicMode(req: Request, res: Response) {
       SET status = $1, anxiety_level_end = $2, completed_at = NOW(), updated_at = NOW()
       WHERE session_id = $3 AND user_id = $4
       `,
-      ['completed', endAnxietyLevel || null, sessionId, userId]
+      ['completed', endAnxietyLevel ?? null, sessionId, userId]
     );
 
     console.log(`🎯 Panic mode completed for session ${sessionId}`);

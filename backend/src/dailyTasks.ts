@@ -196,6 +196,13 @@ export const completeDailyTask = async (req: Request, res: Response) => {
     
     try {
       await client.query('BEGIN');
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [userId]);
+      const locked = await client.query('SELECT status FROM daily_tasks WHERE id=$1 AND user_id=$2 FOR UPDATE', [taskId,userId]);
+      if (!locked.rows.length || locked.rows[0].status === 'completed') {
+        await client.query('ROLLBACK');
+        return res.json({ success: true, status: 'completed', alreadyCompleted: true });
+      }
+
 
       // 1. Обновляем статус задания
       await client.query(

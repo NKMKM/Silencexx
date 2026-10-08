@@ -1,272 +1,142 @@
 import { Request, Response } from 'express';
-import { query } from './db';
-import { generateToken, hashPassword } from './auth';
+import axios from 'axios';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import { createPublicKey, randomBytes } from 'crypto';
+import { pool } from './db';
+import { generateToken } from './auth';
 
-/**
- * POST /api/auth/oauth/google
- * Аутентификация через Google
- * 
- * Body:
- * - idToken: string (Google ID Token)
- * - email: string
- * - name: string
- * - googleId: string
- */
+type Provider = 'google' | 'apple';
+type Identity = JwtPayload & { sub: string; email?: string; email_verified?: boolean | string; name?: string; nonce?: string };
+
+const keySets = {
+  google: 'https://www.googleapis.com/oauth2/v3/certs',
+  apple: 'https://appleid.apple.com/auth/keys',
+};
+const issuers: Record<Provider, [string, ...string[]]> = {
+  google: ['accounts.google.com', 'https://accounts.google.com'],
+  apple: ['https://appleid.apple.com'],
+};
+
+const keyCache = new Map<Provider, { keys: JsonWebKey[]; expires: number }>();
+
+async function verifyIdentityToken(provider: Provider, token: string, nonce?: string): Promise<Identity> {
+  const clientIds = provider === 'google'
+    ? (process.env.GOOGLE_OAUTH_CLIENT_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)
+    : [process.env.APPLE_BUNDLE_ID ?? 'com.silencexx.silencexx'].filter(Boolean);
+  if (clientIds.length === 0) throw new Error(`${provider.toUpperCase()}_CLIENT_ID_NOT_CONFIGURED`);
+
+  const decoded = jwt.decode(token, { complete: true });
+  if (!decoded || typeof decoded === 'string' || !decoded.header.kid) throw new Error('INVALID_ID_TOKEN');
+  let keys = keyCache.get(provider);
+  if (!keys || keys.expires <= Date.now()) {
+    const response = await axios.get<{ keys: JsonWebKey[] }>(keySets[provider], { timeout: 8000 });
+    keys = { keys: response.data.keys, expires: Date.now() + 5 * 60 * 1000 };
+    keyCache.set(provider, keys);
+  }
+  const jwk = keys.keys.find((key) => key.kid === decoded.header.kid);
+  if (!jwk) throw new Error('UNKNOWN_SIGNING_KEY');
+  const publicKey = createPublicKey({ key: jwk as import('crypto').JsonWebKey, format: 'jwk' });
+  const payload = jwt.verify(token, publicKey, {
+    algorithms: provider === 'apple' ? ['RS256'] : ['RS256'],
+    audience: clientIds as [string, ...string[]],
+    issuer: issuers[provider],
+  }) as Identity;
+  if (provider === 'apple' && (!nonce || payload.nonce !== nonce)) throw new Error('INVALID_NONCE');
+  if (!payload.sub || !payload.email) throw new Error('ID_TOKEN_MISSING_IDENTITY');
+  if (payload.email_verified !== true && payload.email_verified !== 'true') throw new Error('EMAIL_NOT_VERIFIED');
+  return payload;
+}
+
+const providerUnavailable = (provider: Provider, error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  return message.endsWith('_NOT_CONFIGURED') || axios.isAxiosError(error);
+};
+
+async function providerAuth(provider: Provider, identityToken: string, displayName: unknown, nonce: string | undefined, res: Response) {
+  let identity: Identity;
+  try {
+    identity = await verifyIdentityToken(provider, identityToken, nonce);
+  } catch (error) {
+    console.error(`${provider} identity verification failed`, error instanceof Error ? error.message : 'unknown error');
+    const unavailable = providerUnavailable(provider, error);
+    res.status(unavailable ? 503 : 401).json({
+      success: false,
+      error: unavailable ? `${provider} sign-in is not configured on this server` : 'Provider identity could not be verified',
+    });
+    return;
+  }
+
+  const email = identity.email!.toLowerCase();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialize OAuth setup for the same verified email without holding a connection during JWKS fetch.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [email]);
+    const existing = await client.query(
+      `SELECT u.id, ud.email, ud.name FROM users u
+       JOIN user_description ud ON ud.id=u.user_desc_id WHERE LOWER(ud.email)=$1 LIMIT 1`, [email]);
+    let user = existing.rows[0];
+    const isNewUser = !user;
+    if (user) {
+      const credentials = await client.query('SELECT user_id FROM user_credentials WHERE user_id=$1', [user.id]);
+      if (credentials.rows.length) {
+        await client.query('ROLLBACK');
+        return void res.status(409).json({ success: false, error: 'This email already has a password account. Sign in with email; provider linking requires a separate authenticated flow.' });
+      }
+    }
+
+    const session = await client.query(
+      `INSERT INTO session (session_ip,session_key,device_type,created_at,last_active,is_active)
+       VALUES ($1,$2,$3,NOW(),NOW(),true) RETURNING id`,
+      ['oauth', randomBytes(32).toString('hex'), provider]);
+    const sessionId = session.rows[0].id;
+    if (!user) {
+      const name = (typeof identity.name === 'string' ? identity.name
+        : typeof displayName === 'string' && displayName.trim() ? displayName.trim() : `${provider} user`).slice(0,64);
+      const description = await client.query(
+        'INSERT INTO user_description (name,email,registration) VALUES ($1,$2,NOW()) RETURNING id', [name,email]);
+      const role = await client.query(
+        "INSERT INTO roles (role,till,autorefresh) VALUES ('free',NOW()+INTERVAL '30 days',false) RETURNING id");
+      const created = await client.query(
+        'INSERT INTO users (user_desc_id,user_role,session_id) VALUES ($1,$2,$3) RETURNING id',
+        [description.rows[0].id,role.rows[0].id,sessionId]);
+      user = { id: created.rows[0].id, email, name };
+      await client.query('INSERT INTO settings (user_id,theme,language_id) VALUES ($1,0,1)', [user.id]);
+      await client.query('INSERT INTO chat_id (user_id) VALUES ($1)', [user.id]);
+    }
+    await client.query('UPDATE session SET user_id=$1 WHERE id=$2', [user.id,sessionId]);
+    await client.query('COMMIT');
+    const token = generateToken(user.id, sessionId);
+    res.json({ success: true, token, isNewUser, user: { id: user.id, email: user.email, name: user.name, provider } });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+
+}
+
 export const googleAuth = async (req: Request, res: Response) => {
-  try {
-    console.log('📱 Google Auth Request Body:', req.body);
-    
-    const { idToken, email, name, googleId } = req.body;
-
-    if (!idToken || !email || !googleId) {
-      console.error('❌ Missing fields:', { idToken: !!idToken, email: !!email, googleId: !!googleId });
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-      });
-    }
-
-    console.log('✅ Processing Google auth for:', email);
-
-    // TODO: Verify Google ID Token with Google API
-    // const ticket = await client.verifyIdToken({
-    //   idToken,
-    //   audience: process.env.GOOGLE_CLIENT_ID,
-    // });
-
-    // Проверка существования пользователя
-    const existingUser = await query(
-      'SELECT u.id, u.session_id FROM users u JOIN user_description ud ON u.user_desc_id = ud.id WHERE ud.email = $1',
-      [email]
-    );
-
-    if (existingUser.rows.length > 0) {
-      // Пользователь существует - логин
-      const userId = existingUser.rows[0].id;
-      const sessionId = existingUser.rows[0].session_id;
-      const token = generateToken(userId, sessionId);
-
-      console.log('✅ Existing user logged in:', userId);
-
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: userId,
-          email,
-          name,
-          provider: 'google',
-        },
-      });
-    }
-
-    // Новый пользователь - регистрация
-    // 1. Создать user_description
-    const userDescResult = await query(
-      `INSERT INTO user_description (name, email, registration_date)
-       VALUES ($1, $2, NOW())
-       RETURNING id`,
-      [name || 'Google User', email]
-    );
-    const userDescId = userDescResult.rows[0].id;
-
-    // 2. Создать роль (free с пробным периодом 30 дней)
-    const roleResult = await query(
-      `INSERT INTO roles (user_role, expiration_date)
-       VALUES ('free', NOW() + INTERVAL '30 days')
-       RETURNING id`,
-      []
-    );
-    const roleId = roleResult.rows[0].id;
-
-    // 3. Создать session (OAuth пользователи не имеют пароля)
-    const dummyPassword = await hashPassword(`google_${googleId}_${Date.now()}`);
-    const sessionResult = await query(
-      `INSERT INTO session (ip_adress, session_key, device)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      ['0.0.0.0', dummyPassword, 'google_oauth']
-    );
-    const sessionId = sessionResult.rows[0].id;
-
-    // 4. Создать пользователя
-    const userResult = await query(
-      `INSERT INTO users (user_desc_id, user_role, session_id)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      [userDescId, roleId, sessionId]
-    );
-    const userId = userResult.rows[0].id;
-
-    // 5. Создать настройки по умолчанию
-    await query(
-      `INSERT INTO settings (id_user, theme, language)
-       VALUES ($1, 0, 1)`,
-      [userId]
-    );
-
-    // 6. Создать chat_id
-    await query(
-      `INSERT INTO chat_id (user_id)
-       VALUES ($1)`,
-      [userId]
-    );
-
-    // Генерация JWT токена
-    const token = generateToken(userId, sessionId);
-
-    console.log(`✅ Новый пользователь через Google: ${email}`);
-
-    return res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: userId,
-        email,
-        name,
-        provider: 'google',
-      },
-    });
-
-  } catch (error) {
-    console.error('❌ Google Auth error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Server error during Google authentication',
-    });
+  const { idToken } = req.body;
+  if (typeof idToken !== 'string' || idToken.length > 12_000) {
+    return res.status(400).json({ success: false, error: 'A valid Google ID token is required' });
+  }
+  try { await providerAuth('google', idToken, req.body.displayName, undefined, res); }
+  catch (error) {
+    console.error('Google account setup failed', error);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Could not complete Google sign-in' });
   }
 };
 
-/**
- * POST /api/auth/oauth/apple
- * Аутентификация через Apple
- * 
- * Body:
- * - identityToken: string (Apple Identity Token)
- * - email?: string (может быть null при повторном входе)
- * - name?: string
- * - appleId: string (user identifier from Apple)
- */
 export const appleAuth = async (req: Request, res: Response) => {
-  try {
-    const { identityToken, email, name, appleId } = req.body;
-
-    if (!identityToken || !appleId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-      });
-    }
-
-    // TODO: Verify Apple Identity Token
-    // const decodedToken = jwt.decode(identityToken);
-
-    // Поиск по appleId в session.device
-    const existingByAppleId = await query(
-      `SELECT u.id, u.session_id, ud.email, ud.name 
-       FROM users u 
-       JOIN session s ON u.session_id = s.id
-       JOIN user_description ud ON u.user_desc_id = ud.id
-       WHERE s.device = $1`,
-      [`apple_${appleId}`]
-    );
-
-    if (existingByAppleId.rows.length > 0) {
-      // Пользователь существует
-      const user = existingByAppleId.rows[0];
-      const token = generateToken(user.id, user.session_id);
-
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          provider: 'apple',
-        },
-      });
-    }
-
-    // Новый пользователь
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email required for first-time Apple Sign In',
-      });
-    }
-
-    // 1. Создать user_description
-    const userDescResult = await query(
-      `INSERT INTO user_description (name, email, registration_date)
-       VALUES ($1, $2, NOW())
-       RETURNING id`,
-      [name || 'Apple User', email]
-    );
-    const userDescId = userDescResult.rows[0].id;
-
-    // 2. Создать роль
-    const roleResult = await query(
-      `INSERT INTO roles (user_role, expiration_date)
-       VALUES ('free', NOW() + INTERVAL '30 days')
-       RETURNING id`,
-      []
-    );
-    const roleId = roleResult.rows[0].id;
-
-    // 3. Создать session с appleId в device
-    const dummyPassword = await hashPassword(`apple_${appleId}_${Date.now()}`);
-    const sessionResult = await query(
-      `INSERT INTO session (ip_adress, session_key, device)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      ['0.0.0.0', dummyPassword, `apple_${appleId}`]
-    );
-    const sessionId = sessionResult.rows[0].id;
-
-    // 4. Создать пользователя
-    const userResult = await query(
-      `INSERT INTO users (user_desc_id, user_role, session_id)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      [userDescId, roleId, sessionId]
-    );
-    const userId = userResult.rows[0].id;
-
-    // 5. Настройки
-    await query(
-      `INSERT INTO settings (id_user, theme, language)
-       VALUES ($1, 0, 1)`,
-      [userId]
-    );
-
-    // 6. Chat
-    await query(
-      `INSERT INTO chat_id (user_id)
-       VALUES ($1)`,
-      [userId]
-    );
-
-    const token = generateToken(userId, sessionId);
-
-    console.log(`🍎 Новый пользователь через Apple: ${email}`);
-
-    return res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: userId,
-        email,
-        name,
-        provider: 'apple',
-      },
-    });
-
-  } catch (error) {
-    console.error('❌ Apple Auth error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Server error during Apple authentication',
-    });
+  const { identityToken, nonce, displayName } = req.body;
+  if (typeof identityToken !== 'string' || identityToken.length > 12_000 || typeof nonce !== 'string' || nonce.length > 200) {
+    return res.status(400).json({ success: false, error: 'A valid Apple identity token is required' });
+  }
+  try { await providerAuth('apple', identityToken, displayName, nonce, res); }
+  catch (error) {
+    console.error('Apple account setup failed', error);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Could not complete Apple sign-in' });
   }
 };
+
+type JsonWebKey = { kid?: string; [key: string]: unknown };

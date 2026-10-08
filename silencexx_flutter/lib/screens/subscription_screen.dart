@@ -204,37 +204,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
       title: Text(context.tr('Оформление подписки', 'Choose subscription')),
     ),
     body: ActionPage(
-      action: ActionButton(
-        label: context.tr(
-          'Активировать в демо-режиме',
-          'Activate in demo mode',
+      action: FilledButton(
+        onPressed: null,
+        child: Text(
+          context.tr(
+            'Оплата пока недоступна',
+            'Payments are not available yet',
+          ),
         ),
-        action: () async {
-          if (!RegExp(r'^\S+@\S+\.\S+$').hasMatch(email.text.trim())) {
-            throw ApiException(
-              context.tr('Введите email.', 'Enter an email address.'),
-            );
-          }
-          final api = context.app.api;
-          if (transactionId == null) {
-            final payment = await api.call(
-              '/payments/create',
-              method: 'POST',
-              body: {
-                'tierSlug': widget.plan['slug'],
-                'paymentMethod': 'card',
-                'email': email.text.trim(),
-              },
-            );
-            transactionId = payment['transactionId'] as String;
-          }
-          await api.call(
-            '/payments/confirm',
-            method: 'POST',
-            body: {'transactionId': transactionId},
-          );
-          if (context.mounted) Navigator.pop(context);
-        },
       ),
       children: [
         PageIntro(
@@ -247,8 +224,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         SectionCard(
           child: Text(
             context.tr(
-              'Демонстрационный платёж. Реального списания денег нет. Backend пока использует симуляцию оплаты.',
-              'Demo payment. No money will be charged. The backend currently simulates payments.',
+              'Покупка подписок пока недоступна. Мы сообщим, когда оплата будет подключена.',
+              'Subscriptions are not available for purchase yet. We will let you know when payments are ready.',
             ),
           ),
         ),

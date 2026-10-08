@@ -230,7 +230,7 @@ export const markMessageAsRead = async (req: Request, res: Response) => {
 
     const decoded = verifyToken(token);
     const userId = decoded.userId;
-    const messageId = parseInt(req.params.id);
+    const messageId = parseInt(req.params.id ?? req.params.messageId);
 
     // Проверяем что сообщение принадлежит пользователю
     const check = await query(

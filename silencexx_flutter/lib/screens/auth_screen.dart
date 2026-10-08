@@ -162,7 +162,9 @@ class _AuthScreenState extends State<AuthScreen> {
               : Theme.of(context).colorScheme.outline,
         ),
         const SizedBox(width: 8),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
       ],
     ),
   );

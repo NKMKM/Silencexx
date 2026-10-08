@@ -50,7 +50,7 @@ export async function getUserLimits(userId: number): Promise<UserLimits | null> 
         COALESCE(dl.mood_analysis_used, 0) as daily_mood_analysis_used,
         COALESCE(dl.journal_entries_used, 0) as daily_journal_used
       FROM users u
-      LEFT JOIN subscription_tiers st ON u.subscription_tier_id = st.id
+      LEFT JOIN subscription_tiers st ON st.id = CASE WHEN u.subscription_expires_at <= NOW() OR u.subscription_tier_id IS NULL THEN (SELECT id FROM subscription_tiers WHERE slug='free') ELSE u.subscription_tier_id END
       LEFT JOIN daily_limits dl ON u.id = dl.user_id AND dl.reset_date = CURRENT_DATE
       WHERE u.id = $1
       `,
@@ -69,18 +69,18 @@ export async function getUserLimits(userId: number): Promise<UserLimits | null> 
       userId: row.user_id,
       tierId: row.tier_id,
       tierName: row.tier_name || 'Free',
-      dailyChatLimit: row.daily_chat_limit || 5,
+      dailyChatLimit: row.daily_chat_limit ?? 5,
       dailyChatUsed: row.daily_chat_used || 0,
-      dailyVoiceLimit: row.daily_voice_limit || 1,
+      dailyVoiceLimit: row.daily_voice_limit ?? 1,
       dailyVoiceUsed: row.daily_voice_used || 0,
-      dailyMoodAnalysisLimit: row.daily_mood_analysis_limit || 3,
+      dailyMoodAnalysisLimit: row.daily_mood_analysis_limit ?? 3,
       dailyMoodAnalysisUsed: row.daily_mood_analysis_used || 0,
-      dailyJournalLimit: row.daily_journal_limit || 1,
+      dailyJournalLimit: row.daily_journal_limit ?? 1,
       dailyJournalUsed: row.daily_journal_used || 0,
-      chatHistoryDays: row.chat_history_days || 30,
+      chatHistoryDays: row.chat_history_days ?? 30,
       hasTTS: row.has_tts || false,
       hasExport: row.has_export || false,
-      priorityLevel: row.priority_level || 1,
+      priorityLevel: row.priority_level ?? 1,
       subscriptionExpiresAt: row.subscription_expires_at,
       isExpired: isExpired || false,
     };
@@ -113,7 +113,7 @@ export async function incrementLimitCounter(
       INSERT INTO daily_limits (user_id, reset_date, ${column})
       VALUES ($1, CURRENT_DATE, 1)
       ON CONFLICT (user_id, reset_date)
-      DO UPDATE SET ${column} = EXCLUDED.${column} + 1, updated_at = NOW()
+      DO UPDATE SET ${column} = daily_limits.${column} + 1, updated_at = NOW()
       `,
       [userId]
     );
@@ -139,16 +139,6 @@ export async function checkFeatureAccess(
       return { allowed: false, reason: 'User not found' };
     }
 
-    // Если подписка истекла, даём только Free функции
-    if (limits.isExpired && limits.tierName !== 'Free') {
-      limits.tierName = 'Free';
-      limits.dailyChatLimit = 5;
-      limits.dailyVoiceLimit = 1;
-      limits.dailyMoodAnalysisLimit = 3;
-      limits.dailyJournalLimit = 1;
-      limits.hasTTS = false;
-      limits.hasExport = false;
-    }
 
     switch (feature) {
       case 'voice':
@@ -225,11 +215,6 @@ export async function checkChatLimitAccess(userId: number): Promise<{
       return { allowed: false, reason: 'User not found' };
     }
 
-    // Если подписка истекла, даём только Free функции
-    if (limits.isExpired && limits.tierName !== 'Free') {
-      limits.dailyChatLimit = 5;
-      limits.dailyChatUsed = 0; // Сбрасываем при отключении подписки
-    }
 
     if (limits.dailyChatUsed >= limits.dailyChatLimit) {
       return {
@@ -266,6 +251,8 @@ export const checkChatLimit = async (req: Request, res: Response, next: NextFunc
         limits: access.limitsInfo,
       });
     }
+
+    if (!await reserveDailyLimit(decoded.userId, 'chat_requests', access.limitsInfo!.dailyChatLimit)) return res.status(429).json({ success: false, error: 'Daily chat limit reached' });
 
     // Сохраняем информацию о лимитах в request для дальнейшего использования
     (req as any).userLimits = access.limitsInfo;
@@ -339,4 +326,15 @@ export async function setUserSubscription(
     console.error('❌ Error setting user subscription:', error);
     return false;
   }
+}
+
+/** Atomic admission: concurrent requests cannot exceed the selected daily quota. */
+export async function reserveDailyLimit(userId: number, type: 'chat_requests' | 'voice_messages' | 'mood_analysis' | 'journal_entries', limit: number): Promise<boolean> {
+  const columns = { chat_requests: 'chat_requests_used', voice_messages: 'voice_messages_used', mood_analysis: 'mood_analysis_used', journal_entries: 'journal_entries_used' };
+  const column = columns[type];
+  if (!column || !Number.isInteger(limit) || limit <= 0) return false;
+  const result = await query(`INSERT INTO daily_limits (user_id,reset_date,${column}) VALUES ($1,CURRENT_DATE,1)
+    ON CONFLICT (user_id,reset_date) DO UPDATE SET ${column}=daily_limits.${column}+1,updated_at=NOW()
+    WHERE daily_limits.${column} < $2 RETURNING user_id`, [userId,limit]);
+  return result.rows.length > 0;
 }

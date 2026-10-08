@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -73,7 +74,11 @@ class Api {
       final response = await (() async {
         return http.Response.fromStream(await client.send(request));
       })().timeout(timeout);
-      if (response.statusCode == 401 && token != null) onUnauthorized?.call();
+      if (response.statusCode == 401 &&
+          token != null &&
+          request.headers['Authorization'] == 'Bearer $token') {
+        onUnauthorized?.call();
+      }
       if (response.body.contains('ERR_NGROK_3200')) {
         throw ApiException(
           'Сервер временно недоступен. Повторите попытку позже. / Server is offline. Please try again later.',
@@ -105,6 +110,39 @@ class Api {
       throw const ApiException(
         'Cannot connect to server. Check your connection and API address.',
       );
+    }
+  }
+
+  Future<Uint8List> downloadMedia(String path) async {
+    final uri = Uri.parse(mediaUrl(path));
+    if (uri.origin != Uri.parse(baseUrl).origin) {
+      throw const ApiException('Media must belong to this server');
+    }
+    final requestToken = token;
+    try {
+      final response = await client
+          .get(
+            uri,
+            headers: {
+              if (requestToken != null) 'Authorization': 'Bearer $requestToken',
+              'ngrok-skip-browser-warning': 'true',
+            },
+          )
+          .timeout(timeout);
+      if (response.statusCode == 401 &&
+          token == requestToken &&
+          token != null) {
+        onUnauthorized?.call();
+      }
+      if (response.statusCode != 200 ||
+          response.bodyBytes.length > 10 * 1024 * 1024) {
+        throw ApiException('Could not load audio', status: response.statusCode);
+      }
+      return response.bodyBytes;
+    } on TimeoutException {
+      throw const ApiException('Audio download timed out');
+    } on http.ClientException {
+      throw const ApiException('Could not connect to audio server');
     }
   }
 
