@@ -13,11 +13,12 @@ flutter pub get
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000/api
 ```
 
-По умолчанию клиент использует `https://178.236.246.99/api` из `lib/core/api.dart`.
+По умолчанию клиент использует `https://garage-reynolds-dis-investigators.trycloudflare.com/api` из `lib/core/api.dart`.
+Это временный Cloudflare Quick Tunnel: при перезапуске туннеля адрес меняется.
 Запуск нативной macOS-версии с тем же API:
 
 ```sh
-flutter run -d macos --dart-define=API_BASE_URL=https://178.236.246.99/api
+flutter run -d macos --dart-define=API_BASE_URL=https://garage-reynolds-dis-investigators.trycloudflare.com/api
 ```
 
 Для macOS в sandbox включён исходящий сетевой доступ к backend.

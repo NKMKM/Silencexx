@@ -23,7 +23,7 @@ class Api {
   static String get defaultUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
-    return 'https://178.236.246.99/api';
+    return 'https://garage-reynolds-dis-investigators.trycloudflare.com/api';
   }
 
   final http.Client client;
