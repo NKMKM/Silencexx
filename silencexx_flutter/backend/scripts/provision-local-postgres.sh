@@ -15,7 +15,7 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-client
 systemctl enable --now postgresql
 
-pgadmin() { runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres "$@"; }
+pgadmin() { runuser -u postgres -- psql -X -q --host=/var/run/postgresql --port=5432 -v ON_ERROR_STOP=1 -d postgres "$@"; }
 if [[ "$(pgadmin -Atc "SELECT 1 FROM pg_database WHERE datname='cloudmind_local'")" == 1 ]]; then
   echo 'Database cloudmind_local already exists. Stopping without changing it.' >&2; exit 1
 fi
@@ -40,7 +40,7 @@ GRANT CONNECT ON DATABASE cloudmind_local TO cloudmind_local_app;
 SQL
 
 # Fail fast; schema initialization is one transaction, owned by the application role.
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 --single-transaction \
+runuser -u postgres -- psql -X -q --host=/var/run/postgresql --port=5432 -v ON_ERROR_STOP=1 --single-transaction \
   -d cloudmind_local -c 'SET ROLE cloudmind_local_app' -f - < scripts/bootstrap-local.sql
 
 # Verify password authentication before changing the live backend configuration.

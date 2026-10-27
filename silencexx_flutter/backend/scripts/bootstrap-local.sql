@@ -108,7 +108,7 @@ INSERT INTO user_default_settings (language_id) VALUES (1);
 -- Migration 2: Add password column to session table
 -- This allows storing hashed passwords for email/password authentication
 
-ALTER TABLE session 
+ALTER TABLE session
 ADD COLUMN password VARCHAR(255);
 
 -- Add comment for clarity
@@ -144,15 +144,15 @@ COMMENT ON COLUMN session.created_at IS 'When the session was created';
 -- Source: flyway/4.sql
 -- Migration 4: Add fields to session table for better tracking
 -- Add last_active timestamp
-ALTER TABLE session 
+ALTER TABLE session
 ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Add created_at if not exists
-ALTER TABLE session 
+ALTER TABLE session
 ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
--- Add user_id if not exists  
-ALTER TABLE session 
+-- Add user_id if not exists
+ALTER TABLE session
 ADD COLUMN IF NOT EXISTS user_id INT;
 
 -- Add index
@@ -203,7 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_session_user_id_active ON session(user_id, is_act
 ALTER TABLE user_chat ADD COLUMN user_id INT;
 ALTER TABLE user_chat ADD CONSTRAINT fk_user_chat_user FOREIGN KEY (user_id) REFERENCES users(id);
 
--- Add user_id to ai_response for strict isolation  
+-- Add user_id to ai_response for strict isolation
 ALTER TABLE ai_response ADD COLUMN user_id INT;
 ALTER TABLE ai_response ADD CONSTRAINT fk_ai_response_user FOREIGN KEY (user_id) REFERENCES users(id);
 
@@ -231,20 +231,20 @@ CREATE INDEX idx_chat_id_user_id ON chat_id(user_id);
 CREATE INDEX idx_chat_id_created_at ON chat_id(created_at DESC);
 
 -- Add constraint to ensure chat belongs to user
-ALTER TABLE user_chat ADD CONSTRAINT check_user_chat_isolation 
+ALTER TABLE user_chat ADD CONSTRAINT check_user_chat_isolation
   CHECK (user_id IS NOT NULL);
 
-ALTER TABLE ai_response ADD CONSTRAINT check_ai_response_isolation 
+ALTER TABLE ai_response ADD CONSTRAINT check_ai_response_isolation
   CHECK (user_id IS NOT NULL);
 
 -- Add mood validation (enum-like)
-ALTER TABLE user_chat ADD CONSTRAINT check_mood_valid 
+ALTER TABLE user_chat ADD CONSTRAINT check_mood_valid
   CHECK (mood IS NULL OR mood IN ('Happy', 'Neutral', 'Sad', 'Anxious', 'Angry', 'Low', 'Stressed'));
 
-ALTER TABLE ai_response ADD CONSTRAINT check_ai_mood_valid 
+ALTER TABLE ai_response ADD CONSTRAINT check_ai_mood_valid
   CHECK (mood IS NULL OR mood IN ('Happy', 'Neutral', 'Sad', 'Anxious', 'Angry', 'Low', 'Stressed'));
 
-ALTER TABLE chat_id ADD CONSTRAINT check_chat_mood_valid 
+ALTER TABLE chat_id ADD CONSTRAINT check_chat_mood_valid
   CHECK (mood IS NULL OR mood IN ('Happy', 'Neutral', 'Sad', 'Anxious', 'Angry', 'Low', 'Stressed'));
 
 
@@ -252,7 +252,7 @@ ALTER TABLE chat_id ADD CONSTRAINT check_chat_mood_valid
 -- Миграция для исправления схемы БД
 
 -- 1. Добавить колонку is_first_message в таблицу chat_id (если её нет)
-ALTER TABLE chat_id 
+ALTER TABLE chat_id
 ADD COLUMN IF NOT EXISTS is_first_message BOOLEAN DEFAULT true;
 
 -- 2. Создать таблицу user_subscriptions (если её нет)
@@ -342,14 +342,14 @@ CREATE INDEX IF NOT EXISTS idx_subscription_history_status ON subscription_histo
 
 -- Вставляем стандартные тарифы
 INSERT INTO subscription_tiers (name, slug, daily_chat_limit, daily_voice_limit, daily_mood_analysis_limit, daily_journal_limit, chat_history_days, has_tts, has_export, priority_level)
-VALUES 
+VALUES
   ('Free', 'free', 5, 1, 3, 1, 30, false, false, 1),
   ('Plus', 'plus', 50, 999, 999, 999, 180, true, true, 2),
   ('Professional', 'pro', 200, 999, 999, 999, 999, true, true, 3)
 ON CONFLICT (slug) DO NOTHING;
 
 -- Обновляем существующих пользователей на Free тариф если у них нет подписки
-UPDATE users 
+UPDATE users
 SET subscription_tier_id = (SELECT id FROM subscription_tiers WHERE slug = 'free')
 WHERE subscription_tier_id IS NULL;
 
@@ -400,7 +400,7 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
+    SELECT 1 FROM information_schema.columns
     WHERE table_name='session' AND column_name='password'
   ) THEN
     -- Migrate existing passwords from session to user_credentials
@@ -452,7 +452,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 );
 
 -- Add last_email_change to user_description to track 14-day cooldown
-ALTER TABLE user_description 
+ALTER TABLE user_description
 ADD COLUMN IF NOT EXISTS last_email_change TIMESTAMP;
 
 -- Index for token lookups
@@ -707,8 +707,8 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- Add Foreign Keys
-DO $$ 
-BEGIN 
+DO $$
+BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_messages_user') THEN
         ALTER TABLE messages ADD CONSTRAINT fk_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
     END IF;
