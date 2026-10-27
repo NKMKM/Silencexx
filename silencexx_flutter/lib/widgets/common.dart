@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'studio.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -6,10 +6,10 @@ import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
+import '../core/theme/app_gradients.dart';
 import '../core/theme/app_radius.dart';
 import '../core/theme/app_spacing.dart';
 import 'design.dart';
-import 'glass.dart';
 
 class AppDialog extends StatelessWidget {
   const AppDialog({
@@ -26,53 +26,57 @@ class AppDialog extends StatelessWidget {
   Widget build(BuildContext context) => Dialog(
     backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
     elevation: 0,
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 480),
-      child: GlassSurface(
-        radius: 28,
-        opacity: .94,
-        blur: 12,
-        padding: const EdgeInsets.all(24),
+      child: StudioPanel(
+        tone: StudioTone.elevated,
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (icon != null) ...[icon!, const SizedBox(width: 12)],
-                Expanded(
-                  child: DefaultTextStyle(
-                    style: Theme.of(context).textTheme.titleLarge!,
-                    child: title,
-                  ),
-                ),
-                const SizedBox(width: 8),
+                if (icon != null) icon!,
+                const Spacer(),
                 IconButton(
                   tooltip: context.tr('Закрыть', 'Close'),
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, size: 20),
+                  icon: const Icon(Icons.close_rounded, size: 19),
                 ),
               ],
             ),
-            if (content != null) ...[
-              const SizedBox(height: 20),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: DefaultTextStyle(
-                    style: Theme.of(context).textTheme.bodyMedium!,
-                    child: content!,
-                  ),
+            const SizedBox(height: 10),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DefaultTextStyle(
+                      style: Theme.of(context).textTheme.headlineSmall!,
+                      child: title,
+                    ),
+                    if (content != null) ...[
+                      const SizedBox(height: 16),
+                      DefaultTextStyle(
+                        style: Theme.of(context).textTheme.bodyMedium!,
+                        child: content!,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
+            ),
             if (actions.isNotEmpty) ...[
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
               OverflowBar(
                 alignment: MainAxisAlignment.end,
-                spacing: 12,
+                spacing: 8,
                 overflowSpacing: 8,
                 children: actions,
               ),
@@ -98,20 +102,8 @@ Future<T?> showAppDialog<T>({
     transitionDuration: reduced
         ? Duration.zero
         : (animationStyle?.duration ?? AppMotion.overlay),
-    pageBuilder: (context, animation, secondaryAnimation) => Stack(
-      children: [
-        if (!MediaQuery.highContrastOf(context))
-          Positioned.fill(
-            child: IgnorePointer(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                child: const SizedBox.expand(),
-              ),
-            ),
-          ),
-        builder(context),
-      ],
-    ),
+    pageBuilder: (context, animation, secondaryAnimation) =>
+        SafeArea(child: builder(context)),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
       final curved = animation.drive(CurveTween(curve: AppMotion.enter));
       return FadeTransition(
@@ -186,7 +178,7 @@ Future<void> showSupport(
         if (resources.isNotEmpty) ...[
           const SizedBox(height: 16),
           for (final item in resources.whereType<Map>())
-            ListTile(
+            StudioRow(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.open_in_new_rounded),
               title: Text(
@@ -249,9 +241,10 @@ Future<bool> confirm(BuildContext context, String title) async =>
     false;
 
 class PageBody extends StatelessWidget {
-  const PageBody({super.key, required this.children});
+  const PageBody({super.key, required this.children, this.compact = false});
 
   final List<Widget> children;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -264,114 +257,18 @@ class PageBody extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),
           child: ListView(
-            padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 40),
+            padding: EdgeInsets.fromLTRB(
+              horizontal,
+              compact ? 8 : 12,
+              horizontal,
+              compact ? 20 : 32,
+            ),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             children: children,
           ),
         ),
       );
     },
-  );
-}
-
-class SectionCard extends StatefulWidget {
-  const SectionCard({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.all(24),
-    this.onTap,
-  });
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final VoidCallback? onTap;
-  @override
-  State<SectionCard> createState() => _SectionCardState();
-}
-
-class _SectionCardState extends State<SectionCard> {
-  bool hovered = false;
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final interactive = widget.onTap != null;
-    return MouseRegion(
-      onEnter: (_) {
-        if (interactive) setState(() => hovered = true);
-      },
-      onExit: (_) {
-        if (interactive) setState(() => hovered = false);
-      },
-      child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : AppMotion.control,
-        curve: AppMotion.enter,
-        transform: Matrix4.translationValues(0, hovered ? -2 : 0, 0),
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? .10 : .025),
-              blurRadius: hovered ? 20 : 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Material(
-          color: hovered
-              ? Theme.of(context).colorScheme.surfaceContainerHigh
-              : Theme.of(context).colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(
-              color: dark ? AppColors.border : const Color(0x102D3554),
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.onTap,
-            child: Padding(padding: widget.padding, child: widget.child),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class AppSectionHeader extends StatelessWidget {
-  const AppSectionHeader({
-    super.key,
-    required this.title,
-    this.subtitle,
-    this.action,
-  });
-
-  final String title;
-  final String? subtitle;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
-              if (subtitle != null) ...[
-                const SizedBox(height: AppSpacing.xxs),
-                Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ],
-          ),
-        ),
-        if (action != null) action!,
-      ],
-    ),
   );
 }
 
@@ -390,28 +287,18 @@ class AppEmptyState extends StatelessWidget {
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => SectionCard(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
     child: Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: .10),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Icon(icon, color: AppColors.primaryBright),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          description,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        if (action != null) ...[const SizedBox(height: AppSpacing.md), action!],
+        StudioGlyph(icon, size: 58),
+        const SizedBox(height: 20),
+        Text(title, style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        Text(description, style: Theme.of(context).textTheme.bodyMedium),
+        if (action != null) ...[const SizedBox(height: 18), action!],
       ],
     ),
   );
@@ -433,16 +320,46 @@ class AppLoadingState extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: AppSkeleton(width: 140, height: 16),
+              const Row(
+                children: [
+                  AppSkeleton(width: 42, height: 42),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppSkeleton(width: 120, height: 12),
+                        SizedBox(height: 8),
+                        AppSkeleton(height: 18),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const AppSkeleton(height: 36),
-              const SizedBox(height: 28),
-              const AppSkeleton(height: 140),
-              const SizedBox(height: 16),
-              const AppSkeleton(height: 72),
+              const SizedBox(height: 32),
+              for (var i = 0; i < 3; i++)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 18),
+                  child: Row(
+                    children: [
+                      AppSkeleton(width: 32, height: 32),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppSkeleton(height: 12),
+                            SizedBox(height: 8),
+                            FractionallySizedBox(
+                              widthFactor: .65,
+                              child: AppSkeleton(height: 9),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (label != null) ...[
                 const SizedBox(height: 20),
                 Text(
@@ -476,7 +393,8 @@ class _AppSkeletonState extends State<AppSkeleton>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
+    if (MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
       controller.stop();
     } else {
       controller.repeat(reverse: true);
@@ -502,7 +420,9 @@ class _AppSkeletonState extends State<AppSkeleton>
             color: Theme.of(
               context,
             ).colorScheme.onSurface.withValues(alpha: .09),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(
+              widget.height > 24 ? 12 : widget.height / 2,
+            ),
           ),
         ),
       ),
@@ -522,6 +442,7 @@ class AsyncPanel extends StatefulWidget {
 
 class _AsyncPanelState extends State<AsyncPanel> {
   late Future<Json> future = widget.load();
+  Json? lastData;
 
   void reload() {
     if (!mounted) return;
@@ -535,26 +456,60 @@ class _AsyncPanelState extends State<AsyncPanel> {
   Widget build(BuildContext context) => FutureBuilder<Json>(
     future: future,
     builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return const AppLoadingState();
+      final loading = snapshot.connectionState != ConnectionState.done;
+      if (!loading && snapshot.hasData && !snapshot.hasError) {
+        lastData = snapshot.data;
       }
-      if (snapshot.hasError) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: AppEmptyState(
-                icon: Icons.cloud_off_outlined,
-                title: context.tr(
-                  'Не удалось загрузить данные',
-                  'Could not load data',
+      if (lastData != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (loading) const LinearProgressIndicator(minHeight: 2),
+            if (!loading && snapshot.hasError)
+              StudioNotice(
+                error: true,
+                message: context.tr(
+                  'Не удалось обновить. Показаны сохранённые данные.',
+                  'Could not refresh. Showing your previous data.',
                 ),
-                description: '${snapshot.error}',
-                action: FilledButton.icon(
+                action: TextButton(
                   onPressed: reload,
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: Text(context.tr('Повторить', 'Try again')),
+                  child: Text(context.tr('Повторить', 'Retry')),
+                ),
+              ),
+            Expanded(
+              key: const ValueKey('loaded-content'),
+              child: PageReveal(
+                child: widget.builder(context, lastData!, reload),
+              ),
+            ),
+          ],
+        );
+      }
+      if (loading) return const AppLoadingState();
+      if (snapshot.hasError) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.zero,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: AppEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: context.tr(
+                    'Не удалось загрузить данные',
+                    'Could not load data',
+                  ),
+                  description: context.tr(
+                    'Проверьте подключение и попробуйте ещё раз.',
+                    'Check your connection and try again.',
+                  ),
+                  action: FilledButton.icon(
+                    onPressed: reload,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(context.tr('Повторить', 'Try again')),
+                  ),
                 ),
               ),
             ),
@@ -615,9 +570,10 @@ class ActionButton extends StatefulWidget {
     required this.action,
     this.icon,
     this.secondary = false,
+    this.destructive = false,
   });
 
-  final bool secondary;
+  final bool secondary, destructive;
   final String label;
   final Future<void> Function() action;
   final IconData? icon;
@@ -631,155 +587,72 @@ class _ActionButtonState extends State<ActionButton> {
 
   @override
   Widget build(BuildContext context) => PressScale(
-    child: FilledButton.icon(
-      style: widget.secondary
-          ? FilledButton.styleFrom(
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest,
-              foregroundColor: Theme.of(context).colorScheme.onSurface,
-            )
-          : null,
-      onPressed: busy
-          ? null
-          : () async {
-              setState(() => busy = true);
-              try {
-                await widget.action();
-              } catch (error) {
-                if (context.mounted) showError(context, error);
-              } finally {
-                if (mounted) setState(() => busy = false);
-              }
-            },
-      icon: AnimatedSwitcher(
-        duration: AppMotion.control,
-        switchInCurve: AppMotion.enter,
-        switchOutCurve: AppMotion.exit,
-        child: busy
-            ? const SizedBox(
-                key: ValueKey('busy'),
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(
-                widget.icon ?? Icons.check_rounded,
-                key: const ValueKey('icon'),
-              ),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: widget.secondary || widget.destructive || busy
+            ? null
+            : AppGradients.accent,
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
-      label: Text(widget.label),
+      child: FilledButton.icon(
+        style: widget.destructive
+            ? FilledButton.styleFrom(
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.error.withValues(alpha: .10),
+                foregroundColor: Theme.of(context).colorScheme.error,
+              )
+            : widget.secondary
+            ? FilledButton.styleFrom(
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
+              )
+            : FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+              ),
+        onPressed: busy
+            ? null
+            : () async {
+                setState(() => busy = true);
+                try {
+                  await widget.action();
+                } catch (error) {
+                  if (context.mounted) showError(context, error);
+                } finally {
+                  if (mounted) setState(() => busy = false);
+                }
+              },
+        icon: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppMotion.control,
+          switchInCurve: AppMotion.enter,
+          switchOutCurve: AppMotion.exit,
+          child: busy
+              ? SizedBox(
+                  key: const ValueKey('busy'),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: widget.secondary || widget.destructive
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Colors.white,
+                  ),
+                )
+              : Icon(
+                  widget.icon ?? Icons.check_rounded,
+                  key: const ValueKey('icon'),
+                ),
+        ),
+        label: Text(widget.label, textAlign: TextAlign.center),
+      ),
     ),
   );
 }
 
 String dateKey(DateTime date) =>
     '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-/// Shared page hierarchy: introduction, grouped content, then a primary action.
-class PageIntro extends StatelessWidget {
-  const PageIntro({
-    super.key,
-    required this.title,
-    required this.description,
-    this.eyebrow,
-  });
-  final String title, description;
-  final String? eyebrow;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 16, bottom: 28),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (eyebrow != null) ...[
-          Text(
-            eyebrow!,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-        Text(title, style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 10),
-        Text(description, style: Theme.of(context).textTheme.bodyMedium),
-      ],
-    ),
-  );
-}
-
-class FormGroup extends StatelessWidget {
-  const FormGroup({super.key, required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-        ),
-        SectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-/// The action stays reachable while the content scrolls, including with a keyboard.
-class ActionPage extends StatelessWidget {
-  const ActionPage({super.key, required this.children, required this.action});
-  final List<Widget> children;
-  final Widget action;
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      if (constraints.maxHeight <
-          280 * MediaQuery.textScalerOf(context).scale(14) / 14) {
-        return PageBody(
-          children: [...children, const SizedBox(height: 20), action],
-        );
-      }
-      return Column(
-        children: [
-          Expanded(child: PageBody(children: children)),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: GlassSurface(
-                radius: 24,
-                opacity: .8,
-                blur: 10,
-                margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                    child: Center(
-                      heightFactor: 1,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 680),
-                        child: SizedBox(width: double.infinity, child: action),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-}

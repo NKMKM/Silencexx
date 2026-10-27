@@ -1,22 +1,22 @@
+import 'studio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/semantics.dart';
 import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/chat_workspace.dart';
 import '../core/theme/app_motion.dart';
 import 'chat_visuals.dart';
 import 'common.dart';
-import 'glass.dart';
 
 String destinationLabel(BuildContext context, String id) => switch (id) {
-  'chat' => context.tr('Чат', 'Chat'),
+  'today' => context.tr('Сегодня', 'Today'),
+  'chat' => context.tr('Разговоры', 'Conversations'),
   'journal' => context.tr('Дневник', 'Journal'),
   'tasks' => context.tr('Маленькие шаги', 'Small steps'),
   'inbox' => context.tr('Сообщения', 'Messages'),
   _ => context.tr('Настройки', 'Settings'),
 };
 IconData destinationIcon(String id) => switch (id) {
+  'today' => Icons.space_dashboard_outlined,
   'chat' => Icons.chat_bubble_outline_rounded,
   'journal' => Icons.auto_stories_outlined,
   'tasks' => Icons.spa_outlined,
@@ -35,6 +35,8 @@ class ConversationSidebar extends StatefulWidget {
     required this.onSearch,
     required this.onCollapse,
     this.collapsed = false,
+    this.fullPage = false,
+    this.onResume,
   });
   final ChatWorkspace workspace;
   final String selected;
@@ -42,21 +44,15 @@ class ConversationSidebar extends StatefulWidget {
   final ValueChanged<int> onChat;
   final VoidCallback onNew, onSearch, onCollapse;
   final bool collapsed;
+  final bool fullPage;
+  final VoidCallback? onResume;
   @override
   State<ConversationSidebar> createState() => _ConversationSidebarState();
 }
 
 class _ConversationSidebarState extends State<ConversationSidebar> {
   bool archived = false;
-
-  Future<void> reorder(int oldIndex, int newIndex) async {
-    try {
-      await widget.workspace.reorder(oldIndex, newIndex);
-      HapticFeedback.selectionClick();
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
+  String query = '';
 
   Future<void> chatAction(String action, Json chat) async {
     final workspace = widget.workspace;
@@ -76,8 +72,9 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                 hintText: context.tr('Название', 'Name'),
               ),
               onSubmitted: (value) {
-                if (value.trim().isNotEmpty)
+                if (value.trim().isNotEmpty) {
                   Navigator.pop(context, value.trim());
+                }
               },
             ),
             actions: [
@@ -87,8 +84,9 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
               ),
               FilledButton(
                 onPressed: () {
-                  if (controller.text.trim().isNotEmpty)
+                  if (controller.text.trim().isNotEmpty) {
                     Navigator.pop(context, controller.text.trim());
+                  }
                 },
                 child: Text(context.tr('Сохранить', 'Save')),
               ),
@@ -111,7 +109,7 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
         if (workspace.sessions.any(
           (session) => session.id == id && session.busy,
         )) {
-          if (mounted)
+          if (mounted) {
             showError(
               context,
               context.tr(
@@ -119,14 +117,16 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                 'Wait for the reply to finish.',
               ),
             );
+          }
           return;
         }
         if (!mounted ||
             !await confirm(
               context,
               context.tr('Удалить разговор?', 'Delete conversation?'),
-            ))
+            )) {
           return;
+        }
         await workspace.delete(id);
       } else if (action == 'share') {
         final data = await workspace.app.api.call('/chats/$id/messages');
@@ -136,8 +136,9 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                   '${m['role'] == 'user' ? 'You' : 'CloudMind'}: ${m['text'] ?? ''}',
             )
             .join('\n\n');
-        if (mounted)
+        if (mounted) {
           await shareChatText(context, '${workspace.title(chat)}\n\n$text');
+        }
       }
     } catch (e) {
       if (mounted) showError(context, e);
@@ -145,8 +146,9 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
   }
 
   String group(Json chat) {
-    if (widget.workspace.meta((chat['id'] as num).toInt())['pinned'] == true)
+    if (widget.workspace.meta((chat['id'] as num).toInt())['pinned'] == true) {
       return context.tr('Закреплено', 'Pinned');
+    }
     final date = DateTime.tryParse(
       '${chat['last_message_date'] ?? ''}',
     )?.toLocal();
@@ -154,10 +156,12 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     final today = DateTime(now.year, now.month, now.day);
     if (date == null) return context.tr('Ранее', 'Earlier');
     if (!date.isBefore(today)) return context.tr('Сегодня', 'Today');
-    if (!date.isBefore(DateTime(now.year, now.month, now.day - 1)))
+    if (!date.isBefore(DateTime(now.year, now.month, now.day - 1))) {
       return context.tr('Вчера', 'Yesterday');
-    if (!date.isBefore(DateTime(now.year, now.month, now.day - 7)))
+    }
+    if (!date.isBefore(DateTime(now.year, now.month, now.day - 7))) {
       return context.tr('За неделю', 'Previous 7 days');
+    }
     return context.tr('Ранее', 'Earlier');
   }
 
@@ -167,6 +171,11 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     builder: (context, _) {
       final w = widget.workspace;
       final chats = w.chats
+          .where(
+            (chat) => '${w.title(chat)} ${chat['last_message'] ?? ''}'
+                .toLowerCase()
+                .contains(query.toLowerCase().trim()),
+          )
           .where(
             (chat) =>
                 (w.meta((chat['id'] as num).toInt())['archived'] == true) ==
@@ -185,359 +194,208 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
       for (final chat in chats) {
         groups.putIfAbsent(group(chat), () => []).add(chat);
       }
-      return GlassSurface(
-        radius: 24,
-        opacity: .70,
-        blur: 12,
-        padding: EdgeInsets.all(widget.collapsed ? 6 : 12),
-        child: LayoutBuilder(
-          builder: (context, constraints) => Column(
+      final theme = Theme.of(context);
+      final items = <Object>[
+        for (final group in groups.entries) ...[group.key, ...group.value],
+      ];
+      if (widget.collapsed) {
+        return Column(
+          children: [
+            IconButton(
+              tooltip: context.tr('История чатов', 'Conversation library'),
+              onPressed: widget.onCollapse,
+              icon: const Icon(Icons.chevron_right_rounded),
+            ),
+            IconButton(
+              tooltip: context.tr('Новый чат', 'New chat'),
+              onPressed: widget.onNew,
+              icon: const Icon(Icons.edit_square),
+            ),
+            IconButton(
+              tooltip: context.tr('Поиск', 'Search'),
+              onPressed: widget.onSearch,
+              icon: const Icon(Icons.search_rounded),
+            ),
+          ],
+        );
+      }
+      return Material(
+        color: theme.scaffoldBackgroundColor,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            widget.fullPage ? 24 : 18,
+            widget.fullPage ? 28 : 18,
+            widget.fullPage ? 24 : 18,
+            8,
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                height: 52,
-                child: Row(
-                  children: [
-                    if (!widget.collapsed) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          'assets/images/cloudmind_icon.png',
-                          width: 30,
-                          height: 30,
-                        ),
+              StudioHeader(
+                eyebrow: widget.fullPage
+                    ? context.tr('ВАШИ ДИАЛОГИ', 'YOUR CONVERSATIONS')
+                    : context.tr('БИБЛИОТЕКА', 'LIBRARY'),
+                description:
+                    widget.fullPage &&
+                        MediaQuery.textScalerOf(context).scale(14) < 19
+                    ? context.tr(
+                        'Мысли, к которым можно вернуться.',
+                        'A place to pick up your thoughts.',
+                      )
+                    : null,
+                title: widget.fullPage
+                    ? context.tr('Разговоры', 'Conversations')
+                    : context.tr('История', 'History'),
+                action: widget.fullPage
+                    ? IconButton.filled(
+                        tooltip: context.tr('Новый чат', 'New chat'),
+                        onPressed: widget.onNew,
+                        icon: const Icon(Icons.add_rounded),
+                      )
+                    : IconButton(
+                        tooltip: context.tr('Закрыть историю', 'Close history'),
+                        onPressed: widget.onCollapse,
+                        icon: const Icon(Icons.close_rounded, size: 20),
                       ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'CloudMind',
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                    IconButton(
-                      onPressed: widget.onCollapse,
-                      tooltip: widget.collapsed
-                          ? context.tr('Развернуть меню', 'Expand sidebar')
-                          : context.tr('Свернуть меню', 'Collapse sidebar'),
-                      icon: Icon(
-                        widget.collapsed
-                            ? Icons.chevron_right_rounded
-                            : Icons.view_sidebar_outlined,
-                        size: 20,
-                      ),
-                    ),
-                  ],
+              ),
+              if (!widget.fullPage)
+                OutlinedButton.icon(
+                  onPressed: widget.onNew,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(context.tr('Новый чат', 'New chat')),
+                ),
+              if (widget.fullPage &&
+                  widget.onResume != null &&
+                  w.active.draft.trim().isNotEmpty)
+                StudioRow(
+                  leading: const StudioGlyph(Icons.edit_note_rounded),
+                  title: Text(
+                    context.tr('Продолжить черновик', 'Continue your draft'),
+                  ),
+                  subtitle: Text(
+                    w.active.draft,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.north_east_rounded),
+                  onTap: widget.onResume,
+                ),
+              const SizedBox(height: 14),
+              TextField(
+                onChanged: (value) => setState(() => query = value),
+                decoration: InputDecoration(
+                  hintText: context.tr('Поиск в истории', 'Search history'),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 19),
+                  suffixIcon: IconButton(
+                    tooltip: context.tr('Расширенный поиск', 'Advanced search'),
+                    onPressed: widget.onSearch,
+                    icon: const Icon(Icons.manage_search_rounded, size: 20),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-              if (widget.collapsed) ...[
-                IconButton(
-                  onPressed: widget.onNew,
-                  tooltip: context.tr('Новый чат', 'New chat'),
-                  icon: const Icon(Icons.edit_square, size: 21),
-                ),
-                IconButton(
-                  onPressed: widget.onSearch,
-                  tooltip: context.tr('Поиск', 'Search'),
-                  icon: const Icon(Icons.search_rounded, size: 21),
-                ),
-              ] else ...[
-                OutlinedButton.icon(
-                  onPressed: widget.onNew,
-                  icon: const Icon(Icons.add_rounded, size: 19),
-                  label: Text(context.tr('Новый чат', 'New chat')),
-                ),
-                const SizedBox(height: 6),
-                Material(
-                  color: Colors.transparent,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.search_rounded, size: 19),
-                    title: Text(
-                      context.tr('Найти разговор', 'Find a conversation'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: widget.onSearch,
+              StudioTabs<bool>(
+                segments: [
+                  ButtonSegment(
+                    value: false,
+                    label: Text(context.tr('Недавние', 'Recent')),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    label: Text(context.tr('Архив', 'Archive')),
+                  ),
+                ],
+                selected: {archived},
+                onSelectionChanged: (values) =>
+                    setState(() => archived = values.first),
+              ),
+              const SizedBox(height: 10),
+              if (w.loading) const LinearProgressIndicator(minHeight: 2),
+              if (w.error != null)
+                StudioNotice(
+                  error: true,
+                  message: context.tr(
+                    'История недоступна',
+                    'History is unavailable',
+                  ),
+                  action: TextButton(
+                    onPressed: w.refresh,
+                    child: Text(context.tr('Повторить', 'Retry')),
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              if (!widget.collapsed)
-                Expanded(
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              archived
-                                  ? context.tr('Архив', 'Archive')
-                                  : context.tr('Разговоры', 'Conversations'),
-                              style: Theme.of(context).textTheme.labelMedium,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: archived
-                                ? context.tr(
-                                    'Все разговоры',
-                                    'All conversations',
-                                  )
-                                : context.tr('Архив', 'Archive'),
-                            onPressed: () =>
-                                setState(() => archived = !archived),
-                            icon: Icon(
-                              archived
-                                  ? Icons.unarchive_outlined
-                                  : Icons.inventory_2_outlined,
-                              size: 17,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: context.tr('Обновить', 'Refresh'),
-                            onPressed: w.loading ? null : w.refresh,
-                            icon: const Icon(Icons.refresh_rounded, size: 17),
-                          ),
-                        ],
-                      ),
-                      Expanded(
-                        child: w.loading
-                            ? const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Column(
-                                  children: [
-                                    AppSkeleton(height: 32),
-                                    SizedBox(height: 12),
-                                    AppSkeleton(height: 32),
-                                    SizedBox(height: 12),
-                                    AppSkeleton(height: 32),
-                                  ],
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: w.refresh,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: items.isEmpty ? 1 : items.length,
+                    itemBuilder: (context, index) {
+                      if (items.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 26),
+                          child: w.loading
+                              ? const AppSkeleton(height: 60)
+                              : AppEmptyState(
+                                  icon: Icons.forum_outlined,
+                                  title: query.trim().isNotEmpty
+                                      ? context.tr(
+                                          'Ничего не найдено',
+                                          'No conversations found',
+                                        )
+                                      : context.tr(
+                                          'Пока пусто',
+                                          'Nothing here yet',
+                                        ),
+                                  description: query.trim().isNotEmpty
+                                      ? context.tr(
+                                          'Попробуйте другое слово.',
+                                          'Try another word.',
+                                        )
+                                      : archived
+                                      ? context.tr(
+                                          'В архиве пока пусто',
+                                          'Your archive is empty',
+                                        )
+                                      : context.tr(
+                                          'Ваши разговоры появятся здесь',
+                                          'Your conversations will appear here',
+                                        ),
                                 ),
-                              )
-                            : ListView(
-                                children: [
-                                  if (w.error != null)
-                                    Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            context.tr(
-                                              'История недоступна',
-                                              'History is unavailable',
-                                            ),
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                          TextButton(
-                                            onPressed: w.refresh,
-                                            child: Text(
-                                              context.tr('Повторить', 'Retry'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  if (chats.isEmpty && w.error == null)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 20,
-                                        horizontal: 8,
-                                      ),
-                                      child: Text(
-                                        archived
-                                            ? context.tr(
-                                                'В архиве пока пусто',
-                                                'Your archive is empty',
-                                              )
-                                            : context.tr(
-                                                'Ваши разговоры появятся здесь',
-                                                'Your conversations will appear here',
-                                              ),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall,
-                                      ),
-                                    ),
-                                  for (final entry in groups.entries) ...[
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        10,
-                                        16,
-                                        8,
-                                        6,
-                                      ),
-                                      child: Text(
-                                        entry.key,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall,
-                                      ),
-                                    ),
-                                    for (final chat in entry.value)
-                                      _HistoryRow(
-                                        title: w.title(chat),
-                                        selected:
-                                            widget.selected == 'chat' &&
-                                            w.active.id == chat['id'],
-                                        onTap: () => widget.onChat(
-                                          (chat['id'] as num).toInt(),
-                                        ),
-                                        onAction: (action) =>
-                                            chatAction(action, chat),
-                                        pinned:
-                                            w.meta(
-                                              (chat['id'] as num).toInt(),
-                                            )['pinned'] ==
-                                            true,
-                                        archived: archived,
-                                      ),
-                                  ],
-                                ],
-                              ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                const Spacer(),
-              const Divider(height: 24),
-              if (constraints.maxHeight >= 480 || widget.collapsed)
-                ReorderableListView.builder(
-                  key: const ValueKey('reorder-navigation'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: false,
-                  itemCount: w.order.length,
-                  onReorderStart: (_) => HapticFeedback.lightImpact(),
-                  onReorder: reorder,
-                  proxyDecorator: (child, index, animation) => AnimatedBuilder(
-                    animation: animation,
-                    builder: (context, _) => Transform.scale(
-                      scale:
-                          1 + .03 * Curves.easeOut.transform(animation.value),
-                      child: GlassSurface(
-                        radius: 14,
-                        opacity: .96,
-                        blur: 10,
-                        child: child,
-                      ),
-                    ),
-                  ),
-                  itemBuilder: (context, index) {
-                    final id = w.order[index];
-                    return Semantics(
-                      key: ValueKey('nav-$id'),
-                      selected: widget.selected == id,
-                      customSemanticsActions: {
-                        if (index > 0)
-                          CustomSemanticsAction(
-                            label: context.tr('Переместить выше', 'Move up'),
-                          ): () =>
-                              reorder(index, index - 1),
-                        if (index < w.order.length - 1)
-                          CustomSemanticsAction(
-                            label: context.tr('Переместить ниже', 'Move down'),
-                          ): () =>
-                              reorder(index, index + 2),
-                      },
-                      child: ReorderableDelayedDragStartListener(
-                        index: index,
-                        child: Tooltip(
-                          message: destinationLabel(context, id),
-                          child: AnimatedContainer(
-                            duration: MediaQuery.disableAnimationsOf(context)
-                                ? Duration.zero
-                                : AppMotion.control,
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              color: widget.selected == id
-                                  ? Theme.of(
-                                      context,
-                                    ).colorScheme.primary.withValues(alpha: .14)
-                                  : Colors.transparent,
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => widget.onSelect(id),
-                                borderRadius: BorderRadius.circular(14),
-                                child: SizedBox(
-                                  height: 44,
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 44,
-                                        child: Icon(
-                                          destinationIcon(id),
-                                          size: 19,
-                                        ),
-                                      ),
-                                      if (!widget.collapsed)
-                                        Expanded(
-                                          child: Text(
-                                            destinationLabel(context, id),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.labelLarge,
-                                          ),
-                                        ),
-                                      if (!widget.collapsed)
-                                        const Padding(
-                                          padding: EdgeInsets.only(right: 8),
-                                          child: Icon(
-                                            Icons.drag_indicator_rounded,
-                                            size: 14,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                        );
+                      }
+                      final item = items[index];
+                      if (item is String) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 18, 8, 8),
+                          child: Text(
+                            item,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                )
-              else
-                PopupMenuButton<String>(
-                  onSelected: widget.onSelect,
-                  itemBuilder: (context) => [
-                    for (final id in w.order)
-                      PopupMenuItem(
-                        value: id,
-                        child: Text(destinationLabel(context, id)),
-                      ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(context.tr('Разделы', 'Workspace')),
+                        );
+                      }
+                      final chat = item as Json;
+                      return _HistoryRow(
+                        spacious: widget.fullPage,
+                        title: w.title(chat),
+                        preview: '${chat['last_message'] ?? ''}',
+                        selected:
+                            widget.selected == 'chat' &&
+                            w.active.id == chat['id'],
+                        onTap: () => widget.onChat((chat['id'] as num).toInt()),
+                        onAction: (action) => chatAction(action, chat),
+                        pinned:
+                            w.meta((chat['id'] as num).toInt())['pinned'] ==
+                            true,
+                        archived: archived,
+                      );
+                    },
                   ),
                 ),
-              if (!widget.collapsed)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 4),
-                  child: Text(
-                    context.tr(
-                      'Зажмите раздел, чтобы переместить',
-                      'Hold a section to rearrange',
-                    ),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                ),
+              ),
             ],
           ),
         ),
@@ -546,90 +404,130 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
   );
 }
 
-class _HistoryRow extends StatefulWidget {
+class _HistoryRow extends StatelessWidget {
   const _HistoryRow({
     required this.title,
+    required this.preview,
     required this.selected,
     required this.onTap,
     required this.onAction,
     required this.pinned,
     required this.archived,
+    this.spacious = false,
   });
-  final String title;
-  final bool selected, pinned, archived;
+  final String title, preview;
+  final bool selected, pinned, archived, spacious;
   final VoidCallback onTap;
   final ValueChanged<String> onAction;
-  @override
-  State<_HistoryRow> createState() => _HistoryRowState();
-}
-
-class _HistoryRowState extends State<_HistoryRow> {
-  bool hover = false;
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => hover = true),
-    onExit: (_) => setState(() => hover = false),
-    child: Material(
-      color: widget.selected
-          ? Theme.of(context).colorScheme.onSurface.withValues(alpha: .06)
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.only(left: 10),
-        title: Text(
-          widget.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        onTap: widget.onTap,
-        trailing: AnimatedOpacity(
-          opacity:
-              hover || widget.selected || MediaQuery.sizeOf(context).width < 900
-              ? 1
-              : .35,
-          duration: AppMotion.fast,
-          child: PopupMenuButton<String>(
-            tooltip: context.tr(
-              'Действия с разговором',
-              'Conversation actions',
-            ),
-            icon: const Icon(Icons.more_horiz_rounded, size: 18),
-            onSelected: widget.onAction,
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'rename',
-                child: Text(context.tr('Переименовать', 'Rename')),
+  Future<void> actions(BuildContext context) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: AnimationStyle(
+        duration: studioDuration(context, AppMotion.overlay),
+      ),
+      builder: (context) => StudioSheet(
+        title: title,
+        icon: Icons.forum_outlined,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final item in [
+              (
+                'rename',
+                Icons.edit_outlined,
+                context.tr('Переименовать', 'Rename'),
               ),
-              PopupMenuItem(
-                value: 'pin',
-                child: Text(
-                  widget.pinned
-                      ? context.tr('Открепить', 'Unpin')
-                      : context.tr('Закрепить', 'Pin'),
+              (
+                'pin',
+                Icons.push_pin_outlined,
+                pinned
+                    ? context.tr('Открепить', 'Unpin')
+                    : context.tr('Закрепить', 'Pin'),
+              ),
+              (
+                'archive',
+                Icons.archive_outlined,
+                archived
+                    ? context.tr('Вернуть из архива', 'Unarchive')
+                    : context.tr('В архив', 'Archive'),
+              ),
+              (
+                'share',
+                Icons.ios_share_rounded,
+                context.tr('Поделиться', 'Share'),
+              ),
+              (
+                'delete',
+                Icons.delete_outline_rounded,
+                context.tr('Удалить', 'Delete'),
+              ),
+            ])
+              StudioRow(
+                leading: Icon(
+                  item.$2,
+                  color: item.$1 == 'delete'
+                      ? Theme.of(context).colorScheme.error
+                      : null,
                 ),
-              ),
-              PopupMenuItem(
-                value: 'archive',
-                child: Text(
-                  widget.archived
-                      ? context.tr('Вернуть из архива', 'Unarchive')
-                      : context.tr('В архив', 'Archive'),
+                title: Text(
+                  item.$3,
+                  style: item.$1 == 'delete'
+                      ? TextStyle(color: Theme.of(context).colorScheme.error)
+                      : null,
                 ),
+                onTap: () => Navigator.pop(context, item.$1),
               ),
-              PopupMenuItem(
-                value: 'share',
-                child: Text(context.tr('Поделиться', 'Share')),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Text(context.tr('Удалить', 'Delete')),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
+    );
+    if (action != null) onAction(action);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: spacious ? 16 : 4),
+    child: StudioRow(
+      selected: selected,
+      contentPadding: EdgeInsets.only(
+        left: spacious ? 0 : 12,
+        top: spacious ? 14 : 6,
+        bottom: spacious ? 14 : 6,
+      ),
+      leading: spacious
+          ? null
+          : Icon(
+              pinned
+                  ? Icons.push_pin_outlined
+                  : Icons.chat_bubble_outline_rounded,
+              size: 17,
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: spacious ? Theme.of(context).textTheme.titleLarge : null,
+      ),
+      subtitle: preview.trim().isEmpty || preview.trim() == title.trim()
+          ? null
+          : Text(
+              preview,
+              maxLines: spacious ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+      trailing: IconButton(
+        tooltip: context.tr('Действия с разговором', 'Conversation actions'),
+        icon: const Icon(Icons.more_horiz_rounded, size: 18),
+        onPressed: () => actions(context),
+      ),
+      onTap: onTap,
+      onLongPress: () => actions(context),
     ),
   );
 }

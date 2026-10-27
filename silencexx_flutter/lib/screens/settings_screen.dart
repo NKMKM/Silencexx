@@ -1,3 +1,4 @@
+import '../widgets/studio.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
@@ -10,181 +11,164 @@ import '../widgets/common.dart';
 import '../widgets/chat_visuals.dart';
 import 'subscription_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
-  void open(BuildContext context, Widget page) =>
-      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   @override
-  Widget build(BuildContext context) => PageBody(
-    children: [
-      PageIntro(
-        title: context.tr('Ваше пространство', 'Your space'),
-        description: context.tr(
-          'Аккаунт, привычки и оформление — под вас.',
-          'Your account, routines and appearance, your way.',
-        ),
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  void open(Widget page) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  String get accountName {
+    final raw = '${context.app.user?['name'] ?? 'CloudMind'}'.trim();
+    return raw.isEmpty ? 'CloudMind' : raw;
+  }
+
+  Future<void> signOut() async {
+    final app = context.app;
+    if (await confirm(context, context.tr('Выйти из аккаунта?', 'Sign out?'))) {
+      await app.logout();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final app = context.app;
+    final shortcuts = [
+      (
+        Icons.workspace_premium_outlined,
+        context.tr('Подписка и лимиты', 'Plan and usage'),
+        const SubscriptionScreen(),
       ),
-      SectionCard(
-        onTap: () => open(context, const ProfileScreen()),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .14),
-              child: Text(
-                ('${context.app.user?['name'] ?? ''}'.trim().isEmpty
-                        ? 'C'
-                        : '${context.app.user?['name']}'
-                              .trim()
-                              .characters
-                              .first)
-                    .toUpperCase(),
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${context.app.user?['name'] ?? 'CloudMind'}',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    context.tr('Личное пространство', 'Your private space'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_outward_rounded, size: 20),
-          ],
-        ),
+      (
+        Icons.devices_outlined,
+        context.tr('Устройства', 'Devices'),
+        const SessionsScreen(),
       ),
-      const SizedBox(height: 24),
-      FormGroup(
-        title: context.tr('Аккаунт', 'Account'),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(
+      (
+        Icons.lock_outline_rounded,
+        context.tr('Приватность и данные', 'Privacy and data'),
+        const PrivacyScreen(),
+      ),
+      (
+        Icons.favorite_outline_rounded,
+        context.tr('Безопасность и приложение', 'Safety and about'),
+        const SafetyAboutScreen(),
+      ),
+    ];
+    return PageBody(
+      compact: true,
+      children: [
+        StudioHeader(
+          eyebrow:
+              'CLOUDMIND / ${context.tr('ВАШЕ ПРОСТРАНСТВО', 'YOUR SPACE')}',
+          title: context.tr('Настройки', 'Settings'),
+          action: IconButton(
+            tooltip: context.tr('Выйти из аккаунта', 'Sign out'),
+            onPressed: signOut,
+            icon: const Icon(Icons.logout_rounded, size: 20),
+          ),
+        ),
+        StudioPanel(
+          tone: StudioTone.accent,
+          padding: const EdgeInsets.all(10),
+          child: StudioRow(
+            leading: StudioAvatar(name: accountName),
+            title: Text(accountName, style: t.textTheme.titleLarge),
+            subtitle: Text(
               context.tr('Профиль и безопасность', 'Profile and security'),
             ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open(context, const ProfileScreen()),
+            trailing: const Icon(Icons.arrow_outward_rounded),
+            onTap: () => open(const ProfileScreen()),
           ),
-          ListTile(
-            leading: const Icon(Icons.devices),
-            title: Text(
-              context.tr('Устройства и сессии', 'Devices and sessions'),
+        ),
+        const SizedBox(height: 18),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns =
+                constraints.maxWidth >= 340 &&
+                    MediaQuery.textScalerOf(context).scale(14) < 24
+                ? 2
+                : 1;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final item in shortcuts)
+                  SizedBox(
+                    width:
+                        (constraints.maxWidth - (columns - 1) * 10) / columns,
+                    child: StudioPanel(
+                      padding: const EdgeInsets.all(4),
+                      radius: 18,
+                      child: StudioRow(
+                        leading: Icon(item.$1, size: 20),
+                        title: Text(item.$2),
+                        onTap: () => open(item.$3),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+        Text(context.tr('Приложение', 'App'), style: t.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        StudioRow(
+          leading: const StudioGlyph(Icons.language_rounded, size: 34),
+          title: Text(context.tr('Язык', 'Language')),
+          trailing: Text(
+            app.language == 'ru' ? 'Русский' : 'English',
+            style: t.textTheme.bodySmall,
+          ),
+          onTap: () => open(const LanguageScreen()),
+        ),
+        StudioRow(
+          leading: const StudioGlyph(
+            Icons.notifications_none_rounded,
+            size: 34,
+          ),
+          title: Text(context.tr('Напоминания', 'Reminders')),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => open(const ReminderScreen()),
+        ),
+        const SizedBox(height: 14),
+        StudioTabs<ThemeMode>(
+          segments: [
+            ButtonSegment(
+              value: ThemeMode.system,
+              label: Text(context.tr('Система', 'System')),
             ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open(context, const SessionsScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.workspace_premium_outlined),
-            title: Text(
-              context.tr('Подписка и платежи', 'Subscription and billing'),
+            ButtonSegment(
+              value: ThemeMode.dark,
+              label: Text(context.tr('Тёмная', 'Dark')),
             ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open(context, const SubscriptionScreen()),
-          ),
-        ],
-      ),
-      FormGroup(
-        title: context.tr('Приложение', 'Application'),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: Text(context.tr('Язык', 'Language')),
-            subtitle: Text(
-              context.app.language == 'ru' ? 'Русский' : 'English',
+            ButtonSegment(
+              value: ThemeMode.light,
+              label: Text(context.tr('Светлая', 'Light')),
             ),
-            onTap: () => open(context, const LanguageScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications_none),
-            title: Text(context.tr('Напоминания', 'Reminders')),
-            onTap: () => open(context, const ReminderScreen()),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          DropdownButtonFormField<ThemeMode>(
-            initialValue: context.app.themeMode,
-            decoration: InputDecoration(
-              labelText: context.tr('Оформление', 'Appearance'),
-              prefixIcon: const Icon(Icons.contrast_rounded),
-            ),
-            items: [
-              DropdownMenuItem(
-                value: ThemeMode.system,
-                child: Text(context.tr('Как в системе', 'System')),
-              ),
-              DropdownMenuItem(
-                value: ThemeMode.dark,
-                child: Text(context.tr('Тёмное', 'Dark')),
-              ),
-              DropdownMenuItem(
-                value: ThemeMode.light,
-                child: Text(context.tr('Светлое', 'Light')),
-              ),
-            ],
-            onChanged: (v) async {
-              try {
-                await context.app.setTheme(v!);
-              } catch (e) {
-                if (context.mounted) showError(context, e);
-              }
-            },
-          ),
-        ],
-      ),
-      FormGroup(
-        title: context.tr('Личные данные и безопасность', 'Privacy and safety'),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.lock_outline_rounded),
-            title: Text(
-              context.tr('Приватность и данные', 'Privacy and data controls'),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open(context, const PrivacyScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.favorite_outline_rounded),
-            title: Text(
-              context.tr('Безопасность и приложение', 'Safety and about'),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open(context, const SafetyAboutScreen()),
-          ),
-        ],
-      ),
-      ActionButton(
-        secondary: true,
-        label: context.tr('Выйти', 'Sign out'),
-        icon: Icons.logout,
-        action: () async {
-          final app = context.app;
-          if (await confirm(
-            context,
-            context.tr('Выйти из аккаунта?', 'Sign out?'),
-          )) {
-            await app.logout();
-          }
-        },
-      ),
-      const SizedBox(height: AppSpacing.xl),
-      Text(
-        'CloudMind · 1.0.0',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-    ],
-  );
+          ],
+          selected: {app.themeMode},
+          onSelectionChanged: (values) async {
+            try {
+              await app.setTheme(values.first);
+            } catch (error) {
+              if (context.mounted) showError(context, error);
+            }
+          },
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'CloudMind · 1.0.0',
+          style: t.textTheme.labelSmall,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
 }
 
 class PrivacyScreen extends StatefulWidget {
@@ -276,77 +260,99 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(
         context.tr('Приватность и данные', 'Privacy and data controls'),
       ),
     ),
     body: PageBody(
+      compact: true,
       children: [
-        PageIntro(
-          title: context.tr('Ваши данные', 'Your data'),
-          description: context.tr(
-            'Сообщения передаются серверу приложения для создания ответов и могут храниться в истории аккаунта. Не отправляйте то, что не хотите передавать сервису.',
-            'Messages are sent to the app server to generate replies and may be stored in your account history. Avoid sharing information you do not want the service to receive.',
+        StudioHeader(
+          eyebrow: context.tr('ВЫ УПРАВЛЯЕТЕ', 'YOU ARE IN CONTROL'),
+          title: context.tr(
+            'Ваши данные.\nВаши решения.',
+            'Your data.\nYour choices.',
           ),
         ),
-        FormGroup(
-          title: context.tr('Управление данными', 'Data controls'),
-          children: [
-            ListTile(
-              leading: const Icon(Icons.ios_share_rounded),
-              title: Text(
+        StudioPanel(
+          tone: StudioTone.accent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const StudioGlyph(Icons.lock_outline_rounded, size: 42),
+              const SizedBox(height: 16),
+              Text(
+                context.tr('О ваших разговорах', 'About your conversations'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 10),
+              Text(
                 context.tr(
-                  'Экспорт профиля и разговоров',
-                  'Export profile and conversations',
+                  'Сообщения передаются серверу приложения для создания ответов и могут храниться в истории аккаунта. Не отправляйте то, что не хотите передавать сервису.',
+                  'Messages are sent to the app server to generate replies and may be stored in your account history. Avoid sharing information you do not want the service to receive.',
                 ),
               ),
-              subtitle: Text(
-                context.tr(
-                  'Профиль, разговоры, дневник, входящие пожелания и последние сессии поддержки.',
-                  'Profile, conversations, journal, received messages and recent support sessions.',
+              const SizedBox(height: 12),
+              StudioDisclosure(
+                title: Text(
+                  context.tr(
+                    'Как обрабатываются сообщения',
+                    'How conversations are handled',
+                  ),
                 ),
+                children: [
+                  Text(
+                    context.tr(
+                      'Для ответа текст отправляется на настроенный сервер приложения. История разговоров загружается и хранится в учётной записи. Этот интерфейс не обещает сквозное шифрование.',
+                      'To generate a reply, message text is sent to the configured app server. Conversation history is stored with your account. This app does not claim end-to-end encryption.',
+                    ),
+                  ),
+                ],
               ),
-              trailing: exporting
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: exporting ? null : exportData,
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline_rounded),
-              title: Text(context.tr('Удаление аккаунта', 'Delete account')),
-              subtitle: Text(
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        StudioHeader(
+          title: context.tr('Сохраните свою копию', 'Keep your own copy'),
+          description: context.tr(
+            'Профиль, разговоры, дневник, входящие пожелания и последние сессии поддержки.',
+            'Profile, conversations, journal, received messages and recent support sessions.',
+          ),
+        ),
+        ActionButton(
+          secondary: true,
+          label: context.tr('Экспортировать данные', 'Export your data'),
+          icon: Icons.ios_share_rounded,
+          action: exportData,
+        ),
+        const SizedBox(height: 24),
+        StudioPanel(
+          tone: StudioTone.danger,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.tr('Удаление аккаунта', 'Delete account'),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
                 context.tr(
                   'Аккаунт и связанные записи удалятся без возможности восстановления.',
                   'Your account and linked records will be permanently removed.',
                 ),
               ),
-              trailing: TextButton(
-                onPressed: deleteAccount,
-                child: Text(context.tr('Удалить', 'Delete')),
+              const SizedBox(height: 12),
+              ActionButton(
+                destructive: true,
+                label: context.tr('Удалить аккаунт', 'Delete account'),
+                icon: Icons.delete_outline_rounded,
+                action: deleteAccount,
               ),
-            ),
-          ],
-        ),
-        FormGroup(
-          title: context.tr(
-            'Как обрабатываются сообщения',
-            'How conversations are handled',
+            ],
           ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                context.tr(
-                  'Для ответа текст отправляется на настроенный сервер приложения. История разговоров загружается и хранится в учётной записи. Этот интерфейс не обещает сквозное шифрование.',
-                  'To generate a reply, message text is sent to the configured app server. Conversation history is loaded from and stored with your account. This app does not claim end-to-end encryption.',
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     ),
@@ -357,13 +363,14 @@ class SafetyAboutScreen extends StatelessWidget {
   const SafetyAboutScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(context.tr('Безопасность и приложение', 'Safety and about')),
     ),
     body: PageBody(
+      compact: true,
       children: [
-        PageIntro(
-          eyebrow: 'CloudMind',
+        StudioHeader(
+          eyebrow: 'CLOUDMIND / ${context.tr('О ПРИЛОЖЕНИИ', 'ABOUT')}',
           title: context.tr(
             'Тёплое место для разговора',
             'A welcoming place to talk',
@@ -373,42 +380,65 @@ class SafetyAboutScreen extends StatelessWidget {
             'An AI companion for reflection, emotional well-being and everyday conversations.',
           ),
         ),
-        FormGroup(
-          title: context.tr('Ограничения', 'Important limits'),
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                context.tr(
-                  'Приложение не является медицинской службой, не ставит диагнозы и не лечит. Ответы ИИ не заменяют врача, психиатра, психолога или другую квалифицированную помощь.',
-                  'This app is not a medical service and does not diagnose or treat conditions. AI responses do not replace a doctor, psychiatrist, psychologist or other qualified professional.',
-                ),
+        StudioNotice(
+          icon: Icons.shield_outlined,
+          message: context.tr(
+            'Ответы создаёт ИИ. Это не медицинская помощь.',
+            'Responses are generated by AI. This is not medical care.',
+          ),
+        ),
+        const SizedBox(height: 18),
+        StudioPanel(
+          tone: StudioTone.accent,
+          padding: const EdgeInsets.all(6),
+          child: StudioRow(
+            leading: const StudioGlyph(
+              Icons.favorite_outline_rounded,
+              size: 44,
+            ),
+            title: Text(context.tr('Поддержка рядом', 'Find support')),
+            subtitle: Text(
+              context.tr(
+                'Если сейчас нужна помощь человека',
+                'When you need someone by your side',
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Text(
-                context.tr(
-                  'Если тебе угрожает непосредственная опасность, обратись в местную экстренную службу или к доступному кризисному ресурсу.',
-                  'If you are in immediate danger, contact your local emergency service or an available crisis resource.',
-                ),
+            trailing: const Icon(Icons.arrow_outward_rounded),
+            onTap: () => showSupport(context),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _SecurityFold(
+          title: context.tr('Ограничения', 'Important limits'),
+          children: [
+            Text(
+              context.tr(
+                'Приложение не является медицинской службой, не ставит диагнозы и не лечит. Ответы ИИ не заменяют врача, психиатра, психолога или другую квалифицированную помощь.',
+                'This app is not a medical service and does not diagnose or treat conditions. AI responses do not replace a doctor, psychiatrist, psychologist or other qualified professional.',
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              context.tr(
+                'Если тебе угрожает непосредственная опасность, обратись в местную экстренную службу или к доступному кризисному ресурсу.',
+                'If you are in immediate danger, contact your local emergency service or an available crisis resource.',
               ),
             ),
           ],
         ),
-        ListTile(
-          leading: const Icon(Icons.info_outline_rounded),
+        StudioRow(
+          leading: const StudioGlyph(Icons.info_outline_rounded, size: 34),
           title: Text(
             context.tr(
               'Прочитать полное уведомление',
               'Read the full app notice',
             ),
           ),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(Icons.chevron_right_rounded),
           onTap: () => showAppDialog<void>(
             context: context,
             builder: (dialogContext) => AppDialog(
-              icon: const Icon(Icons.auto_awesome_outlined),
+              icon: const StudioGlyph(Icons.info_outline_rounded),
               title: Text(
                 context.tr(
                   'О mental wellness companion',
@@ -430,6 +460,12 @@ class SafetyAboutScreen extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(height: 18),
+        Text(
+          'CloudMind · 1.0.0',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
       ],
     ),
   );
@@ -439,22 +475,65 @@ class LanguageScreen extends StatelessWidget {
   const LanguageScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.tr('Язык приложения', 'App language'))),
+    appBar: StudioTopBar(
+      title: Text(context.tr('Язык приложения', 'App language')),
+    ),
     body: PageBody(
       children: [
-        PageIntro(
+        StudioHeader(
           title: context.tr('Понятно с первого слова', 'Feel at home'),
           description: context.tr(
             'Выберите язык интерфейса.',
             'Choose your interface language.',
           ),
         ),
-        FormGroup(
+        StudioPanel(
+          tone: StudioTone.accent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.tr('ПРЕДПРОСМОТР', 'PREVIEW'),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                context.tr(
+                  'Можно начать с одной мысли.',
+                  'You can start with a single thought.',
+                ),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        _PreferenceSection(
           title: context.tr('Язык', 'Language'),
           children: [
             for (final entry in {'ru': 'Русский', 'en': 'English'}.entries)
-              ListTile(
+              StudioRow(
+                selected: context.app.language == entry.key,
+                selectedTileColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: .09),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                leading: Text(
+                  entry.key.toUpperCase(),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 title: Text(entry.value),
+                subtitle: Text(
+                  context.app.language == entry.key
+                      ? context.tr('Текущий язык', 'Current language')
+                      : context.tr('Выбрать язык', 'Select language'),
+                ),
                 trailing: context.app.language == entry.key
                     ? const Icon(Icons.check_circle, color: AppColors.primary)
                     : null,
@@ -487,6 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       email = TextEditingController(),
       emailToken = TextEditingController();
   String? avatar;
+  bool showOldPassword = false, showNewPassword = false;
   @override
   void dispose() {
     for (final c in [name, phone, oldPassword, password, email, emailToken]) {
@@ -506,36 +586,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(context.tr('Профиль и безопасность', 'Profile and security')),
     ),
     body: AsyncPanel(
       load: load,
       builder: (context, data, reload) => PageBody(
         children: [
-          PageIntro(
-            title: context.tr('Личные данные', 'Personal details'),
-            description: context.tr(
-              'Управляйте профилем и доступом к аккаунту.',
-              'Manage your profile and account access.',
-            ),
+          StudioHeader(
+            eyebrow: context.tr('УЧЁТНАЯ ЗАПИСЬ', 'YOUR ACCOUNT'),
+            title:
+                '${(data['user'] as Json)['name'] ?? context.tr('Ваш профиль', 'Your profile')}',
+            description: '${(data['user'] as Json)['email'] ?? ''}',
           ),
-          FormGroup(
+          _PreferenceSection(
             title: context.tr('Профиль', 'Profile'),
             children: [
-              if (avatar != null)
-                Center(
-                  child: ClipOval(
-                    child: Image.network(
-                      context.app.api.mediaUrl(avatar!),
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          const Icon(Icons.person, size: 70),
+              Row(
+                children: [
+                  StudioAvatar(
+                    name: name.text,
+                    url: avatar == null
+                        ? null
+                        : context.app.api.mediaUrl(avatar!),
+                    size: 72,
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.tr('Это вы', 'This is you'),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr(
+                            'Ваше имя и образ в CloudMind',
+                            'Your identity in CloudMind',
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                ],
+              ),
+              const SizedBox(height: 16),
               ActionButton(
                 secondary: true,
                 label: context.tr('Изменить аватар', 'Change avatar'),
@@ -606,22 +704,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          FormGroup(
+          _SecurityFold(
             title: context.tr('Смена пароля', 'Change password'),
             children: [
               TextField(
                 controller: oldPassword,
-                obscureText: true,
+                obscureText: !showOldPassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
                   labelText: context.tr('Текущий пароль', 'Current password'),
+                  suffixIcon: IconButton(
+                    tooltip: context.tr(
+                      'Показать или скрыть пароль',
+                      'Show or hide password',
+                    ),
+                    onPressed: () =>
+                        setState(() => showOldPassword = !showOldPassword),
+                    icon: Icon(
+                      showOldPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: password,
-                obscureText: true,
+                obscureText: !showNewPassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.newPassword],
                 decoration: InputDecoration(
                   labelText: context.tr('Новый пароль', 'New password'),
+                  suffixIcon: IconButton(
+                    tooltip: context.tr(
+                      'Показать или скрыть пароль',
+                      'Show or hide password',
+                    ),
+                    onPressed: () =>
+                        setState(() => showNewPassword = !showNewPassword),
+                    icon: Icon(
+                      showNewPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -659,7 +789,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          FormGroup(
+          _SecurityFold(
             title: context.tr('Смена email', 'Change email'),
             children: [
               Text('${(data['user'] as Json)['email'] ?? ''}'),
@@ -729,14 +859,14 @@ class SessionsScreen extends StatelessWidget {
   const SessionsScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(context.tr('Устройства и сессии', 'Devices and sessions')),
     ),
     body: AsyncPanel(
       load: () => context.app.api.call('/auth/sessions'),
       builder: (context, data, reload) => PageBody(
         children: [
-          PageIntro(
+          StudioHeader(
             title: context.tr('Где вы вошли', 'Where you’re signed in'),
             description: context.tr(
               'Текущий доступ к вашему аккаунту.',
@@ -753,10 +883,11 @@ class SessionsScreen extends StatelessWidget {
               ),
             ),
           for (final session in rows(data, 'sessions'))
-            SectionCard(
-              child: ExpansionTile(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: StudioDisclosure(
                 tilePadding: EdgeInsets.zero,
-                leading: const Icon(Icons.devices_outlined),
+                leading: const _SettingsIcon(Icons.devices_outlined),
                 title: Text('${session['device_type'] ?? ''}'),
                 subtitle: Text(
                   session['is_current'] == true
@@ -823,84 +954,186 @@ class _ReminderScreenState extends State<ReminderScreen> {
     }
   }
 
+  Future<void> chooseTime() async {
+    final result = await showTimePicker(context: context, initialTime: time);
+    if (result != null && mounted) setState(() => time = result);
+  }
+
+  Future<void> enable() async {
+    final app = context.app;
+    await Reminders.daily(
+      time.hour,
+      time.minute,
+      context.tr(
+        'Как прошёл ваш день? Запишите свои мысли.',
+        'How was your day? Write down your thoughts.',
+      ),
+    );
+    await app.preferences.setInt('reminder_hour', time.hour);
+    await app.preferences.setInt('reminder_minute', time.minute);
+    await app.preferences.setBool('reminder_enabled', true);
+    if (mounted) setState(() {});
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.tr('Напоминания', 'Reminders'))),
-    body: PageBody(
+  Widget build(BuildContext context) {
+    final enabled = context.app.preferences.getBool('reminder_enabled') == true;
+    return Scaffold(
+      appBar: StudioTopBar(title: Text(context.tr('Напоминания', 'Reminders'))),
+      body: StudioActionLayout(
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            StudioHeader(
+              eyebrow: context.tr('ЕЖЕДНЕВНЫЙ РИТУАЛ', 'A DAILY RITUAL'),
+              title: context.tr('Время для себя', 'Time for yourself'),
+              description: context.tr(
+                'Выберите удобное время для записи в дневнике.',
+                'Choose a good time to write in your journal.',
+              ),
+            ),
+            if (!Reminders.supported)
+              StudioNotice(
+                icon: Icons.notifications_off_outlined,
+                message: context.tr(
+                  'Ежедневные уведомления доступны в приложениях Android и iOS.',
+                  'Daily notifications are available in the Android and iOS apps.',
+                ),
+              )
+            else ...[
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: chooseTime,
+                  child: StudioPanel(
+                    tone: StudioTone.accent,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const StudioGlyph(Icons.schedule_rounded, size: 40),
+                            const Spacer(),
+                            const Icon(Icons.edit_outlined, size: 20),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          time.format(context),
+                          style: Theme.of(context).textTheme.displayMedium,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          context.tr(
+                            'Каждый день · нажмите, чтобы изменить',
+                            'Every day · tap to change',
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              StudioNotice(
+                icon: enabled
+                    ? Icons.notifications_active_outlined
+                    : Icons.notifications_none_rounded,
+                message: enabled
+                    ? context.tr('Напоминания включены', 'Reminders enabled')
+                    : context.tr('Напоминания выключены', 'Reminders are off'),
+              ),
+            ],
+          ],
+        ),
+        action: Reminders.supported
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ActionButton(
+                    label: enabled
+                        ? context.tr('Сохранить время', 'Save schedule')
+                        : context.tr(
+                            'Включить напоминания',
+                            'Enable reminders',
+                          ),
+                    icon: Icons.check_rounded,
+                    action: enable,
+                  ),
+                  if (enabled)
+                    TextButton(
+                      onPressed: () async {
+                        try {
+                          final app = context.app;
+                          await Reminders.cancel();
+                          await app.preferences.setBool(
+                            'reminder_enabled',
+                            false,
+                          );
+                          if (mounted) setState(() {});
+                        } catch (error) {
+                          if (context.mounted) showError(context, error);
+                        }
+                      },
+                      child: Text(context.tr('Отключить', 'Disable')),
+                    ),
+                ],
+              )
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _SettingsIcon extends StatelessWidget {
+  const _SettingsIcon(this.icon);
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) => StudioGlyph(icon);
+}
+
+class _PreferenceSection extends StatelessWidget {
+  const _PreferenceSection({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageIntro(
-          eyebrow: context.tr('Ежедневный ритуал', 'A daily ritual'),
-          title: context.tr('Время для себя', 'Time for yourself'),
-          description: context.tr(
-            'Выберите удобное время для записи в дневнике.',
-            'Choose a good time to write in your journal.',
+        Text(title, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 12),
+        StudioPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
-        if (!Reminders.supported)
-          Text(
-            context.tr(
-              'Ежедневные уведомления доступны в приложениях Android и iOS.',
-              'Daily notifications are available in the Android and iOS apps.',
-            ),
-          )
-        else ...[
-          Text(
-            context.tr(
-              'Напоминать записывать мысли каждый день',
-              'A daily reminder to write down your thoughts',
-            ),
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          SectionCard(
-            child: ListTile(
-              title: Text(
-                time.format(context),
-                style: Theme.of(context).textTheme.displaySmall,
-              ),
-              trailing: const Icon(Icons.schedule),
-              onTap: () async {
-                final result = await showTimePicker(
-                  context: context,
-                  initialTime: time,
-                );
-                if (result != null && mounted) setState(() => time = result);
-              },
-            ),
-          ),
-          ActionButton(
-            label: context.tr('Включить напоминания', 'Enable reminders'),
-            action: () async {
-              final app = context.app;
-              await Reminders.daily(
-                time.hour,
-                time.minute,
-                context.tr(
-                  'Как прошёл ваш день? Запишите свои мысли.',
-                  'How was your day? Write down your thoughts.',
-                ),
-              );
-              await app.preferences.setInt('reminder_hour', time.hour);
-              await app.preferences.setInt('reminder_minute', time.minute);
-              await app.preferences.setBool('reminder_enabled', true);
-              if (mounted) setState(() {});
-            },
-          ),
-          const SizedBox(height: 12),
-          if (context.app.preferences.getBool('reminder_enabled') == true) ...[
-            Text(context.tr('Напоминания включены', 'Reminders enabled')),
-            ActionButton(
-              secondary: true,
-              label: context.tr('Отключить', 'Disable'),
-              action: () async {
-                final app = context.app;
-                await Reminders.cancel();
-                await app.preferences.setBool('reminder_enabled', false);
-                if (mounted) setState(() {});
-              },
-            ),
-          ],
-        ],
       ],
+    ),
+  );
+}
+
+class _SecurityFold extends StatelessWidget {
+  const _SecurityFold({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: StudioPanel(
+      padding: const EdgeInsets.all(4),
+      radius: 20,
+      child: StudioDisclosure(
+        title: Text(title),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        childrenPadding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+        children: children,
+      ),
     ),
   );
 }

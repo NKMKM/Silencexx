@@ -69,19 +69,37 @@ struct WishProvider: TimelineProvider {
 
 struct WishView: View {
     let entry: WishEntry
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var family
+
     private var content: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(entry.language == "ru" ? "Пожелание на день" : "A wish for today", systemImage: "sun.max")
-                .font(.caption.weight(.semibold)).foregroundColor(Color(red: 0.85, green: 0.79, blue: 1))
-            Text(entry.text).font(family == .systemSmall ? .footnote : .body)
-                .foregroundColor(.white).minimumScaleFactor(0.8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            Text("CloudMind").font(.system(size: 10)).foregroundColor(.white.opacity(0.6))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles")
+                    .foregroundColor(Color(red: 0.77, green: 0.72, blue: 1))
+                Text("CloudMind").font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 4)
+                Text(entry.date, style: .date)
+                    .font(.system(size: 9)).foregroundColor(.white.opacity(0.55))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundColor(.white.opacity(0.9))
+            Text(entry.text)
+                .font(.system(size: family == .systemSmall ? 14 : 17, weight: .medium))
+                .foregroundColor(.white).lineSpacing(2)
+                .lineLimit(family == .systemSmall ? 5 : 7).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                Capsule().fill(Color(red: 0.65, green: 0.55, blue: 0.95)).frame(width: 16, height: 2)
+                Text(entry.language == "ru" ? "ДЛЯ ТЕБЯ СЕГОДНЯ" : "FOR YOU TODAY")
+                    .font(.system(size: 9, weight: .medium)).tracking(0.7)
+                    .foregroundColor(.white.opacity(0.6))
+            }
         }
         .padding(16)
     }
+
     var body: some View {
-        let background = LinearGradient(colors: [Color(red: 0.18, green: 0.12, blue: 0.28), Color(red: 0.09, green: 0.05, blue: 0.18)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        let background = LinearGradient(colors: [Color(red: 0.15, green: 0.13, blue: 0.20), Color(red: 0.067, green: 0.075, blue: 0.082)], startPoint: .topLeading, endPoint: .bottomTrailing)
         if #available(iOSApplicationExtension 17.0, *) {
             content.containerBackground(for: .widget) { background }
         } else {

@@ -69,7 +69,7 @@ async function main() {
       for (const column of required) if (!columns.get(table)?.has(column)) report.findings.push(`Missing ${table}.${column}`);
     }
     if (report.server.role_is_superuser) report.findings.push('Application DB role is a superuser; use a restricted application role.');
-    if (report.server.timezone !== 'UTC') report.findings.push('DB timezone is not UTC; CURRENT_DATE quotas depend on DB timezone.');
+    if (!['UTC', 'GMT', 'Etc/UTC', 'Etc/GMT'].includes(report.server.timezone)) report.findings.push('DB timezone is not UTC; CURRENT_DATE quotas depend on DB timezone.');
     // EXPLAIN only: validates SQL and shows the planner estimate, without executing the SELECT.
     // IDs are placeholders, so these are NOT measured production latency or representative row counts.
     const statements = {
@@ -78,7 +78,8 @@ async function main() {
       chatList: [`SELECT c.id,c.user_id,COALESCE(lpc.message,'') AS last_message,
         COALESCE(lpc.senddate,c.created_at) AS last_message_date FROM chat_id c
         LEFT JOIN LATERAL (SELECT message,senddate FROM (
-          (SELECT message,senddate FROM user_chat WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
+          (SELECT text AS message,created_at AS senddate FROM messages WHERE chat_id=c.id AND user_id=c.user_id ORDER BY created_at DESC LIMIT 1)
+          UNION ALL (SELECT message,senddate FROM user_chat WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
           UNION ALL (SELECT message,senddate FROM ai_response WHERE chat_id=c.id ORDER BY senddate DESC LIMIT 1)
         ) recent ORDER BY senddate DESC LIMIT 1) lpc ON true
         WHERE c.user_id=$1 AND (c.is_temporary=false OR c.is_temporary IS NULL)
@@ -94,13 +95,65 @@ async function main() {
       }
       await client.query('RELEASE SAVEPOINT audit_query');
     }
+    // Optional bounded SELECT execution: aggregate counts and plans only, never user content.
+    if (process.argv.includes('--analyze')) {
+      report.integrity = {};
+      const checks = {
+        duplicateEmailGroups: `SELECT count(*)::int AS count FROM (SELECT lower(email) FROM user_description WHERE email IS NOT NULL GROUP BY lower(email) HAVING count(*)>1) d`,
+        orphanSessions: `SELECT count(*)::int AS count FROM session s LEFT JOIN users u ON u.id=s.user_id WHERE u.id IS NULL`,
+        invalidMessageOwners: `SELECT count(*)::int AS count FROM messages m LEFT JOIN chat_id c ON c.id=m.chat_id WHERE c.id IS NULL OR m.user_id IS DISTINCT FROM c.user_id`,
+        invalidLegacyUserOwners: `SELECT count(*)::int AS count FROM user_chat m LEFT JOIN chat_id c ON c.id=m.chat_id WHERE c.id IS NULL OR m.user_id IS DISTINCT FROM c.user_id`,
+        invalidLegacyAssistantOwners: `SELECT count(*)::int AS count FROM ai_response m LEFT JOIN chat_id c ON c.id=m.chat_id WHERE c.id IS NULL OR m.user_id IS DISTINCT FROM c.user_id`,
+        duplicateDiaryDays: `SELECT count(*)::int AS count FROM (SELECT user_id,diary_date::date FROM diary GROUP BY user_id,diary_date::date HAVING count(*)>1) d`,
+        duplicateQuotaDays: `SELECT count(*)::int AS count FROM (SELECT user_id,reset_date FROM daily_limits GROUP BY user_id,reset_date HAVING count(*)>1) d`,
+      };
+      for (const [name, sql] of Object.entries(checks)) {
+        await client.query('SAVEPOINT integrity_check');
+        try {
+          const count = (await client.query(sql)).rows[0].count;
+          report.integrity[name] = count;
+          if (count) report.findings.push(`Integrity ${name}: ${count}; inspect before changing data.`);
+        } catch (error) {
+          await client.query('ROLLBACK TO SAVEPOINT integrity_check');
+          report.findings.push(`Integrity ${name} failed (${error.code || 'UNKNOWN'}).`);
+        }
+        await client.query('RELEASE SAVEPOINT integrity_check');
+      }
+      report.roundTripMs = [];
+      for (let i=0; i<5; i++) {
+        const start = process.hrtime.bigint();
+        await client.query('SELECT 1');
+        report.roundTripMs.push(Number(process.hrtime.bigint()-start)/1e6);
+      }
+      // Largest chat owner makes the list sample useful; identity stays out of the report.
+      const sample = (await client.query('SELECT user_id FROM chat_id GROUP BY user_id ORDER BY count(*) DESC LIMIT 1')).rows[0];
+      if (sample) {
+        report.measuredPlans = {};
+        const measured = {
+          chatList: [statements.chatList[0], [sample.user_id]],
+          history: [`SELECT id,role,text,created_at FROM messages WHERE user_id=$1 AND chat_id=(SELECT id FROM chat_id WHERE user_id=$1 ORDER BY updated_at DESC NULLS LAST LIMIT 1) ORDER BY created_at`, [sample.user_id]],
+        };
+        for (const [name,[sql,values]] of Object.entries(measured)) {
+          await client.query('SAVEPOINT measured_query');
+          try {
+            const plan = (await client.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+sql,values)).rows[0]['QUERY PLAN'][0];
+            // Full plans can include literal account IDs; retain timings/counts only.
+            report.measuredPlans[name] = { planningMs: plan['Planning Time'], executionMs: plan['Execution Time'], rows: plan.Plan['Actual Rows'] };
+          } catch (error) {
+            await client.query('ROLLBACK TO SAVEPOINT measured_query');
+            report.findings.push(`Measured ${name} failed (${error.code || 'UNKNOWN'}).`);
+          }
+          await client.query('RELEASE SAVEPOINT measured_query');
+        }
+      }
+    }
     await client.query('ROLLBACK');
     const directory = path.join(__dirname, '../.db-audit');
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(directory, 'latest.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
     console.log(`DB inspected: ${columns.size} tables, ${report.indexes.length} indexes; ${report.findings.length} findings.`);
     for (const finding of report.findings) console.log('- ' + finding);
-    console.log('Read-only report: .db-audit/latest.json. No table data was changed. EXPLAIN estimates are not performance measurements.');
+    console.log('Read-only report: .db-audit/latest.json. No table data was changed. Only measuredPlans contains server execution timings; plans contains estimates.');
     if (report.findings.length) process.exitCode = 2;
   } catch (error) {
     console.error(`DB inspection failed (${error.code || error.name || 'UNKNOWN'}). Credentials and server error details omitted.`);

@@ -8,7 +8,6 @@ import 'package:silencexx/core/api.dart';
 import 'package:silencexx/core/app_state.dart';
 import 'package:silencexx/main.dart';
 import 'package:silencexx/screens/auth_screen.dart';
-import 'package:silencexx/screens/chat_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -88,13 +87,21 @@ void main() {
     expect(find.text('Создать аккаунт'), findsOneWidget);
     expect(find.text('Никнейм'), findsOneWidget);
     expect(find.text('Повторите пароль'), findsOneWidget);
-    expect(find.text('У меня уже есть аккаунт'), findsOneWidget);
+    expect(find.text('Вход'), findsOneWidget);
+    await tester.tap(find.text('Вход'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('Войти'), findsNothing);
+    expect(find.text('Войти по email'), findsOneWidget);
+    await tester.tap(find.text('Регистрация'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(4));
     expect(find.text('Телефон'), findsNothing);
     expect(find.byType(TextFormField), findsNWidgets(4));
     app.api.close();
   });
 
-  testWidgets('a restored accepted session opens the chat directly', (
+  testWidgets('a restored accepted session opens the daily home', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({'disclaimer_accepted': true});
@@ -111,7 +118,7 @@ void main() {
     await app.restore();
     await tester.pumpWidget(SilenceApp(state: app));
     await tester.pumpAndSettle();
-    expect(find.byType(ChatScreen), findsOneWidget);
+    expect(find.text('Можно просто\nбыть собой.'), findsOneWidget);
     expect(find.byType(AuthScreen), findsNothing);
     expect(find.text('Твоё пространство для себя'), findsNothing);
     app.api.close();

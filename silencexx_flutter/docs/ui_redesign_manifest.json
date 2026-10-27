@@ -1,0 +1,575 @@
+{
+  "lib/core/app_state.dart": {
+    "sha256_before": "6eb436abb206c4ba102cb320995bd689cf3cb8d52e9d365eb88274a5fe995f74",
+    "classes": [
+      "AppState",
+      "AppScope"
+    ],
+    "status": "reviewed_nonvisual_retained",
+    "decision": "Не является renderer: InheritedNotifier и состояние языка/авторизации сохранены; UI реализован в потребителях.",
+    "sha256_reviewed": "6eb436abb206c4ba102cb320995bd689cf3cb8d52e9d365eb88274a5fe995f74"
+  },
+  "lib/core/home_widget_service.dart": {
+    "sha256_before": "54a2897ecc5b5ed7f27c4af01eceed7924cea2bf4a277540cbf635241e4093b9",
+    "classes": [
+      "HomeWidgetService"
+    ],
+    "status": "reviewed_nonvisual_retained",
+    "decision": "Не является renderer: синхронизация native widgets через MethodChannel сохранена.",
+    "sha256_reviewed": "54a2897ecc5b5ed7f27c4af01eceed7924cea2bf4a277540cbf635241e4093b9"
+  },
+  "lib/core/theme/app_typography.dart": {
+    "sha256_before": "890a400a95e6e7d732bf525deed7de17dc714857efe13ed7488f9b857bcf5648",
+    "classes": [
+      "AppTypography"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "32efb4160f45fb2da4c44aad48d1160252b02308fe6fd441a780296d2ee598d0",
+    "decision": "Новая шкала display/headline/label; умеренные веса, явные line heights и интервалы. Native font fallback сохранён.",
+    "classes_after": [
+      "AppTypography"
+    ],
+    "retired_classes": []
+  },
+  "lib/core/theme.dart": {
+    "sha256_before": "97dca2de1bbb8d0b43cb527122766ed0fcc242ba04cc80360093d35a176dece3",
+    "classes": [
+      "CosmicBackdrop"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "fb6a0269efc2caa8a51cfc7e4c4633842e1beadf0e344a886299105ee1717189",
+    "decision": "Общая типографика и состояния ввода/кнопок; добавлены собственные темы date/time picker, menu, slider; native iOS back gesture сохранён.",
+    "classes_after": [
+      "CosmicBackdrop"
+    ],
+    "retired_classes": []
+  },
+  "lib/main.dart": {
+    "sha256_before": "5ad3b72c7255497348e33a578cc9cab38f612c496aff3d779e1cc7a56b7667cf",
+    "classes": [
+      "SilenceApp"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "cdd119d51b72bdc23f23e6125614cc7cf8c162e450181a76b180d635147fa58d",
+    "decision": "Перестроены launch/error/reauth сцены. Убран повторный фон. Роутинг авторизации и AppScope сохранены.",
+    "classes_after": [
+      "SilenceApp"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/auth_screen.dart": {
+    "sha256_before": "9336f630be48ca095f01b0a0b18db080f3b5764eeb31a08812497fb61f0c30a0",
+    "classes": [
+      "AuthScreen",
+      "_AuthScreenState",
+      "_GoogleMark"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "1aeabce8d5d625b37af12c1be0a0c2bdd708c1e5f3ac64707c5cd8f3bcb4f480",
+    "decision": "Адаптивный email-разделитель исправлен на Flexible; существующая форма и SSO сохранены.",
+    "classes_after": [
+      "AuthScreen",
+      "_AuthScreenState",
+      "_GoogleMark"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/chat_screen.dart": {
+    "sha256_before": "078c57ce042b167c4fca1b9cf3fe4593e3f228cd43229664dba31771cb0308c2",
+    "classes": [
+      "ChatScreen",
+      "ChatScreenState",
+      "AudioBubble",
+      "_AudioBubbleState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "889abf2d7f28297b8e9c4dd4000424e6f7f359b53bde1cf436ff19ce0739c1b2",
+    "decision": "Однорядный composer, контекстные tools/mood sheets, запись с явными cancel/send, audio loading; пустой чат с выбором настроения и сценариями. API/send/session logic сохранена. Общий обработчик ScrollStart/Overscroll закрывает клавиатуру также на границе пустого чата; черновик сохраняется (отдельный regression test).",
+    "classes_after": [
+      "ChatScreen",
+      "ChatScreenState",
+      "AudioBubble",
+      "_AudioBubbleState"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/disclaimer_screen.dart": {
+    "sha256_before": "cbacb022452de3ac967162f5c774cef2d72697c574089260e9bd428b47a414be",
+    "classes": [
+      "DisclaimerScreen",
+      "_DisclaimerScreenState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "80e1896dcbc8b90d058923535e124248dd4f12be28a8a1a54bd275e538daa1cc",
+    "decision": "Смысловые нумерованные блоки и закреплённое продолжение. Полный текст ограничений сохранён.",
+    "classes_after": [
+      "DisclaimerScreen",
+      "_DisclaimerScreenState"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/home_screen.dart": {
+    "sha256_before": "5c1b385ead397baa8bfb8cb826d1979b42e98d1410690a32dba44a93663d133c",
+    "classes": [
+      "HomeScreen",
+      "_HomeScreenState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "b09067506e3d3e661544a6a77e6e04dc027a98a74ec806493c240b9ce8622355",
+    "decision": "Структурное исправление: Today как вход, библиотека как основной раздел, чат как отдельный фокусный экран, drawer удалён, системный возврат дневника.",
+    "classes_after": [
+      "HomeScreen",
+      "_HomeScreenState"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/inbox_screen.dart": {
+    "sha256_before": "69cd1b6a4d9859edff99bde2854cbbd82c14f8ca069aef35f9e47be824dc820c",
+    "classes": [
+      "InboxScreen",
+      "_InboxScreenState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "73d94a59c40beb0fec3ad11a780f8eb3848a7e9f131d4de428dfbc15052c80fe",
+    "decision": "Письма с акцентным первым сообщением; отдельный editor, полный reading sheet, read/unread, success/cooldown. Отправка и read API сохранены.",
+    "classes_after": [
+      "InboxScreen",
+      "_InboxScreenState"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/journal_screen.dart": {
+    "sha256_before": "f448dc785d65caf1abc4840aba46f67c8fa60e80f5a8c0c2a8e0f23b5721e2f0",
+    "classes": [
+      "JournalScreen",
+      "_JournalScreenState",
+      "_JournalWeek"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "83eef53943b680f0d1deb5607442b520e318ba0ed3e77367cf2beebad29dc74d",
+    "decision": "Коллекция при входе, отдельное написание/чтение, системный и явный возврат; удалено вложенное раскрытие архивной записи. Сохранение и черновик сохранены.",
+    "classes_after": [
+      "JournalScreen",
+      "_JournalScreenState",
+      "_JournalWeek"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/panic_screen.dart": {
+    "sha256_before": "dee9800b0bf470bc74883d6ee35effaa8a8367d6e0ecac4233880aa6d93bb995",
+    "classes": [
+      "PanicScreen",
+      "_PanicScreenState",
+      "BreathingCircle",
+      "_BreathingCircleState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "0c6d7197d189d2f6b0d27fa970d2d442b89ab489f3fd8101480a5dbcf43db80f",
+    "decision": "Одна адаптивная структура всех этапов. Полные ответы доступны через scroll. Новый breathing dial; countdown приостанавливается вне активного экрана/приложения. API cadence и шаги сохранены.",
+    "classes_after": [
+      "PanicScreen",
+      "_PanicScreenState",
+      "BreathingCircle",
+      "_BreathingCircleState",
+      "_BreathDialPainter"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/settings_screen.dart": {
+    "sha256_before": "99968288172a850ee630d6ae482988bb7a80fde056c5448bf1e2bd608eb1b42e",
+    "classes": [
+      "SettingsScreen",
+      "_SettingsScreenState",
+      "PrivacyScreen",
+      "_PrivacyScreenState",
+      "SafetyAboutScreen",
+      "LanguageScreen",
+      "ProfileScreen",
+      "_ProfileScreenState",
+      "SessionsScreen",
+      "ReminderScreen",
+      "_ReminderScreenState",
+      "_SettingsIcon",
+      "_PreferenceSection",
+      "_SecurityFold"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "be5d81c1edc1fe837cf20b897325b7e0b499b18bca5cc19d32389f9044254352",
+    "decision": "Перестроен центр управления: identity, 2x2 shortcuts, preferences. Все вложенные страницы переведены на новые section/disclosure/row. Privacy danger zone, locale preview, schedule scene, password visibility.",
+    "classes_after": [
+      "SettingsScreen",
+      "_SettingsScreenState",
+      "PrivacyScreen",
+      "_PrivacyScreenState",
+      "SafetyAboutScreen",
+      "LanguageScreen",
+      "ProfileScreen",
+      "_ProfileScreenState",
+      "SessionsScreen",
+      "ReminderScreen",
+      "_ReminderScreenState",
+      "_SettingsIcon",
+      "_PreferenceSection",
+      "_SecurityFold"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/subscription_screen.dart": {
+    "sha256_before": "b367b7b659d1adf61efee0141898210847f542a43beeeac45b5ce47211918ff2",
+    "classes": [
+      "SubscriptionScreen",
+      "PaymentScreen",
+      "_PaymentScreenState",
+      "_UsageMeter"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "dd77f4a00af8e34652fadb5ef7b6c05e40d14a840f90219ec85c24fc66f64bf9",
+    "decision": "Текущий план и usage list, выбор одного тарифа с деталями, timeline/disclosure платежей. Payment — order summary с недоступным CTA; платежи не включены.",
+    "classes_after": [
+      "SubscriptionScreen",
+      "_SubscriptionScreenState",
+      "PaymentScreen",
+      "_UsageMeter"
+    ],
+    "retired_classes": [
+      "_PaymentScreenState"
+    ]
+  },
+  "lib/screens/tasks_screen.dart": {
+    "sha256_before": "698861b7d04e5f95a80660046f6960957a7f4e1c08b753facef653c8c600782f",
+    "classes": [
+      "TasksScreen",
+      "_TasksScreenState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "38ceb87f84a74f9d0d8c027fcfedad92a50e4a9dbcbb526047916169a0cef8a7",
+    "decision": "Заново собрана practice scene с естественной высотой, этапами и отдельной pause area; закреплённый CTA с ожиданием и защитой от повторов.",
+    "classes_after": [
+      "TasksScreen",
+      "_TasksScreenState",
+      "_PracticeJourney"
+    ],
+    "retired_classes": []
+  },
+  "lib/screens/wellness_onboarding_screen.dart": {
+    "sha256_before": "f9f240a56b17e233321f659b3767db2d960e102f40f6a260df04cf787f57b7bb",
+    "classes": [
+      "WellnessOnboardingScreen",
+      "_WellnessOnboardingScreenState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "51748fcf01f6b76fff12bb2528005046b9006c3ebc90dae2dc87d586d7cff4bc",
+    "decision": "Темы как компактные интерактивные строки/сетка; общий selected summary и закреплённые Continue/Skip. Сохранены все шесть интересов и backend IDs.",
+    "classes_after": [
+      "WellnessOnboardingScreen",
+      "_WellnessOnboardingScreenState"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/app_navigation.dart": {
+    "sha256_before": "271def8bd5c226746f87ad944ca892601cbe61ad9ce44f20844058a729bdca2b",
+    "classes": [
+      "AppNavigation",
+      "_AppNavigationState",
+      "RetainedPageStack",
+      "_RetainedPageStackState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "f91a74c076ca9f9e90c2e082531de1a149a982fffa49b31f3911767768d79655",
+    "decision": "Полностью заменён navigator: moving dock selection и responsive rail. RetainedPageStack сохранён ради черновиков и оптимизированного выключения скрытых ticker.",
+    "classes_after": [
+      "AppNavigation",
+      "_AppNavigationState",
+      "RetainedPageStack",
+      "_RetainedPageStackState"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/chat_visuals.dart": {
+    "sha256_before": "f26c5015daf86217b4d42b4908023640b1d26470fe58c603f4ae203fa2292bbc",
+    "classes": [
+      "ChatAtmosphere",
+      "_ChatAtmosphereState",
+      "_AtmospherePainter",
+      "AiActivity",
+      "_AiActivityState",
+      "MessageContent",
+      "_CodeBlock",
+      "_CodeBlockState",
+      "FloatingActionMenu"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "ceb377cb593f1893efa2544ee75e65c57b66c018aded4c241c79775b71058f5a",
+    "decision": "Кодовые блоки получили анимированное copy/success, markdown стал компактнее, tools используют новые строки. Парсинг markdown, безопасные ссылки и repaint-only background сохранены.",
+    "classes_after": [
+      "ChatAtmosphere",
+      "_ChatAtmosphereState",
+      "_AtmospherePainter",
+      "AiActivity",
+      "_AiActivityState",
+      "MessageContent",
+      "_CodeBlock",
+      "_CodeBlockState",
+      "FloatingActionMenu"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/command_palette.dart": {
+    "sha256_before": "0bdc85380d91bbcc07f8273e6f8166515c9a9c71582a3c66cc515a065b13a515",
+    "classes": [
+      "WorkspaceCommand",
+      "_CommandPalette",
+      "_CommandPaletteState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "fb4bd323297761af735c1682936f4c02e10f1f866c2b4cd63f2a41ea0961f6dd",
+    "decision": "Новые result rows, высота зависит от text scale; keyboard hint только на wide. Все команды и стрелки/Enter/Esc сохранены.",
+    "classes_after": [
+      "WorkspaceCommand",
+      "_CommandPalette",
+      "_CommandPaletteState"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/common.dart": {
+    "sha256_before": "ae70ee780b88209a7aa29c3d6caad06edf532a0613b8edec5e1073959add0992",
+    "classes": [
+      "AppDialog",
+      "PageBody",
+      "SectionCard",
+      "_SectionCardState",
+      "AppSectionHeader",
+      "AppEmptyState",
+      "AppLoadingState",
+      "AppSkeleton",
+      "_AppSkeletonState",
+      "AsyncPanel",
+      "_AsyncPanelState",
+      "PressScale",
+      "_PressScaleState",
+      "ActionButton",
+      "_ActionButtonState",
+      "PageIntro",
+      "FormGroup",
+      "ActionPage"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "92bc3f28bf3c5538aeea2724f797cb2b6cf7aef879ec60badd7e208c0864af7f",
+    "decision": "Новая структура modal/empty/loading/error/refresh; сохранение данных при reload, PressScale и ActionButton normal/busy/destructive. Удалены устаревшие неиспользуемые wrappers.",
+    "classes_after": [
+      "AppDialog",
+      "PageBody",
+      "AppEmptyState",
+      "AppLoadingState",
+      "AppSkeleton",
+      "_AppSkeletonState",
+      "AsyncPanel",
+      "_AsyncPanelState",
+      "PressScale",
+      "_PressScaleState",
+      "ActionButton",
+      "_ActionButtonState"
+    ],
+    "retired_classes": [
+      "ActionPage",
+      "AppSectionHeader",
+      "FormGroup",
+      "PageIntro",
+      "SectionCard",
+      "_SectionCardState"
+    ]
+  },
+  "lib/widgets/conversation_message.dart": {
+    "sha256_before": "45a9f3cc543b242a64bc66afc5684b1046b5da37643a1fc85c6e8e8ff95f3505",
+    "classes": [
+      "ConversationMessage"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "460d222f7b1c3277d4441fd529385de94ab5e0f3e7528aa8ea8b55ef759839b1",
+    "decision": "Убраны повторные user avatar/author headers, собраны AI identity/text/time/actions; постоянная геометрия toolbar и disabled actions при запросе.",
+    "classes_after": [
+      "ConversationMessage"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/conversation_sidebar.dart": {
+    "sha256_before": "c9480df8af8d0fab231f5b3be0c637fb682ac2728bd7c47db39ed6d543cba060",
+    "classes": [
+      "ConversationSidebar",
+      "_ConversationSidebarState",
+      "_HistoryRow",
+      "_HistoryRowState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "21b5a3ea7458fbce78f1c1f2d4fb76e171e83f7f36a68c8dfaeacf572597527e",
+    "decision": "Библиотека как самостоятельная страница: header creation action, поиск и фильтр, крупные чистые строки; возобновление черновика. Компактный режим остаётся контекстной desktop-колонкой.",
+    "classes_after": [
+      "ConversationSidebar",
+      "_ConversationSidebarState",
+      "_HistoryRow"
+    ],
+    "retired_classes": [
+      "_HistoryRowState"
+    ]
+  },
+  "lib/widgets/design.dart": {
+    "sha256_before": "3bc4b4d0eb1836602fe2309fef3bae6a29daaaadafcec0b9eca2057c79b33a7a",
+    "classes": [
+      "QuietOrbit",
+      "_OrbitPainter",
+      "AppBadge",
+      "PageReveal",
+      "AuthFrame",
+      "CalmPageTransitions",
+      "StagedEntry",
+      "LivingEmblem"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "80913bfef9336c6a348ba4f78fc7a950b8eb60f15835e8088f3b428072bec5da",
+    "decision": "Новый ribbon motif, единый auth split scene, быстрые staged entrances и route transitions. OS reduced motion сохранён.",
+    "classes_after": [
+      "QuietOrbit",
+      "_OrbitPainter",
+      "AppBadge",
+      "PageReveal",
+      "AuthFrame",
+      "CalmPageTransitions",
+      "StagedEntry",
+      "LivingEmblem"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/glass.dart": {
+    "sha256_before": "f8ea5c3b50e0e5ab7e0d6b0582438eb514885029b3ba2dd9f764cbb79762f0da",
+    "classes": [
+      "GlassSurface",
+      "BreathingIcon",
+      "_BreathingIconState"
+    ],
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "46b99d7bfe33afba8428a600d67283e81af3f8e47c30989b2bdc8ad565cd33b2",
+    "decision": "Переработан в тональную поверхность с focus border. Нет градиента и тени на каждом обычном блоке. Неиспользуемый бесконечный BreathingIcon удалён.",
+    "classes_after": [
+      "GlassSurface"
+    ],
+    "retired_classes": [
+      "BreathingIcon",
+      "_BreathingIconState"
+    ]
+  },
+  "lib/core/theme/app_colors.dart": {
+    "status": "reviewed_retained",
+    "sha256_reviewed": "04b9234f806f7245eb4fd015e5f24313fef9226d10d5639a293aef21249c353b",
+    "decision": "Осознанно сохранена узнаваемая палитра бренда и контрастные смысловые цвета. Изменения находятся в структуре и компонентах, не в перекраске.",
+    "classes_after": [
+      "AppColors"
+    ],
+    "retired_classes": []
+  },
+  "lib/core/theme/app_gradients.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "210b52e28086afaefc845c67eeee88fa3a68c685678200507a8ea13f29ab6b75",
+    "decision": "Удалены неиспользуемые card/hero градиенты. Оставлены только фон и основной CTA.",
+    "classes_after": [
+      "AppGradients"
+    ],
+    "retired_classes": []
+  },
+  "lib/core/theme/app_motion.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "f4870175a37eeaf6dc9c4a082488f0875736e82e05b212e60bd0a45da9cde570",
+    "decision": "Единые длительности press/selection/disclosure/scene; reduced motion обрабатывается компонентами.",
+    "classes_after": [
+      "AppMotion"
+    ],
+    "retired_classes": []
+  },
+  "lib/core/theme/app_radius.dart": {
+    "status": "reviewed_retained",
+    "sha256_reviewed": "93321536dcbd1c5bfeef2619e2dafa1ea609c93ecf5e447619cf2a3b554a1fed",
+    "decision": "Сохранена базовая шкала радиусов как совместимый контракт. Новые композиции используют разные радиусы по роли, а не единую форму каждой карточки.",
+    "classes_after": [
+      "AppRadius"
+    ],
+    "retired_classes": []
+  },
+  "lib/core/theme/app_spacing.dart": {
+    "status": "reviewed_retained",
+    "sha256_reviewed": "dffc6cda88ad3c61f4980649b06c6730ba3da65ba3bb514418943ff1b2cd3c95",
+    "decision": "Сохранена 4px шкала отступов; PageBody больше не резервирует 128px пустого места снизу.",
+    "classes_after": [
+      "AppSpacing"
+    ],
+    "retired_classes": []
+  },
+  "lib/widgets/studio.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "67f1181e4e6dcbc1637e62477fb709052f232170c92e42e3f3165338173a6819",
+    "decision": "Новая библиотека системных компонентов: header/panel/row/glyph/tabs/choice/disclosure/notice/sheet/topbar/action layout/avatar/resize. Размеры, focus, hover, press, reduced motion и семантика реализованы централизованно.",
+    "classes_after": [
+      "StudioGlyph",
+      "StudioPanel",
+      "StudioHeader",
+      "StudioRow",
+      "_StudioRowState",
+      "StudioTabs",
+      "StudioChoice",
+      "StudioDisclosure",
+      "_StudioDisclosureState",
+      "StudioNotice",
+      "StudioSheet",
+      "StudioTopBar",
+      "StudioActionLayout",
+      "StudioAvatar",
+      "StudioResize"
+    ],
+    "retired_classes": []
+  },
+  "ios/DailyWishWidget/DailyWishWidget.swift": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "77f94feac34b697847314004392a69f3746788001d14506e695481b6e1aff1a0",
+    "decision": "Новая композиция WishView: бренд и дата → пожелание → подпись. Graphite surface. Timeline, токен и кэш не менялись.",
+    "classes_after": [
+      "WishEntry",
+      "WishProvider",
+      "WishView",
+      "DailyWishWidget"
+    ],
+    "retired_classes": []
+  },
+  "macos/DailyWishWidget/DailyWishWidget.swift": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "93828047cf2a3f5b66637b3d4de4ba4e5a30af8a115ceab6895a1560f024be7c",
+    "decision": "Та же композиция и margins, включая large family. Timeline и Keychain transport не менялись.",
+    "classes_after": [
+      "WishEntry",
+      "WishProvider",
+      "WishView",
+      "DailyWishWidget"
+    ],
+    "retired_classes": []
+  },
+  "android/app/src/main/res/layout/daily_wish_widget.xml": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "4cb62df6dc1f4fcfd44554ec1358bd2c42d12af1579714f030f2d17e292e9073",
+    "decision": "Перестроен порядок brand → wish → localized caption; обновлена иерархия текста. Resource IDs и click action сохранены.",
+    "classes_after": [],
+    "retired_classes": []
+  },
+  "android/app/src/main/res/drawable/wish_background.xml": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "9bed2b494b7f3ef9803f97749d3e31f1c5369110e6298d0d398504b1f51293a0",
+    "decision": "Graphite background/border согласован с приложением. Без новых remote-view эффектов и фоновых анимаций.",
+    "classes_after": [],
+    "retired_classes": []
+  },
+  "lib/core/theme/app_shadows.dart": {
+    "status": "retired",
+    "decision": "Удалён неиспользуемый набор декоративных теней; потребителей в lib/test нет."
+  },
+  "lib/screens/today_screen.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "7e28d71b4ef32d66dd15e4eacdb90eaa99ba78807776155db6ea3260388b09a5",
+    "decision": "Новый action-led ежедневный вход: старт/продолжение диалога, три последовательных действия, настройки в заголовке; desktop split и mobile stack; реальные данные workspace."
+  }
+}

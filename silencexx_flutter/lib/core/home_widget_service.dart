@@ -11,7 +11,8 @@ class HomeWidgetService {
   }) async {
     if (kIsWeb ||
         (defaultTargetPlatform != TargetPlatform.iOS &&
-            defaultTargetPlatform != TargetPlatform.android)) {
+            defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.macOS)) {
       return;
     }
     try {

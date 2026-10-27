@@ -56,3 +56,7 @@ backend/google-android_api.json
 # Flutter and native build output is generated locally.
 **/build/
 **/*.backup
+
+# Local PostgreSQL CA certificate
+/backend/ca.pem
+/silencexx_flutter/backend/ca.pem

@@ -4,12 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api.dart';
 import 'core/app_state.dart';
 import 'core/theme.dart';
-import 'core/theme/app_spacing.dart';
+import 'core/theme/app_motion.dart';
 import 'screens/auth_screen.dart';
 import 'screens/disclaimer_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/wellness_onboarding_screen.dart';
 import 'widgets/common.dart';
+import 'widgets/studio.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,8 +33,6 @@ class SilenceApp extends StatelessWidget {
       builder: (context, _) => MaterialApp(
         title: 'CloudMind',
         debugShowCheckedModeBanner: false,
-        builder: (context, child) =>
-            CosmicBackdrop(child: child ?? const SizedBox.shrink()),
         theme: auroraTheme(Brightness.light),
         darkTheme: auroraTheme(Brightness.dark),
         themeMode: state.themeMode,
@@ -43,77 +42,121 @@ class SilenceApp extends StatelessWidget {
         home: !state.ready
             ? Scaffold(
                 body: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Image.asset(
-                          'assets/images/cloudmind_icon.png',
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                        ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                'assets/images/cloudmind_icon.png',
+                                width: 68,
+                                height: 68,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          Text(
+                            'CloudMind',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            state.tr(
+                              'Ваше пространство рядом',
+                              'Your space is here',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 28),
+                          const AppSkeleton(height: 3),
+                        ],
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      const Text('CloudMind'),
-                      const SizedBox(height: AppSpacing.xl),
-                      const AppSkeleton(width: 140, height: 6),
-                    ],
+                    ),
                   ),
                 ),
               )
             : state.startupError != null
             ? Scaffold(
                 body: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(state.startupError!, textAlign: TextAlign.center),
-                        const SizedBox(height: AppSpacing.lg),
-                        FilledButton(
-                          onPressed: state.restore,
-                          child: Text(state.tr('Повторить', 'Retry')),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            state.startupError = null;
-                            state.expireSession();
-                          },
-                          child: Text(
-                            state.tr('Войти заново', 'Sign in again'),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AppEmptyState(
+                            icon: Icons.cloud_off_rounded,
+                            title: state.tr(
+                              'Не удалось открыть приложение',
+                              'Could not open the app',
+                            ),
+                            description: state.tr(
+                              'Попробуйте подключиться ещё раз или войдите в аккаунт заново.',
+                              'Try connecting again or sign in to your account again.',
+                            ),
                           ),
-                        ),
-                      ],
+                          ActionButton(
+                            label: state.tr('Повторить', 'Retry'),
+                            icon: Icons.refresh_rounded,
+                            action: state.restore,
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              state.startupError = null;
+                              state.expireSession();
+                            },
+                            child: Text(
+                              state.tr('Войти заново', 'Sign in again'),
+                            ),
+                          ),
+                          StudioDisclosure(
+                            title: Text(
+                              state.tr('Подробности ошибки', 'Error details'),
+                            ),
+                            children: [SelectableText(state.startupError!)],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               )
-            : AnimatedSwitcher(
-                duration: const Duration(milliseconds: 360),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(.025, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
+            : Builder(
+                builder: (context) => AnimatedSwitcher(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : AppMotion.screen,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(.025, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
                   ),
+                  child: !state.disclaimerAccepted
+                      ? const DisclaimerScreen(key: ValueKey('disclaimer'))
+                      : state.authenticated
+                      ? state.needsOnboarding
+                            ? const WellnessOnboardingScreen(
+                                key: ValueKey('wellness-onboarding'),
+                              )
+                            : const HomeScreen(key: ValueKey('chat'))
+                      : const AuthScreen(key: ValueKey('auth')),
                 ),
-                child: !state.disclaimerAccepted
-                    ? const DisclaimerScreen(key: ValueKey('disclaimer'))
-                    : state.authenticated
-                    ? state.needsOnboarding
-                          ? const WellnessOnboardingScreen(
-                              key: ValueKey('wellness-onboarding'),
-                            )
-                          : const HomeScreen(key: ValueKey('chat'))
-                    : const AuthScreen(key: ValueKey('auth')),
               ),
       ),
     ),

@@ -12,16 +12,37 @@ abstract final class AppTypography {
     return ThemeData(brightness: brightness).textTheme
         .apply(bodyColor: primary, displayColor: primary)
         .copyWith(
-          headlineLarge: TextStyle(
+          displayLarge: TextStyle(
             color: primary,
-            fontSize: 36,
+            fontSize: 52,
+            height: 1.05,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -1.8,
+          ),
+          displayMedium: TextStyle(
+            color: primary,
+            fontSize: 42,
+            height: 1.08,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -1.3,
+          ),
+          displaySmall: TextStyle(
+            color: primary,
+            fontSize: 34,
             height: 1.12,
             fontWeight: FontWeight.w600,
-            letterSpacing: -1.15,
+            letterSpacing: -1,
+          ),
+          headlineLarge: TextStyle(
+            color: primary,
+            fontSize: 32,
+            height: 1.12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -1.0,
           ),
           headlineMedium: TextStyle(
             color: primary,
-            fontSize: 30,
+            fontSize: 28,
             height: 1.16,
             fontWeight: FontWeight.w600,
             letterSpacing: -.85,
@@ -55,6 +76,18 @@ abstract final class AppTypography {
           bodyLarge: TextStyle(color: primary, fontSize: 16, height: 1.45),
           bodyMedium: TextStyle(color: secondary, fontSize: 15, height: 1.55),
           bodySmall: TextStyle(color: secondary, fontSize: 13, height: 1.45),
+          labelMedium: TextStyle(
+            color: primary,
+            fontSize: 12,
+            height: 1.3,
+            fontWeight: FontWeight.w500,
+          ),
+          labelSmall: TextStyle(
+            color: secondary,
+            fontSize: 11,
+            height: 1.3,
+            fontWeight: FontWeight.w500,
+          ),
           labelLarge: TextStyle(
             color: primary,
             fontSize: 14,

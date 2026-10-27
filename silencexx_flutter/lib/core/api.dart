@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -24,7 +23,7 @@ class Api {
   static String get defaultUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
-    return 'https://frying-liver-gotten.ngrok-free.dev/api';
+    return 'https://178.236.246.99/api';
   }
 
   final http.Client client;

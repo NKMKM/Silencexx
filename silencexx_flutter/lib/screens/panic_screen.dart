@@ -1,8 +1,8 @@
+import 'dart:math' as math;
+import '../widgets/studio.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/app_state.dart';
-import '../core/theme/app_colors.dart';
-import '../widgets/design.dart';
 import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
 
@@ -121,196 +121,477 @@ class _PanicScreenState extends State<PanicScreen> {
       context.tr('Какая мысль вас тревожит?', 'What thought is worrying you?'),
       context.tr('Как вы чувствуете себя сейчас?', 'How do you feel now?'),
     ];
+    final theme = Theme.of(context);
+    final phase = step < 1
+        ? 0
+        : step < 3
+        ? 1
+        : 2;
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Я рядом', 'I am here'))),
-      body: ActionPage(
+      appBar: StudioTopBar(
+        title: Text(context.tr('Пауза', 'A moment for you')),
+      ),
+      body: StudioActionLayout(
+        maxWidth: 760,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            StudioHeader(
+              eyebrow: context.tr('В ВАШЕМ ТЕМПЕ', 'AT YOUR OWN PACE'),
+              title: context.tr('Пауза для себя', 'A moment for you'),
+              action: Text(
+                step < 0
+                    ? '01'
+                    : step == 10
+                    ? '✓'
+                    : '${step + 1} / 10',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                for (var i = 0; i < 3; i++) ...[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedContainer(
+                          duration: studioDuration(context),
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: i <= phase || step == 10
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.outlineVariant,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          [
+                            context.tr('Самочувствие', 'Check in'),
+                            context.tr('Дыхание', 'Breathe'),
+                            context.tr('Опора', 'Grounding'),
+                          ][i],
+                          style: theme.textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (i < 2) const SizedBox(width: 10),
+                ],
+              ],
+            ),
+            const SizedBox(height: 24),
+            StudioResize(
+              duration: studioDuration(context),
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: studioDuration(context),
+                child: KeyedSubtree(
+                  key: ValueKey('pause-step-$step'),
+                  child: _mobileStep(
+                    context,
+                    theme,
+                    prompts,
+                    theme.colorScheme,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
         action: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (step < 10)
               ActionButton(
-                label: step == -1
-                    ? context.tr('Начать', 'Begin')
+                label: step < 0
+                    ? context.tr('Начать паузу', 'Start gently')
                     : step == 9
                     ? context.tr('Завершить', 'Finish')
-                    : context.tr('Продолжить', 'Continue'),
+                    : context.tr('Дальше', 'Continue'),
+                icon: step < 0
+                    ? Icons.air_rounded
+                    : step == 9
+                    ? Icons.check_rounded
+                    : Icons.arrow_forward_rounded,
                 action: advance,
               )
             else
-              FilledButton(
+              FilledButton.icon(
                 onPressed: () => Navigator.pop(context),
-                child: Text(context.tr('Вернуться', 'Go back')),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: Text(context.tr('Вернуться', 'Return')),
               ),
             TextButton.icon(
               onPressed: () => showSupport(context),
-              icon: const Icon(Icons.people_outline),
+              icon: const Icon(Icons.favorite_outline_rounded, size: 17),
               label: Text(
-                context.tr('Обратиться за поддержкой', 'Reach out for support'),
+                context.tr('Нужна помощь рядом', 'Reach out for help'),
               ),
             ),
           ],
         ),
-        children: [
-          if (step == -1 || step == 10)
-            Center(
-              child: QuietOrbit(
-                size: 180,
-                child: Icon(
-                  step == 10 ? Icons.check_rounded : Icons.spa_outlined,
-                  color: AppColors.primaryBright,
-                  size: 36,
+      ),
+    );
+  }
+
+  Widget _mobileStep(
+    BuildContext context,
+    ThemeData theme,
+    List<String> prompts,
+    ColorScheme colors,
+  ) {
+    if (step < 0 || step == 10) {
+      final complete = step == 10;
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.primary.withValues(alpha: .09),
+                border: Border.all(
+                  color: colors.primary.withValues(alpha: .24),
                 ),
               ),
+              child: Icon(
+                complete ? Icons.check_rounded : Icons.air_rounded,
+                size: 38,
+                color: colors.primary,
+              ),
             ),
-          if (step >= 0 && step < 10)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(value: step / 10, minHeight: 4),
-            ),
-          PageIntro(
-            eyebrow: step >= 0 && step < 10
-                ? context.tr('Шаг ${step + 1} из 10', 'Step ${step + 1} of 10')
-                : context.tr('В своём темпе', 'At your own pace'),
-            title: context.tr('Побудем здесь', 'Stay here a moment'),
-            description: context.tr(
-              'Один небольшой шаг за раз. Можно остановиться в любой момент.',
-              'One small step at a time. You can stop whenever you want.',
-            ),
-          ),
-          Text(
-            step < 0
-                ? context.tr(
-                    'Давайте пройдём этот момент вместе',
-                    'Let’s take this one moment at a time',
-                  )
-                : step == 10
-                ? context.tr(
-                    'Спасибо, что позаботились о себе',
-                    'Thank you for taking care of yourself',
-                  )
-                : prompts[step],
-            style: Theme.of(context).textTheme.headlineSmall,
-            textAlign: TextAlign.start,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          if (response.isNotEmpty && step < 10)
-            SectionCard(child: Text(response)),
-          if (step == 0 || step == 9) ...[
+            const SizedBox(height: 20),
             Text(
-              '${level.round()} / 10',
+              complete
+                  ? context.tr(
+                      'Ты уделил(а) себе время',
+                      'You made time for you',
+                    )
+                  : context.tr('Давай замедлимся', 'Let’s slow things down'),
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: theme.textTheme.headlineMedium?.copyWith(height: 1.12),
             ),
-            Slider(
-              value: level,
-              min: 1,
-              max: 10,
-              divisions: 9,
-              label: '${level.round()}',
-              onChanged: (v) => setState(() => level = v),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Text(
+                complete
+                    ? context.tr(
+                        'На этом можно остановиться. Возвращайся к паузе, когда понадобится.',
+                        'You can stop here. Return to this pause whenever you need it.',
+                      )
+                    : context.tr(
+                        'Один небольшой шаг за раз. Можно остановиться в любой момент.',
+                        'One small step at a time. You can stop whenever you want.',
+                      ),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  height: 1.45,
+                ),
+              ),
             ),
           ],
-          if (step == 1) const BreathingCircle(),
-          if (step >= 3 && step <= 8)
-            TextField(
-              controller: input,
-              minLines: 2,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: context.tr(
-                  'Можно написать или просто подумать',
-                  'You may write or just reflect',
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (response.trim().isNotEmpty) ...[
+          Text(
+            response,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+        Text(
+          prompts[step],
+          style: theme.textTheme.headlineSmall?.copyWith(height: 1.15),
+        ),
+        if (step == 0 || step == 9) ...[
+          const SizedBox(height: 22),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${level.round()}',
+                style: theme.textTheme.displayMedium?.copyWith(
+                  color: colors.primary,
+                  height: 1,
                 ),
               ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text(
+                  context.tr('из 10', 'out of 10'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: level,
+            min: 1,
+            max: 10,
+            divisions: 9,
+            label: '${level.round()}',
+            semanticFormatterCallback: (value) => context.tr(
+              '${value.round()} из 10',
+              '${value.round()} out of 10',
             ),
+            onChanged: (value) => setState(() => level = value),
+          ),
+          Row(
+            children: [
+              Expanded(child: Text(context.tr('Спокойно', 'Calm'))),
+              Expanded(
+                child: Text(
+                  context.tr('Сильная тревога', 'Very anxious'),
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ],
+          ),
+        ] else if (step == 1) ...[
+          const SizedBox(height: 12),
+          const BreathingCircle(compact: true),
+        ] else if (step >= 3 && step <= 8) ...[
+          const SizedBox(height: 18),
+          TextField(
+            controller: input,
+            minLines: 2,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: context.tr(
+                'Можно ответить здесь или про себя',
+                'You can answer here or just reflect',
+              ),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 14),
+          Text(
+            context.tr(
+              'Не нужно делать всё идеально. Просто заметь, что происходит сейчас.',
+              'There is no need to do this perfectly. Just notice what is here now.',
+            ),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }
 
 class BreathingCircle extends StatefulWidget {
-  const BreathingCircle({super.key});
+  const BreathingCircle({super.key, this.compact = false});
+  final bool compact;
   @override
   State<BreathingCircle> createState() => _BreathingCircleState();
 }
 
-class _BreathingCircleState extends State<BreathingCircle> {
+class _BreathingCircleState extends State<BreathingCircle>
+    with WidgetsBindingObserver {
   int seconds = 0;
-  late final Timer timer = Timer.periodic(const Duration(seconds: 1), (_) {
-    if (mounted) setState(() => seconds++);
-  });
+  Timer? timer;
+  bool foreground = true, entered = false;
   @override
   void initState() {
     super.initState();
-    timer;
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => entered = true);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    syncTimer();
+  }
+
+  void syncTimer() {
+    final active = foreground && TickerMode.valuesOf(context).enabled;
+    if (active && timer == null) {
+      timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => seconds++);
+      });
+    } else if (!active) {
+      timer?.cancel();
+      timer = null;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground = state == AppLifecycleState.resumed;
+    if (mounted) syncTimer();
   }
 
   @override
   void dispose() {
-    timer.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final phase = seconds % 12;
+    final inhale = phase < 4;
+    final pause = phase >= 4 && phase < 6;
+    final label = inhale
+        ? context.tr('Вдох', 'Breathe in')
+        : pause
+        ? context.tr('Пауза', 'Pause')
+        : context.tr('Выдох', 'Breathe out');
+    final remaining = inhale
+        ? 4 - phase
+        : pause
+        ? 6 - phase
+        : 12 - phase;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    final size = widget.compact ? 164.0 : 208.0;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(height: AppSpacing.xxl),
         SizedBox(
-          height: 220,
+          height: size,
           child: Center(
             child: Stack(
               alignment: Alignment.center,
               children: [
+                SizedBox.square(
+                  dimension: size,
+                  child: CustomPaint(
+                    painter: _BreathDialPainter(
+                      phase / 12,
+                      Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
                 AnimatedScale(
-                  scale: phase < 6 ? 1 : .65,
-                  duration: MediaQuery.disableAnimationsOf(context)
+                  scale: reduced
+                      ? 1
+                      : phase < 6 && entered
+                      ? 1
+                      : .72,
+                  duration: reduced
                       ? Duration.zero
                       : Duration(
-                          seconds: phase < 4
+                          seconds: inhale
                               ? 4
-                              : phase < 6
+                              : pause
                               ? 2
                               : 6,
                         ),
                   curve: Curves.easeInOut,
-                  child: const QuietOrbit(size: 220),
+                  child: Container(
+                    width: size * .76,
+                    height: size * .76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: .07),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: .42),
+                        width: 1.2,
+                      ),
+                    ),
+                  ),
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.air_rounded,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 28,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      phase < 4
-                          ? context.tr('Вдох', 'Breathe in')
-                          : phase < 6
-                          ? context.tr('Пауза', 'Pause')
-                          : context.tr('Выдох', 'Breathe out'),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ],
+                Semantics(
+                  label: context.tr(
+                    '$label, осталось $remaining секунд',
+                    '$label, $remaining seconds remaining',
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$remaining',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 20),
-        Text(
-          context.tr(
-            'Можно пропустить паузу или остановиться в любой момент.',
-            'You may skip the pause or stop whenever you want.',
+        if (!widget.compact) ...[
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            context.tr(
+              'Вдохни мягко. Выдыхай чуть дольше. Не нужно задерживать дыхание.',
+              'Breathe in gently and let your exhale be a little longer. No need to hold your breath.',
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
-        ),
+        ],
       ],
     );
   }
+}
+
+class _BreathDialPainter extends CustomPainter {
+  _BreathDialPainter(this.progress, this.color);
+  final double progress;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromCircle(
+      center: size.center(Offset.zero),
+      radius: size.shortestSide * .47,
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < 12; i++) {
+      paint.color = color.withValues(alpha: i / 12 <= progress ? .8 : .16);
+      canvas.drawArc(
+        rect,
+        -math.pi / 2 + i * math.pi / 6,
+        math.pi / 6 - .12,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BreathDialPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.color != color;
 }

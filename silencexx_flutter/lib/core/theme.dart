@@ -14,7 +14,7 @@ ThemeData auroraTheme(Brightness brightness) {
   final foreground = dark ? AppColors.textPrimary : AppColors.lightTextPrimary;
   final muted = dark ? AppColors.textSecondary : AppColors.lightTextSecondary;
   final surface = dark ? AppColors.surface : AppColors.lightSurface;
-  final outline = dark ? AppColors.border : const Color(0x1F303A6B);
+  final outline = dark ? AppColors.borderStrong : const Color(0x1F303A6B);
   final scheme =
       ColorScheme.fromSeed(
         seedColor: AppColors.primary,
@@ -26,8 +26,11 @@ ThemeData auroraTheme(Brightness brightness) {
         secondary: AppColors.secondary,
         onSecondary: Colors.white,
         error: AppColors.error,
-        onError: Colors.white,
+        onError: AppColors.background,
         onSurface: foreground,
+        onSurfaceVariant: muted,
+        outline: outline,
+        outlineVariant: dark ? AppColors.border : outline,
         surfaceContainerLowest: dark
             ? AppColors.background
             : AppColors.lightBackground,
@@ -45,6 +48,7 @@ ThemeData auroraTheme(Brightness brightness) {
 
   return ThemeData(
     useMaterial3: true,
+    splashFactory: NoSplash.splashFactory,
     brightness: brightness,
     colorScheme: scheme,
     pageTransitionsTheme: const PageTransitionsTheme(
@@ -107,10 +111,55 @@ ThemeData auroraTheme(Brightness brightness) {
       titleTextStyle: AppTypography.textTheme(brightness).titleLarge,
       iconTheme: IconThemeData(color: muted),
     ),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      headerBackgroundColor: surface,
+      headerForegroundColor: foreground,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      dayOverlayColor: WidgetStatePropertyAll(
+        AppColors.primary.withValues(alpha: .10),
+      ),
+      todayBorder: const BorderSide(color: AppColors.primary),
+      dividerColor: outline,
+    ),
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      hourMinuteShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      dayPeriodShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      dialBackgroundColor: scheme.surfaceContainerHigh,
+      dialHandColor: AppColors.primary,
+    ),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(surface),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: outline),
+          ),
+        ),
+      ),
+    ),
+    sliderTheme: SliderThemeData(
+      trackHeight: 5,
+      activeTrackColor: AppColors.primary,
+      inactiveTrackColor: scheme.surfaceContainerHigh,
+      thumbColor: AppColors.primary,
+      overlayColor: AppColors.primary.withValues(alpha: .12),
+      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: dark ? AppColors.backgroundSoft : const Color(0xFFF0EEF4),
       hintStyle: TextStyle(color: dark ? AppColors.textTertiary : muted),
+      errorMaxLines: 3,
       labelStyle: TextStyle(color: muted),
       prefixIconColor: muted,
       suffixIconColor: muted,
@@ -148,7 +197,7 @@ ThemeData auroraTheme(Brightness brightness) {
       margin: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        side: BorderSide(color: outline),
+        side: BorderSide(color: dark ? AppColors.border : outline),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -169,7 +218,7 @@ ThemeData auroraTheme(Brightness brightness) {
         ),
         textStyle: AppTypography.textTheme(brightness).labelLarge,
         animationDuration: AppMotion.control,
-        splashFactory: InkRipple.splashFactory,
+        splashFactory: NoSplash.splashFactory,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -185,7 +234,7 @@ ThemeData auroraTheme(Brightness brightness) {
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         animationDuration: AppMotion.control,
-        splashFactory: InkRipple.splashFactory,
+        splashFactory: NoSplash.splashFactory,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -193,25 +242,25 @@ ThemeData auroraTheme(Brightness brightness) {
         foregroundColor: dark
             ? AppColors.primaryBright
             : AppColors.primaryPressed,
-        minimumSize: const Size(44, 44),
+        minimumSize: const Size(48, 48),
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         animationDuration: AppMotion.control,
-        splashFactory: InkRipple.splashFactory,
+        splashFactory: NoSplash.splashFactory,
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         foregroundColor: muted,
-        minimumSize: const Size(44, 44),
+        minimumSize: const Size(48, 48),
         tapTargetSize: MaterialTapTargetSize.padded,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         animationDuration: AppMotion.fast,
-        splashFactory: InkRipple.splashFactory,
+        splashFactory: NoSplash.splashFactory,
       ),
     ),
     popupMenuTheme: PopupMenuThemeData(
@@ -270,7 +319,7 @@ ThemeData auroraTheme(Brightness brightness) {
       backgroundColor: dark ? AppColors.surface : surface,
       surfaceTintColor: Colors.transparent,
       modalBackgroundColor: dark ? AppColors.surface : surface,
-      showDragHandle: true,
+      showDragHandle: false,
       dragHandleColor: muted.withValues(alpha: .45),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
@@ -302,7 +351,7 @@ ThemeData auroraTheme(Brightness brightness) {
       ),
       trackColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
-            ? AppColors.primary.withValues(alpha: .75)
+            ? AppColors.primary
             : AppColors.surfaceHighest,
       ),
     ),
@@ -328,8 +377,15 @@ class CosmicBackdrop extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: [
-      const DecoratedBox(
-        decoration: BoxDecoration(gradient: AppGradients.cosmic),
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.light
+              ? AppColors.lightBackground
+              : null,
+          gradient: Theme.of(context).brightness == Brightness.dark
+              ? AppGradients.cosmic
+              : null,
+        ),
       ),
       Positioned.fill(
         child: IgnorePointer(
@@ -341,7 +397,7 @@ class CosmicBackdrop extends StatelessWidget {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [Color(0x249B8CFF), Color(0x009B8CFF)],
+                  colors: [Color(0x128247FF), Color(0x008247FF)],
                 ),
               ),
             ),

@@ -1,3 +1,4 @@
+import '../widgets/studio.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -77,9 +78,9 @@ class ChatScreenState extends State<ChatScreen> {
           event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.enter &&
           !HardwareKeyboard.instance.isShiftPressed) {
-        if (quickActions.isNotEmpty && input.text.startsWith('/'))
+        if (quickActions.isNotEmpty && input.text.startsWith('/')) {
           applyCommand(quickActions.first);
-        else {
+        } else {
           send();
         }
         return KeyEventResult.handled;
@@ -90,15 +91,16 @@ class ChatScreenState extends State<ChatScreen> {
       if (!scroll.hasClients || _session == null) return;
       session.scrollOffset = scroll.offset;
       final follow = scroll.position.extentAfter < 120;
-      if (follow != followBottom && mounted)
+      if (follow != followBottom && mounted) {
         setState(() => followBottom = follow);
+      }
     });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_session == null)
+    if (_session == null) {
       attach(
         widget.session ??
             ConversationSession(
@@ -108,6 +110,7 @@ class ChatScreenState extends State<ChatScreen> {
               onChanged: () {},
             ),
       );
+    }
   }
 
   @override
@@ -130,10 +133,11 @@ class ChatScreenState extends State<ChatScreen> {
     value.addListener(sessionChanged);
     value.load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && scroll.hasClients)
+      if (mounted && scroll.hasClients) {
         scroll.jumpTo(
           value.scrollOffset.clamp(0, scroll.position.maxScrollExtent),
         );
+      }
     });
   }
 
@@ -151,9 +155,9 @@ class ChatScreenState extends State<ChatScreen> {
   void bottom({bool immediate = false}) =>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !scroll.hasClients) return;
-        if (immediate || MediaQuery.disableAnimationsOf(context))
+        if (immediate || MediaQuery.disableAnimationsOf(context)) {
           scroll.jumpTo(scroll.position.maxScrollExtent);
-        else {
+        } else {
           scroll.animateTo(
             scroll.position.maxScrollExtent,
             duration: AppMotion.control,
@@ -168,14 +172,16 @@ class ChatScreenState extends State<ChatScreen> {
         target.loading ||
         recordingInProgress ||
         target.loadError != null ||
-        target.attachments.any((a) => a.isImage))
+        target.attachments.any((a) => a.isImage)) {
       return;
+    }
     final text = (override ?? input.text).trim();
     if (text.isEmpty && target.attachments.isEmpty) return;
     var payload = text;
-    if (target.replyTo != null)
+    if (target.replyTo != null) {
       payload =
           '${context.tr('В ответ на', 'In reply to')}:\n> ${target.replyTo}\n\n$payload';
+    }
     for (final attachment in target.attachments) {
       payload += '\n\n--- ${attachment.name} ---\n${attachment.text}';
     }
@@ -211,8 +217,9 @@ class ChatScreenState extends State<ChatScreen> {
     if (target.busy ||
         target.loading ||
         voiceWorking ||
-        target.loadError != null)
+        target.loadError != null) {
       return;
+    }
     setState(() {
       voiceWorking = true;
       attachmentMenu = false;
@@ -222,13 +229,14 @@ class ChatScreenState extends State<ChatScreen> {
         await target.checkLimit('Voice');
         final permissionGranted = await recorder.hasPermission();
         if (!mounted) return;
-        if (!permissionGranted)
+        if (!permissionGranted) {
           throw ApiException(
             context.tr(
               'Разрешите доступ к микрофону.',
               'Allow microphone access.',
             ),
           );
+        }
         await target.ensureCreated();
         final path = kIsWeb
             ? ''
@@ -289,13 +297,14 @@ class ChatScreenState extends State<ChatScreen> {
     final app = context.app;
     final limits =
         (await app.api.call('/subscriptions/limits'))['limits'] as Json? ?? {};
-    if (limits['hasTTS'] != true)
+    if (limits['hasTTS'] != true) {
       throw ApiException(
         app.tr(
           'Озвучивание недоступно в вашем тарифе.',
           'Text to speech is not included in your plan.',
         ),
       );
+    }
     await speech.setLanguage(app.language == 'ru' ? 'ru-RU' : 'en-US');
     await speech.speak(text);
   }
@@ -340,23 +349,25 @@ class ChatScreenState extends State<ChatScreen> {
         if (file == null) return;
         final fileLength = await file.length();
         if (!mounted) return;
-        if (fileLength > 200000)
+        if (fileLength > 200000) {
           throw ApiException(
             context.tr(
               'Выберите текстовый файл до 200 КБ.',
               'Choose a text file up to 200 KB.',
             ),
           );
+        }
         final bytes = await file.readAsBytes();
         if (!mounted) return;
         final text = utf8.decode(bytes);
-        if (text.length > 24000)
+        if (text.length > 24000) {
           throw ApiException(
             context.tr(
               'До 24 000 символов в файле.',
               'Up to 24,000 characters per file.',
             ),
           );
+        }
         target.attachments.add(
           DraftAttachment(name: file.name, bytes: bytes, text: text),
         );
@@ -370,13 +381,14 @@ class ChatScreenState extends State<ChatScreen> {
         if (image == null) return;
         final imageLength = await image.length();
         if (!mounted) return;
-        if (imageLength > 10000000)
+        if (imageLength > 10000000) {
           throw ApiException(
             context.tr(
               'Выберите изображение до 10 МБ.',
               'Choose an image up to 10 MB.',
             ),
           );
+        }
         target.attachments.add(
           DraftAttachment(name: image.name, bytes: await image.readAsBytes()),
         );
@@ -386,7 +398,7 @@ class ChatScreenState extends State<ChatScreen> {
         inputFocus.requestFocus();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         showError(
           context,
           e is FormatException
@@ -396,6 +408,7 @@ class ChatScreenState extends State<ChatScreen> {
                 )
               : e,
         );
+      }
     }
   }
 
@@ -476,6 +489,109 @@ class ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  Future<void> showChatActions() async {
+    inputFocus.unfocus();
+    final actions = <({String value, String label, IconData icon})>[
+      if (widget.onPrevious != null)
+        (
+          value: 'previous',
+          label: context.tr('Предыдущий чат', 'Previous chat'),
+          icon: Icons.history_rounded,
+        ),
+      (
+        value: 'refresh',
+        label: context.tr('Обновить сообщения', 'Refresh messages'),
+        icon: Icons.refresh_rounded,
+      ),
+      (
+        value: 'voice',
+        label: context.tr('Голосовые ответы', 'Spoken replies'),
+        icon: voiceReplies ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+      ),
+      (
+        value: 'stop',
+        label: context.tr('Остановить озвучивание', 'Stop speaking'),
+        icon: Icons.stop_circle_outlined,
+      ),
+      if (widget.onCommands != null)
+        (
+          value: 'commands',
+          label: context.tr('Быстрые действия', 'Quick actions'),
+          icon: Icons.bolt_rounded,
+        ),
+      (
+        value: 'support',
+        label: context.tr('Поддержка рядом', 'Find support'),
+        icon: Icons.favorite_border_rounded,
+      ),
+    ];
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: AnimationStyle(
+        duration: studioDuration(context, AppMotion.overlay),
+      ),
+      builder: (sheetContext) => StudioSheet(
+        title: context.tr('Действия чата', 'Conversation actions'),
+        icon: Icons.tune_rounded,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final item in actions)
+              StudioRow(
+                leading: StudioGlyph(item.icon, size: 34),
+                title: Text(item.label),
+                subtitle: item.value == 'voice'
+                    ? Text(
+                        voiceReplies
+                            ? context.tr('Включены', 'On')
+                            : context.tr('Выключены', 'Off'),
+                      )
+                    : null,
+                trailing: item.value == 'voice'
+                    ? Icon(
+                        voiceReplies
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                        size: 19,
+                      )
+                    : const Icon(Icons.chevron_right_rounded),
+                enabled:
+                    item.value != 'refresh' ||
+                    !session.busy && !recordingInProgress,
+                onTap: () => Navigator.pop(sheetContext, item.value),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'refresh':
+        await session.load(refresh: true);
+        break;
+      case 'voice':
+        setState(() => voiceReplies = !voiceReplies);
+        break;
+      case 'stop':
+        await speech.stop();
+        break;
+      case 'commands':
+        widget.onCommands?.call();
+        break;
+      case 'support':
+        widget.onSupport != null
+            ? widget.onSupport!()
+            : await showSupport(context);
+        break;
+      case 'previous':
+        widget.onPrevious?.call();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
@@ -497,13 +613,16 @@ class ChatScreenState extends State<ChatScreen> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 12, 4),
+                padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
                 child: Row(
                   children: [
                     IconButton(
                       tooltip: widget.onMenu == null
                           ? context.tr('Назад', 'Back')
-                          : context.tr('Открыть меню', 'Open sidebar'),
+                          : context.tr(
+                              'История разговоров',
+                              'Conversation history',
+                            ),
                       onPressed:
                           widget.onMenu ??
                           widget.onExit ??
@@ -555,68 +674,10 @@ class ChatScreenState extends State<ChatScreen> {
                             : widget.onNewChat,
                         icon: const Icon(Icons.edit_square, size: 21),
                       ),
-                    PopupMenuButton<String>(
+                    IconButton(
                       tooltip: context.tr('Действия', 'More actions'),
-                      onSelected: (value) {
-                        if (value == 'refresh') session.load(refresh: true);
-                        if (value == 'voice')
-                          setState(() => voiceReplies = !voiceReplies);
-                        if (value == 'stop') speech.stop();
-                        if (value == 'commands') widget.onCommands?.call();
-                        if (value == 'support')
-                          widget.onSupport != null
-                              ? widget.onSupport!()
-                              : showSupport(context);
-                        if (value == 'previous') widget.onPrevious?.call();
-                      },
-                      itemBuilder: (context) => [
-                        if (widget.onPrevious != null)
-                          PopupMenuItem(
-                            value: 'previous',
-                            child: Text(
-                              context.tr('Предыдущий чат', 'Previous chat'),
-                            ),
-                          ),
-                        PopupMenuItem(
-                          value: 'refresh',
-                          enabled: !session.busy && !recordingInProgress,
-                          child: Text(
-                            context.tr(
-                              'Обновить сообщения',
-                              'Refresh messages',
-                            ),
-                          ),
-                        ),
-                        CheckedPopupMenuItem(
-                          value: 'voice',
-                          checked: voiceReplies,
-                          child: Text(
-                            context.tr('Голосовые ответы', 'Spoken replies'),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'stop',
-                          child: Text(
-                            context.tr(
-                              'Остановить озвучивание',
-                              'Stop speaking',
-                            ),
-                          ),
-                        ),
-                        if (widget.onCommands != null)
-                          PopupMenuItem(
-                            value: 'commands',
-                            child: Text(
-                              context.tr('Быстрые действия', 'Quick actions'),
-                            ),
-                          ),
-                        PopupMenuItem(
-                          value: 'support',
-                          child: Text(
-                            context.tr('Поддержка рядом', 'Find support'),
-                          ),
-                        ),
-                      ],
+                      onPressed: showChatActions,
+                      icon: const Icon(Icons.more_horiz_rounded),
                     ),
                   ],
                 ),
@@ -671,77 +732,92 @@ class ChatScreenState extends State<ChatScreen> {
                                     )
                                   : session.messages.isEmpty
                                   ? _emptyChat()
-                                  : ListView.builder(
-                                      controller: scroll,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        24,
-                                        24,
-                                        24,
-                                        32,
-                                      ),
-                                      itemCount:
-                                          session.messages.length +
-                                          (session.phase ==
-                                                      ReplyPhase.thinking ||
-                                                  session.phase ==
-                                                      ReplyPhase.transcribing
-                                              ? 1
-                                              : 0),
-                                      itemBuilder: (context, index) {
-                                        if (index == session.messages.length)
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 24,
-                                            ),
-                                            child: AiActivity(
-                                              label:
-                                                  session.phase ==
-                                                      ReplyPhase.transcribing
-                                                  ? context.tr(
-                                                      'Распознаю и готовлю ответ',
-                                                      'Transcribing and preparing a reply',
-                                                    )
-                                                  : context.tr(
-                                                      'Думаю',
-                                                      'Thinking',
-                                                    ),
-                                            ),
-                                          );
-                                        final message = session.messages[index];
-                                        return ConversationMessage(
-                                          key: ValueKey(
-                                            '${session.id}-${message['role']}-${message['id'] ?? index}',
-                                          ),
-                                          message: message,
-                                          chatId: session.id,
-                                          enabled:
-                                              !session.busy &&
-                                              !recordingInProgress,
-                                          onReply: () => replyTo(message),
-                                          onEdit: () => edit(message),
-                                          onRegenerate: () => send(
-                                            override: context.tr(
-                                              'Предложи другой вариант ответа на мой последний запрос.',
-                                              'Offer another answer to my last request.',
-                                            ),
-                                          ),
-                                          onSpeak: () async {
-                                            try {
-                                              await speak('${message['text']}');
-                                            } catch (e) {
-                                              if (context.mounted)
-                                                showError(context, e);
-                                            }
-                                          },
-                                          audio: message['audio_url'] == null
-                                              ? null
-                                              : AudioBubble(
-                                                  url: context.app.api.mediaUrl(
-                                                    '${message['audio_url']}',
+                                  : NotificationListener<ScrollNotification>(
+                                      onNotification: _dismissOnChatDrag,
+                                      child: ListView.builder(
+                                        controller: scroll,
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        keyboardDismissBehavior:
+                                            ScrollViewKeyboardDismissBehavior
+                                                .onDrag,
+                                        padding: const EdgeInsets.fromLTRB(
+                                          24,
+                                          24,
+                                          24,
+                                          32,
+                                        ),
+                                        itemCount:
+                                            session.messages.length +
+                                            (session.phase ==
+                                                        ReplyPhase.thinking ||
+                                                    session.phase ==
+                                                        ReplyPhase.transcribing
+                                                ? 1
+                                                : 0),
+                                        itemBuilder: (context, index) {
+                                          if (index ==
+                                              session.messages.length) {
+                                            return Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 24,
                                                   ),
-                                                ),
-                                        );
-                                      },
+                                              child: AiActivity(
+                                                label:
+                                                    session.phase ==
+                                                        ReplyPhase.transcribing
+                                                    ? context.tr(
+                                                        'Распознаю и готовлю ответ',
+                                                        'Transcribing and preparing a reply',
+                                                      )
+                                                    : context.tr(
+                                                        'Думаю',
+                                                        'Thinking',
+                                                      ),
+                                              ),
+                                            );
+                                          }
+                                          final message =
+                                              session.messages[index];
+                                          return ConversationMessage(
+                                            key: ValueKey(
+                                              '${session.id}-${message['role']}-${message['id'] ?? index}',
+                                            ),
+                                            message: message,
+                                            chatId: session.id,
+                                            enabled:
+                                                !session.busy &&
+                                                !recordingInProgress,
+                                            onReply: () => replyTo(message),
+                                            onEdit: () => edit(message),
+                                            onRegenerate: () => send(
+                                              override: context.tr(
+                                                'Предложи другой вариант ответа на мой последний запрос.',
+                                                'Offer another answer to my last request.',
+                                              ),
+                                            ),
+                                            onSpeak: () async {
+                                              try {
+                                                await speak(
+                                                  '${message['text']}',
+                                                );
+                                              } catch (e) {
+                                                if (context.mounted) {
+                                                  showError(context, e);
+                                                }
+                                              }
+                                            },
+                                            audio: message['audio_url'] == null
+                                                ? null
+                                                : AudioBubble(
+                                                    url: context.app.api.mediaUrl(
+                                                      '${message['audio_url']}',
+                                                    ),
+                                                  ),
+                                          );
+                                        },
+                                      ),
                                     ),
                             ),
                           ),
@@ -801,8 +877,9 @@ class ChatScreenState extends State<ChatScreen> {
                                     reduceMotion: reduced,
                                   );
                                   if (context.mounted &&
-                                      result?['isCrisis'] == true)
+                                      result?['isCrisis'] == true) {
                                     await showSupport(context);
+                                  }
                                 } else {
                                   await session.load(refresh: true);
                                 }
@@ -820,82 +897,234 @@ class ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _chooseStarter(String prompt) {
+    input.value = TextEditingValue(
+      text: prompt,
+      selection: TextSelection.collapsed(offset: prompt.length),
+    );
+    inputFocus.requestFocus();
+  }
+
+  bool _dismissOnChatDrag(ScrollNotification notification) {
+    final dragging =
+        notification is ScrollStartNotification &&
+            notification.dragDetails != null ||
+        notification is OverscrollNotification &&
+            notification.dragDetails != null;
+    if (dragging && inputFocus.hasFocus) {
+      inputFocus.unfocus();
+    }
+    return false;
+  }
+
   Widget _emptyChat() => LayoutBuilder(
-    builder: (context, constraints) => SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: (constraints.maxHeight - 40).clamp(0, double.infinity),
+    builder: (context, constraints) {
+      final theme = Theme.of(context);
+      final colors = theme.colorScheme;
+      final wide = constraints.maxWidth >= 620;
+      Widget suggestion(String title, String prompt, IconData icon) => Material(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _chooseStarter(prompt),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: colors.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
+                Icon(
+                  Icons.north_east_rounded,
+                  size: 17,
+                  color: colors.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            QuietOrbit(
-              size: constraints.maxHeight < 360 ? 76 : 128,
-              child: const Icon(
-                Icons.auto_awesome_outlined,
-                color: AppColors.primaryBright,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              context.tr('Сделай вдох.', 'Take a breath.'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              session.temporary
-                  ? context.tr(
-                      'Этот разговор не появится в истории. О чём хочется поговорить?',
-                      'This conversation won’t appear in history. What would you like to talk about?',
-                    )
-                  : context.tr(
-                      'Я рядом и готов выслушать. Что у тебя на уме?',
-                      'I’m here to listen. What’s on your mind?',
+      );
+
+      final suggestions = [
+        (
+          context.tr('Разгрузить мысли', 'Clear my head'),
+          context.tr('Хочу освободить голову', 'I need to clear my mind'),
+          Icons.waves_rounded,
+        ),
+        (
+          context.tr('Слишком много всего', 'Too much at once'),
+          context.tr('Я перегружен(а)', 'I’m feeling overwhelmed'),
+          Icons.spa_outlined,
+        ),
+        (
+          context.tr('Просто поговорить', 'Just talk'),
+          context.tr('Просто хочу поговорить', 'I just want to talk'),
+          Icons.chat_bubble_outline_rounded,
+        ),
+      ];
+      final content = ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: wide ? 32 : 22,
+            vertical: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  LivingEmblem(
+                    size: 76,
+                    icon: session.temporary
+                        ? Icons.visibility_off_outlined
+                        : Icons.auto_awesome_rounded,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      session.temporary
+                          ? context.tr('Временный чат', 'Temporary chat')
+                          : context.tr('ТИХОЕ МЕСТО', 'A QUIET PLACE'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        letterSpacing: 1.0,
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 28),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Wrap(
-                alignment: WrapAlignment.center,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                context.tr('Что сейчас у тебя?', 'What’s on your mind?'),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  height: 1.08,
+                  fontSize: wide ? 34 : 28,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Text(
+                  session.temporary
+                      ? context.tr(
+                          'Этот разговор останется вне истории. Здесь можно быть собой.',
+                          'This conversation stays out of your history. You can be yourself here.',
+                        )
+                      : context.tr(
+                          'Не нужно подбирать слова. Начни с того, что чувствуешь сейчас.',
+                          'There’s no need to find the perfect words. Start with how you feel right now.',
+                        ),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                context.tr('КАК ВЫ СЕЙЧАС?', 'HOW ARE YOU FEELING?'),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  letterSpacing: .9,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final prompt in [
-                    context.tr(
-                      'Хочу освободить голову',
-                      'I need to clear my mind',
-                    ),
-                    context.tr('Я перегружен(а)', 'I’m feeling overwhelmed'),
-                    context.tr('Просто хочу поговорить', 'I just want to talk'),
+                  for (final mood in [
+                    ('Neutral', context.tr('Нейтрально', 'Neutral')),
+                    ('Anxious', context.tr('Тревожно', 'Anxious')),
+                    ('Low', context.tr('Нет сил', 'Low energy')),
                   ])
-                    PressScale(
-                      child: ActionChip(
-                        label: Text(prompt),
-                        onPressed: () {
-                          input.value = TextEditingValue(
-                            text: prompt,
-                            selection: TextSelection.collapsed(
-                              offset: prompt.length,
-                            ),
-                          );
-                          inputFocus.requestFocus();
-                        },
-                      ),
+                    StudioChoice(
+                      label: Text(mood.$2),
+                      selected: session.mood == mood.$1,
+                      onSelected: (_) => setState(() => session.mood = mood.$1),
                     ),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 20),
+              Text(
+                context.tr('МОЖНО НАЧАТЬ ТАК', 'A PLACE TO BEGIN'),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  letterSpacing: .9,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 9),
+              if (wide)
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final item in suggestions)
+                      SizedBox(
+                        width: (constraints.maxWidth - 84) / 2,
+                        child: suggestion(item.$1, item.$2, item.$3),
+                      ),
+                  ],
+                )
+              else
+                Column(
+                  children: [
+                    StagedEntry(
+                      order: 1,
+                      child: suggestion(
+                        suggestions[0].$1,
+                        suggestions[0].$2,
+                        suggestions[0].$3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var i = 1; i < suggestions.length; i++) ...[
+                          if (i > 1) const SizedBox(width: 10),
+                          Expanded(
+                            child: StagedEntry(
+                              order: i + 1,
+                              child: suggestion(
+                                suggestions[i].$1,
+                                suggestions[i].$2,
+                                suggestions[i].$3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
-      ),
-    ),
+      );
+      if (constraints.maxHeight < 560 ||
+          MediaQuery.textScalerOf(context).scale(14) >= 19) {
+        return NotificationListener<ScrollNotification>(
+          onNotification: _dismissOnChatDrag,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Center(child: content),
+          ),
+        );
+      }
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onVerticalDragStart: (_) => inputFocus.unfocus(),
+        child: Center(child: content),
+      );
+    },
   );
 
   Widget _composer(Map<String, String> moods) {
@@ -945,13 +1174,13 @@ class ChatScreenState extends State<ChatScreen> {
                                 context.tr('Текстовый файл', 'Text file'),
                               ),
                             ])
-                              ListTile(
+                              StudioRow(
                                 dense: true,
                                 leading: Icon(item.$2, size: 20),
                                 title: Text(item.$3),
                                 onTap: () => attachFile(item.$1),
                               ),
-                            ListTile(
+                            StudioRow(
                               dense: true,
                               leading: const Icon(
                                 Icons.mic_none_rounded,
@@ -959,6 +1188,62 @@ class ChatScreenState extends State<ChatScreen> {
                               ),
                               title: Text(context.tr('Голос', 'Voice')),
                               onTap: voice,
+                            ),
+                            StudioRow(
+                              leading: const Icon(
+                                Icons.mood_outlined,
+                                size: 20,
+                              ),
+                              title: Text(
+                                context.tr(
+                                  'Как вы сейчас?',
+                                  'How are you feeling?',
+                                ),
+                              ),
+                              subtitle: Text(moods[session.mood] ?? ''),
+                              onTap: () async {
+                                setState(() => attachmentMenu = false);
+                                final mood = await showModalBottomSheet<String>(
+                                  context: context,
+                                  useSafeArea: true,
+                                  backgroundColor: Colors.transparent,
+                                  sheetAnimationStyle: AnimationStyle(
+                                    duration: studioDuration(
+                                      context,
+                                      AppMotion.overlay,
+                                    ),
+                                  ),
+                                  builder: (sheetContext) => StudioSheet(
+                                    title: context.tr(
+                                      'Как вы сейчас?',
+                                      'How are you feeling?',
+                                    ),
+                                    icon: Icons.mood_outlined,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        for (final item in moods.entries)
+                                          StudioRow(
+                                            title: Text(item.value),
+                                            selected: session.mood == item.key,
+                                            trailing: session.mood == item.key
+                                                ? const Icon(
+                                                    Icons.check_rounded,
+                                                  )
+                                                : null,
+                                            onTap: () => Navigator.pop(
+                                              sheetContext,
+                                              item.key,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                                if (mounted && mood != null) {
+                                  setState(() => session.mood = mood);
+                                }
+                              },
                             ),
                           ],
                         ),
@@ -973,7 +1258,7 @@ class ChatScreenState extends State<ChatScreen> {
                             child: FloatingActionMenu(
                               children: [
                                 for (final action in quickActions)
-                                  ListTile(
+                                  StudioRow(
                                     dense: true,
                                     title: Text(commandLabel(action)),
                                     trailing: Text(action),
@@ -987,9 +1272,9 @@ class ChatScreenState extends State<ChatScreen> {
                     : const SizedBox.shrink(),
               ),
               GlassSurface(
-                radius: 26,
-                opacity: .80,
-                blur: 14,
+                radius: 24,
+                opacity: .96,
+                blur: 0,
                 focused: focused,
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                 child: Column(
@@ -1129,150 +1414,111 @@ class ChatScreenState extends State<ChatScreen> {
                               ),
                               icon: const Icon(Icons.close_rounded),
                             ),
+                            IconButton.filled(
+                              tooltip: context.tr(
+                                'Отправить запись',
+                                'Send recording',
+                              ),
+                              onPressed: voiceWorking ? null : voice,
+                              icon: const Icon(Icons.arrow_upward_rounded),
+                            ),
                           ],
                         ),
                       )
                     else
-                      TextField(
-                        key: const ValueKey('chat-input'),
-                        controller: input,
-                        focusNode: inputFocus,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: InputDecoration(
-                          filled: false,
-                          hintText: context.tr(
-                            'Можно не спешить…',
-                            'Take your time…',
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            8,
-                            10,
-                            8,
-                            12,
-                          ),
-                        ),
-                      ),
-                    Row(
-                      children: [
-                        IconButton(
-                          tooltip: context.tr(
-                            'Добавить вложение',
-                            'Add attachment',
-                          ),
-                          onPressed: session.busy || recordingInProgress
-                              ? null
-                              : () {
-                                  inputFocus.unfocus();
-                                  setState(
-                                    () => attachmentMenu = !attachmentMenu,
-                                  );
-                                },
-                          icon: AnimatedRotation(
-                            turns: attachmentMenu ? .125 : 0,
-                            duration: reduced ? Duration.zero : AppMotion.fast,
-                            child: const Icon(Icons.add_rounded, size: 23),
-                          ),
-                        ),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: () =>
-                                  showModelPicker(context, session),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      'CloudMind',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelMedium,
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    size: 15,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          tooltip: context.tr(
-                            'Как вы сейчас?',
-                            'How are you feeling?',
-                          ),
-                          icon: const Icon(Icons.mood_outlined, size: 20),
-                          initialValue: session.mood,
-                          onSelected: (value) =>
-                              setState(() => session.mood = value),
-                          itemBuilder: (context) => [
-                            for (final entry in moods.entries)
-                              CheckedPopupMenuItem(
-                                value: entry.key,
-                                checked: session.mood == entry.key,
-                                child: Text(entry.value),
-                              ),
-                          ],
-                        ),
-                        if (session.phase != ReplyPhase.revealing)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
                           IconButton(
-                            tooltip: recording
-                                ? context.tr(
-                                    'Отправить запись',
-                                    'Send recording',
-                                  )
-                                : context.tr('Записать голос', 'Record voice'),
-                            onPressed:
-                                session.busy ||
-                                    voiceWorking ||
-                                    session.loading ||
-                                    session.loadError != null
+                            tooltip: context.tr(
+                              'Добавить вложение',
+                              'Add attachment',
+                            ),
+                            onPressed: session.busy || recordingInProgress
                                 ? null
-                                : voice,
-                            icon: Icon(
-                              recording
-                                  ? Icons.stop_circle_outlined
-                                  : Icons.mic_none_rounded,
-                              size: 22,
+                                : () {
+                                    inputFocus.unfocus();
+                                    setState(
+                                      () => attachmentMenu = !attachmentMenu,
+                                    );
+                                  },
+                            icon: AnimatedRotation(
+                              turns: attachmentMenu ? .125 : 0,
+                              duration: studioDuration(context, AppMotion.fast),
+                              child: const Icon(Icons.add_rounded, size: 22),
                             ),
                           ),
-                        PressScale(
-                          child: IconButton.filled(
-                            tooltip: session.phase == ReplyPhase.revealing
-                                ? context.tr(
-                                    'Показать весь ответ',
-                                    'Show full reply',
-                                  )
-                                : context.tr('Отправить', 'Send'),
-                            onPressed: session.phase == ReplyPhase.revealing
-                                ? session.finishReveal
-                                : canSend
-                                ? send
-                                : null,
-                            style: IconButton.styleFrom(
-                              shape: const CircleBorder(),
-                              minimumSize: const Size(44, 44),
-                            ),
-                            icon: Icon(
-                              session.phase == ReplyPhase.revealing
-                                  ? Icons.stop_rounded
-                                  : Icons.arrow_upward_rounded,
-                              size: 22,
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey('chat-input'),
+                              controller: input,
+                              focusNode: inputFocus,
+                              minLines: 1,
+                              maxLines: 5,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: InputDecoration(
+                                filled: false,
+                                hintText: context.tr(
+                                  'Можно не спешить…',
+                                  'Take your time…',
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  8,
+                                  10,
+                                  8,
+                                  12,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                          if (session.phase != ReplyPhase.revealing)
+                            IconButton(
+                              tooltip: context.tr(
+                                'Записать голос',
+                                'Record voice',
+                              ),
+                              onPressed:
+                                  session.busy ||
+                                      voiceWorking ||
+                                      session.loading ||
+                                      session.loadError != null
+                                  ? null
+                                  : voice,
+                              icon: const Icon(
+                                Icons.mic_none_rounded,
+                                size: 21,
+                              ),
+                            ),
+                          PressScale(
+                            child: IconButton.filled(
+                              tooltip: session.phase == ReplyPhase.revealing
+                                  ? context.tr(
+                                      'Показать весь ответ',
+                                      'Show full reply',
+                                    )
+                                  : context.tr('Отправить', 'Send'),
+                              onPressed: session.phase == ReplyPhase.revealing
+                                  ? session.finishReveal
+                                  : canSend
+                                  ? send
+                                  : null,
+                              style: IconButton.styleFrom(
+                                shape: const CircleBorder(),
+                                minimumSize: const Size(44, 44),
+                              ),
+                              icon: Icon(
+                                session.phase == ReplyPhase.revealing
+                                    ? Icons.stop_rounded
+                                    : Icons.arrow_upward_rounded,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -1281,8 +1527,8 @@ class ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     context.tr(
-                      'Тёплое место для обычных разговоров и размышлений.',
-                      'A gentle space for everyday conversations and reflection.',
+                      'ИИ может ошибаться. Это не замена специалисту.',
+                      'AI can make mistakes. It does not replace professional care.',
                     ),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelSmall,
@@ -1305,33 +1551,83 @@ class AudioBubble extends StatefulWidget {
 
 class _AudioBubbleState extends State<AudioBubble> {
   final player = AudioPlayer();
+  bool loading = false;
   @override
   void dispose() {
     player.dispose();
     super.dispose();
   }
 
+  Future<void> toggle(bool playing) async {
+    if (loading) return;
+    if (playing) {
+      await player.pause();
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      final bytes = await context.app.api.downloadMedia(widget.url);
+      if (!mounted) return;
+      await player.play(BytesSource(bytes));
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => StreamBuilder<PlayerState>(
     stream: player.onPlayerStateChanged,
-    builder: (context, snapshot) => TextButton.icon(
-      icon: Icon(
-        snapshot.data == PlayerState.playing ? Icons.pause : Icons.play_arrow,
-      ),
-      label: Text(context.tr('Голосовое сообщение', 'Voice message')),
-      onPressed: () async {
-        try {
-          if (snapshot.data == PlayerState.playing) {
-            await player.pause();
-          } else {
-            final bytes = await context.app.api.downloadMedia(widget.url);
-            if (!mounted) return;
-            await player.play(BytesSource(bytes));
-          }
-        } catch (e) {
-          if (context.mounted) showError(context, e);
-        }
-      },
-    ),
+    builder: (context, snapshot) {
+      final playing = snapshot.data == PlayerState.playing;
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: StudioPanel(
+          radius: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            children: [
+              IconButton.filledTonal(
+                tooltip: playing
+                    ? context.tr('Пауза', 'Pause')
+                    : context.tr('Воспроизвести', 'Play'),
+                onPressed: loading
+                    ? null
+                    : () async {
+                        try {
+                          await toggle(playing);
+                        } catch (error) {
+                          if (context.mounted) showError(context, error);
+                        }
+                      },
+                icon: loading
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.tr('Голосовое сообщение', 'Voice message'),
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              if (playing)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(Icons.graphic_eq_rounded, size: 22),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }

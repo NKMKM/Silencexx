@@ -2,11 +2,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/wish_root" android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:padding="20dp" android:background="@drawable/wish_background">
-    <TextView android:id="@+id/wish_title" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="@string/daily_wish_title" android:textColor="#D8C9FF" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:id="@+id/wish_text" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-        android:gravity="center_vertical" android:paddingTop="10dp" android:text="@string/daily_wish_open"
-        android:textColor="#FFFFFF" android:textSize="16sp" android:maxLines="7" android:ellipsize="end" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CloudMind"
-        android:textColor="#AFA3C9" android:textSize="10sp" />
+        android:fontFamily="sans-serif-medium" android:textColor="#F8F8FC" android:textSize="13sp" />
+    <TextView android:id="@+id/wish_text" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:gravity="center_vertical" android:paddingTop="12dp" android:paddingBottom="12dp" android:text="@string/daily_wish_open"
+        android:fontFamily="sans-serif" android:textColor="#F8F8FC" android:textSize="16sp" android:maxLines="7" android:ellipsize="end" />
+    <TextView android:id="@+id/wish_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/daily_wish_title" android:textColor="#C4B7FF" android:textSize="10sp" android:letterSpacing="0.07" />
 </LinearLayout>

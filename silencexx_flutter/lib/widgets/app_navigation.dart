@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_state.dart';
-import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
-import 'common.dart';
-import 'glass.dart';
+import 'studio.dart';
 
 class AppNavigation extends StatefulWidget {
   const AppNavigation({
@@ -13,234 +11,234 @@ class AppNavigation extends StatefulWidget {
     required this.labels,
     required this.icons,
     this.vertical = false,
+    this.initiallyExpanded = true,
+    this.onCustomize,
   });
   final int selected;
   final ValueChanged<int> onSelected;
   final List<String> labels;
   final List<IconData> icons;
-  final bool vertical;
+  final bool vertical, initiallyExpanded;
+  final VoidCallback? onCustomize;
   @override
   State<AppNavigation> createState() => _AppNavigationState();
 }
 
 class _AppNavigationState extends State<AppNavigation> {
-  bool expanded = true;
+  late bool expanded = widget.initiallyExpanded;
   @override
-  Widget build(BuildContext context) {
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : AppMotion.screen;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    Widget destinations(bool showLabels) => LayoutBuilder(
-      builder: (context, constraints) {
-        const rowHeight = 60.0;
-        final itemWidth = widget.vertical
-            ? constraints.maxWidth
-            : constraints.maxWidth / widget.labels.length;
-        return SizedBox(
-          height: widget.vertical ? rowHeight * widget.labels.length : 68,
-          child: Stack(
-            children: [
-              AnimatedPositioned(
-                duration: duration,
-                curve: AppMotion.enter,
-                top: widget.vertical ? widget.selected * rowHeight + 4 : 4,
-                left: widget.vertical ? 4 : widget.selected * itemWidth + 4,
-                width: itemWidth - 8,
-                height: widget.vertical ? rowHeight - 8 : 60,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: dark
-                        ? Colors.white.withValues(alpha: .085)
-                        : Colors.white.withValues(alpha: .85),
-                    border: Border.all(
-                      color: dark
-                          ? const Color(0x18FFFFFF)
-                          : const Color(0x0D000000),
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x12000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                ),
+  void didUpdateWidget(AppNavigation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initiallyExpanded != widget.initiallyExpanded) {
+      expanded = widget.initiallyExpanded;
+    }
+  }
+
+  Widget destination(int i) {
+    final t = Theme.of(context);
+    final active = i == widget.selected;
+    final color = active
+        ? t.colorScheme.onSurface
+        : t.colorScheme.onSurfaceVariant;
+    return Tooltip(
+      message: widget.labels[i],
+      child: Semantics(
+        selected: active,
+        button: true,
+        label: widget.labels[i],
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(15),
+            onTap: () => widget.onSelected(i),
+            onLongPress: widget.onCustomize,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.vertical ? 12 : 3,
+                vertical: 9,
               ),
-              for (var i = 0; i < widget.labels.length; i++)
-                Positioned(
-                  left: widget.vertical ? 0 : i * itemWidth,
-                  top: widget.vertical ? i * rowHeight : 0,
-                  width: itemWidth,
-                  height: widget.vertical ? rowHeight : 68,
-                  child: Semantics(
-                    selected: i == widget.selected,
-                    button: true,
-                    child: Tooltip(
-                      message: widget.labels[i],
-                      child: PressScale(
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => widget.onSelected(i),
-                            child: IconTheme(
-                              data: IconThemeData(
-                                size: 22,
-                                color: i == widget.selected
-                                    ? (dark
-                                          ? AppColors.primaryBright
-                                          : AppColors.primaryPressed)
-                                    : Theme.of(context).colorScheme.onSurface
-                                          .withValues(alpha: .55),
+              child: widget.vertical
+                  ? Row(
+                      children: [
+                        Icon(widget.icons[i], size: 21, color: color),
+                        if (expanded) ...[
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              widget.labels[i],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.textTheme.labelLarge?.copyWith(
+                                color: color,
                               ),
-                              child: widget.vertical
-                                  ? Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 56,
-                                          child: Icon(widget.icons[i]),
-                                        ),
-                                        Expanded(
-                                          child: ClipRect(
-                                            child: AnimatedOpacity(
-                                              opacity: showLabels ? 1 : 0,
-                                              duration: duration,
-                                              child: Text(
-                                                widget.labels[i],
-                                                maxLines: 1,
-                                                overflow: TextOverflow.clip,
-                                                softWrap: false,
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.labelLarge,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(widget.icons[i]),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          widget.labels[i],
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(fontSize: 11),
-                                        ),
-                                      ],
-                                    ),
                             ),
                           ),
+                        ],
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedScale(
+                          scale: active ? 1.05 : 1,
+                          duration: studioDuration(context, AppMotion.fast),
+                          child: Icon(widget.icons[i], size: 21, color: color),
                         ),
-                      ),
+                        const SizedBox(height: 5),
+                        Text(
+                          widget.labels[i],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                            fontWeight: active
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: color,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-            ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
     if (!widget.vertical) {
       return SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-          child: GlassSurface(
-            radius: 24,
-            opacity: .72,
-            blur: 12,
-            padding: const EdgeInsets.all(4),
-            child: destinations(true),
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: Container(
+            key: const ValueKey('mobile-primary-dock'),
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: c.outlineVariant.withValues(alpha: .7)),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth / widget.labels.length;
+                final height =
+                    48.0 + MediaQuery.textScalerOf(context).scale(12) * 1.4;
+                return SizedBox(
+                  height: height,
+                  child: Stack(
+                    children: [
+                      AnimatedPositioned(
+                        duration: studioDuration(context),
+                        curve: AppMotion.enter,
+                        left: widget.selected * width,
+                        top: 0,
+                        bottom: 0,
+                        width: width,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: c.primary.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < widget.labels.length; i++)
+                            Expanded(child: destination(i)),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       );
     }
     return AnimatedContainer(
-      duration: duration,
+      duration: studioDuration(context),
       curve: AppMotion.enter,
-      width: expanded ? 264 : 96,
-      margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
-      child: GlassSurface(
-        radius: 24,
-        opacity: .62,
-        blur: 12,
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: 76,
-              child: Row(
-                children: [
+      width: expanded ? 224 : 76,
+      margin: const EdgeInsets.fromLTRB(10, 12, 8, 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: c.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: c.outlineVariant.withValues(alpha: .6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                const StudioGlyph(Icons.blur_on_rounded, size: 34),
+                if (expanded) ...[
                   const SizedBox(width: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/images/cloudmind_icon.png',
-                      width: 36,
-                      height: 36,
-                    ),
-                  ),
                   Expanded(
-                    child: ClipRect(
-                      child: AnimatedOpacity(
-                        opacity: expanded ? 1 : 0,
-                        duration: duration,
-                        child: const Padding(
-                          padding: EdgeInsets.only(left: 12),
-                          child: Text(
-                            'CloudMind',
-                            maxLines: 1,
-                            softWrap: false,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -.5,
-                            ),
-                          ),
-                        ),
-                      ),
+                    child: Text(
+                      'CloudMind',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < widget.labels.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: AnimatedContainer(
+                        duration: studioDuration(context),
+                        decoration: BoxDecoration(
+                          color: i == widget.selected
+                              ? c.primary.withValues(alpha: .12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: destination(i),
+                      ),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            destinations(expanded),
-            const Spacer(),
-            const Divider(indent: 12, endIndent: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                tooltip: expanded
-                    ? context.tr('Свернуть меню', 'Collapse sidebar')
-                    : context.tr('Развернуть меню', 'Expand sidebar'),
-                onPressed: () => setState(() => expanded = !expanded),
-                icon: AnimatedRotation(
-                  turns: expanded ? 0 : .5,
-                  duration: duration,
-                  child: const Icon(
-                    Icons.keyboard_double_arrow_left_rounded,
-                    size: 20,
-                  ),
-                ),
+          ),
+          if (widget.onCustomize != null)
+            IconButton(
+              tooltip: context.tr('Порядок разделов', 'Arrange navigation'),
+              onPressed: widget.onCustomize,
+              icon: const Icon(Icons.tune_rounded, size: 20),
+            ),
+          const Divider(),
+          IconButton(
+            tooltip: expanded
+                ? context.tr('Свернуть меню', 'Collapse sidebar')
+                : context.tr('Развернуть меню', 'Expand sidebar'),
+            onPressed: () => setState(() => expanded = !expanded),
+            icon: AnimatedRotation(
+              turns: expanded ? 0 : .5,
+              duration: studioDuration(context),
+              child: const Icon(
+                Icons.keyboard_double_arrow_left_rounded,
+                size: 20,
               ),
             ),
-            const SizedBox(height: 8),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

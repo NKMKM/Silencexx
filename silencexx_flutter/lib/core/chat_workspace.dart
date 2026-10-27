@@ -129,8 +129,13 @@ class ConversationSession extends ChangeNotifier {
   }
 
   Future<Json?> send(String text, {bool reduceMotion = false}) async {
-    if (text.trim().isEmpty || busy || loading || loadError != null || disposed)
+    if (text.trim().isEmpty ||
+        busy ||
+        loading ||
+        loadError != null ||
+        disposed) {
       return null;
+    }
     final history = messages
         .where(
           (m) => m['status'] != 'failed' && '${m['text'] ?? ''}'.isNotEmpty,
@@ -232,8 +237,9 @@ class ConversationSession extends ChangeNotifier {
   }
 
   Future<Json?> retry({bool reduceMotion = false}) async {
-    if (busy || messages.isEmpty || messages.last['status'] != 'failed')
+    if (busy || messages.isEmpty || messages.last['status'] != 'failed') {
       return null;
+    }
     final text = '${messages.removeLast()['text']}';
     return send(text, reduceMotion: reduceMotion);
   }
@@ -346,8 +352,9 @@ class ChatWorkspace extends ChangeNotifier {
     if (active.id == null &&
         active.messages.isEmpty &&
         active.draft.isEmpty &&
-        active.temporary == temporary)
+        active.temporary == temporary) {
       return;
+    }
     active = _newSession(temporary: temporary);
     changed();
   }

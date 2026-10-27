@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/app_state.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
-import '../widgets/design.dart';
+import '../widgets/studio.dart';
 
-class SubscriptionScreen extends StatelessWidget {
+class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
   @override
+  State<SubscriptionScreen> createState() => _SubscriptionScreenState();
+}
+
+class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  String? selected;
+  @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(context.tr('Подписка и платежи', 'Subscription and billing')),
     ),
     body: AsyncPanel(
@@ -22,159 +26,228 @@ class SubscriptionScreen extends StatelessWidget {
           api.call('/subscriptions/limits'),
           api.call('/payments/history'),
         ]);
-        return {for (final data in results) ...data};
+        return {for (final result in results) ...result};
       },
       builder: (context, data, reload) {
         final subscription = data['subscription'] as Json? ?? {};
         final limits = data['limits'] as Json? ?? {};
+        final plans = rows(data, 'plans');
+        final payments = rows(data, 'payments');
+        final matching = plans.where((p) => p['slug'] == selected);
+        final plan = matching.isNotEmpty
+            ? matching.first
+            : plans.isEmpty
+            ? null
+            : plans.first;
+        final t = Theme.of(context);
         return PageBody(
+          compact: true,
           children: [
-            PageIntro(
-              title: context.tr('Больше пространства', 'More room for you'),
-              description: context.tr(
-                'Ваш тариф и доступные возможности — в одном месте.',
-                'Your plan and available features in one place.',
-              ),
+            StudioHeader(
+              eyebrow: 'CLOUDMIND / ${context.tr('ВОЗМОЖНОСТИ', 'MEMBERSHIP')}',
+              title: context.tr('Подписка', 'Membership'),
             ),
-            SectionCard(
+            StudioPanel(
+              tone: StudioTone.accent,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  AppBadge(label: context.tr('Ваш тариф', 'Your plan')),
-                  const SizedBox(height: 16),
                   Row(
                     children: [
-                      const QuietOrbit(
-                        size: 72,
-                        child: Icon(
-                          Icons.workspace_premium_outlined,
-                          color: AppColors.primaryBright,
-                        ),
+                      const StudioGlyph(
+                        Icons.workspace_premium_outlined,
+                        size: 46,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      const SizedBox(width: 16),
                       Expanded(
-                        child: Text(
-                          '${subscription['name'] ?? 'Free'}',
-                          style: Theme.of(context).textTheme.headlineSmall,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.tr('ТЕКУЩИЙ ТАРИФ', 'CURRENT PLAN'),
+                              style: t.textTheme.labelSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${subscription['name'] ?? 'Free'}',
+                              style: t.textTheme.headlineMedium,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                  if (subscription['daysUntilExpiry'] != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      context.tr(
+                        'Осталось дней: ${subscription['daysUntilExpiry']}',
+                        'Days remaining: ${subscription['daysUntilExpiry']}',
+                      ),
+                    ),
+                  ],
+                  if (subscription['slug'] != 'free' &&
+                      subscription['slug'] != null) ...[
+                    const SizedBox(height: 16),
+                    ActionButton(
+                      secondary: true,
+                      label: context.tr(
+                        'Отменить подписку',
+                        'Cancel subscription',
+                      ),
+                      action: () async {
+                        final api = context.app.api;
+                        if (!await confirm(
+                          context,
+                          context.tr('Перейти на Free?', 'Switch to Free?'),
+                        )) {
+                          return;
+                        }
+                        await api.call('/subscriptions/cancel', method: 'POST');
+                        reload();
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
-            if (subscription['daysUntilExpiry'] != null)
-              Text(
-                context.tr(
-                  'Осталось дней: ${subscription['daysUntilExpiry']}',
-                  'Days remaining: ${subscription['daysUntilExpiry']}',
-                ),
-              ),
-            if (subscription['slug'] != 'free' && subscription['slug'] != null)
-              ActionButton(
-                secondary: true,
-                label: context.tr('Отменить подписку', 'Cancel subscription'),
-                action: () async {
-                  final api = context.app.api;
-                  if (!await confirm(
-                    context,
-                    context.tr('Перейти на Free?', 'Switch to Free?'),
-                  )) {
-                    return;
-                  }
-                  await api.call('/subscriptions/cancel', method: 'POST');
-                  reload();
-                },
-              ),
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: 24),
             Text(
-              context.tr('Тарифы', 'Plans'),
-              style: Theme.of(context).textTheme.titleLarge,
+              context.tr('Сегодня', 'Today'),
+              style: t.textTheme.titleMedium,
             ),
-            for (final plan in rows(data, 'plans'))
-              SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${plan['name']}',
-                      style: Theme.of(context).textTheme.titleLarge,
+            const SizedBox(height: 10),
+            StudioPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              child: Column(
+                children: [
+                  for (final pair in [
+                    ('Chat', context.tr('Сообщения', 'Messages')),
+                    ('Voice', context.tr('Голос', 'Voice')),
+                    (
+                      'Analysis',
+                      context.tr('Анализ настроения', 'Mood analysis'),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '${plan['price_monthly']} ₽ / ${context.tr('мес.', 'month')}',
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    ('Journal', context.tr('Дневник', 'Journal')),
+                  ])
+                    _UsageMeter(
+                      label: pair.$2,
+                      used: limits['daily${pair.$1}Used'],
+                      limit: limits['daily${pair.$1}Limit'],
                     ),
-                    const SizedBox(height: 14),
-                    Text('${plan['description'] ?? ''}'),
-                    Text(
-                      context.tr(
-                        'Сообщений в день: ${plan['daily_chat_limit'] == -1 ? '∞' : plan['daily_chat_limit']}',
-                        'Messages per day: ${plan['daily_chat_limit'] == -1 ? '∞' : plan['daily_chat_limit']}',
-                      ),
-                    ),
-                    if (plan['slug'] != 'free') ...[
-                      const SizedBox(height: AppSpacing.sm),
-                      FilledButton(
-                        onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PaymentScreen(plan: plan),
-                            ),
-                          );
-                          if (context.mounted) reload();
-                        },
-                        child: Text(context.tr('Выбрать', 'Choose')),
-                      ),
-                    ],
-                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+            Text(
+              context.tr('Сравнить тарифы', 'Compare plans'),
+              style: t.textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 14),
+            if (plans.isEmpty)
+              StudioNotice(
+                message: context.tr(
+                  'Тарифы пока недоступны',
+                  'Plans are unavailable right now',
                 ),
               ),
-            FormGroup(
-              title: context.tr('Использование сегодня', 'Today’s usage'),
-              children: [
-                for (final pair in [
-                  ('Chat', context.tr('Сообщения', 'Messages')),
-                  ('Voice', context.tr('Голос', 'Voice')),
-                  (
-                    'Analysis',
-                    context.tr('Анализ настроения', 'Mood analysis'),
+            if (plan != null) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item in plans)
+                    StudioChoice(
+                      label: Text('${item['name']}'),
+                      selected: item['slug'] == plan['slug'],
+                      onSelected: (_) =>
+                          setState(() => selected = '${item['slug']}'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              StudioResize(
+                duration: studioDuration(context),
+                alignment: Alignment.topCenter,
+                child: StudioPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.end,
+                        spacing: 20,
+                        runSpacing: 10,
+                        children: [
+                          Text(
+                            '${plan['name']}',
+                            style: t.textTheme.titleLarge,
+                          ),
+                          Text(
+                            '${plan['price_monthly']} ₽',
+                            style: t.textTheme.headlineMedium,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.tr('в месяц', 'per month'),
+                        textAlign: TextAlign.end,
+                        style: t.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 18),
+                      Text('${plan['description'] ?? ''}'),
+                      const SizedBox(height: 12),
+                      StudioRow(
+                        dense: true,
+                        leading: const Icon(Icons.forum_outlined, size: 18),
+                        title: Text(
+                          context.tr('Сообщений в день', 'Messages per day'),
+                        ),
+                        trailing: Text(
+                          '${plan['daily_chat_limit'] == -1 ? '∞' : plan['daily_chat_limit'] ?? '—'}',
+                          style: t.textTheme.titleMedium,
+                        ),
+                      ),
+                      if (plan['slug'] != 'free') ...[
+                        const SizedBox(height: 14),
+                        OutlinedButton(
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PaymentScreen(plan: plan),
+                              ),
+                            );
+                            if (context.mounted) reload();
+                          },
+                          child: Text(context.tr('Подробнее', 'View plan')),
+                        ),
+                      ],
+                    ],
                   ),
-                  ('Journal', context.tr('Дневник', 'Journal')),
-                ])
-                  ListTile(
-                    title: Text(pair.$2),
-                    trailing: Text(
-                      '${limits['daily${pair.$1}Used'] ?? 0} / ${limits['daily${pair.$1}Limit'] == -1 ? '∞' : limits['daily${pair.$1}Limit'] ?? '—'}',
+                ),
+              ),
+            ],
+            const SizedBox(height: 22),
+            StudioDisclosure(
+              title: Text(context.tr('История платежей', 'Payment history')),
+              leading: const StudioGlyph(Icons.receipt_long_outlined, size: 34),
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (payments.isEmpty)
+                  Text(context.tr('Платежей пока нет', 'No payments yet')),
+                for (final payment in payments)
+                  StudioRow(
+                    title: Text(
+                      '${payment['tier_slug']} · ${payment['amount']} ${payment['currency']}',
+                    ),
+                    subtitle: Text(
+                      '${payment['status']} · ${payment['created_at']}',
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              context.tr('История платежей', 'Payment history'),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            if (rows(data, 'payments').isEmpty)
-              AppEmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: context.tr('Платежей пока нет', 'No payments yet'),
-                description: context.tr(
-                  'Чеки и история оплаты появятся здесь.',
-                  'Your receipts and payment history will appear here.',
-                ),
-              ),
-            for (final payment in rows(data, 'payments'))
-              ListTile(
-                title: Text(
-                  '${payment['tier_slug']} · ${payment['amount']} ${payment['currency']}',
-                ),
-                subtitle: Text(
-                  '${payment['status']} · ${payment['created_at']}',
-                ),
-              ),
           ],
         );
       },
@@ -182,28 +255,55 @@ class SubscriptionScreen extends StatelessWidget {
   );
 }
 
-class PaymentScreen extends StatefulWidget {
+class PaymentScreen extends StatelessWidget {
   const PaymentScreen({super.key, required this.plan});
   final Json plan;
   @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
-}
-
-class _PaymentScreenState extends State<PaymentScreen> {
-  final email = TextEditingController();
-  String? transactionId;
-  @override
-  void dispose() {
-    email.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: StudioTopBar(
       title: Text(context.tr('Оформление подписки', 'Choose subscription')),
     ),
-    body: ActionPage(
+    body: StudioActionLayout(
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StudioHeader(
+            eyebrow: context.tr('ВАШ ВЫБОР', 'YOUR SELECTION'),
+            title: '${plan['name']}',
+            icon: Icons.workspace_premium_outlined,
+          ),
+          StudioPanel(
+            tone: StudioTone.accent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.tr('Стоимость подписки', 'Subscription price'),
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  '${plan['price_monthly']} ₽',
+                  style: Theme.of(context).textTheme.displaySmall,
+                ),
+                Text(context.tr('в месяц', 'per month')),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+                Text('${plan['description'] ?? ''}'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          StudioNotice(
+            icon: Icons.schedule_rounded,
+            message: context.tr(
+              'Покупка подписок пока недоступна. Мы сообщим, когда оплата будет подключена.',
+              'Subscriptions are not available for purchase yet. We will let you know when payments are ready.',
+            ),
+          ),
+        ],
+      ),
       action: FilledButton(
         onPressed: null,
         child: Text(
@@ -213,30 +313,57 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ),
       ),
-      children: [
-        PageIntro(
-          eyebrow: context.tr('Выбранный тариф', 'Selected plan'),
-          title: '${widget.plan['name']}',
-          description:
-              '${widget.plan['price_monthly']} ₽ / ${context.tr('мес.', 'month')}',
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        SectionCard(
-          child: Text(
-            context.tr(
-              'Покупка подписок пока недоступна. Мы сообщим, когда оплата будет подключена.',
-              'Subscriptions are not available for purchase yet. We will let you know when payments are ready.',
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        TextField(
-          controller: email,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Email'),
-        ),
-        const SizedBox(height: AppSpacing.md),
-      ],
     ),
   );
+}
+
+class _UsageMeter extends StatelessWidget {
+  const _UsageMeter({required this.label, this.used, this.limit});
+  final String label;
+  final dynamic used, limit;
+  @override
+  Widget build(BuildContext context) {
+    final usedCount = num.tryParse('$used');
+    final limitCount = num.tryParse('$limit');
+    final value = usedCount != null && limitCount != null && limitCount > 0
+        ? (usedCount / limitCount).clamp(0.0, 1.0).toDouble()
+        : 0.0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Text(
+                '${usedCount ?? '—'} / ${limitCount == -1 ? '∞' : limitCount ?? '—'}',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
+          if (limitCount != null && limitCount >= 0) ...[
+            const SizedBox(height: 10),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: value),
+              duration: studioDuration(context),
+              builder: (context, v, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: v,
+                  minHeight: 3,
+                  semanticsLabel: label,
+                  semanticsValue: '${(v * 100).round()}%',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

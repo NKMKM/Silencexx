@@ -1,9 +1,8 @@
+import '../widgets/studio.dart';
 import 'package:flutter/material.dart';
 import '../core/app_state.dart';
-import '../core/theme/app_spacing.dart';
 import '../widgets/common.dart';
 import '../widgets/design.dart';
-import '../widgets/glass.dart';
 
 class DisclaimerScreen extends StatefulWidget {
   const DisclaimerScreen({super.key});
@@ -27,80 +26,112 @@ class _DisclaimerScreenState extends State<DisclaimerScreen> {
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
       child: AuthFrame(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: PageReveal(
-              child: GlassSurface(
-                radius: 32,
-                opacity: .76,
-                blur: 18,
-                padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Center(
-                      child: QuietOrbit(
-                        size: 100,
-                        child: Icon(Icons.auto_awesome_outlined, size: 28),
-                      ),
+        child: StudioActionLayout(
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Row(
+                children: [
+                  StudioGlyph(Icons.blur_on_rounded, size: 38),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'CloudMind',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      context.tr(
-                        'Твоё пространство для себя',
-                        'Your mental wellness companion',
-                      ),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context.tr(
-                        'Спокойное место для размышлений, эмоционального благополучия и обычных разговоров.',
-                        'A calm space for reflection, emotional well-being and everyday conversations.',
-                      ),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 18),
-                    Text(
-                      context.tr('Важно знать', 'A note about this app'),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      context.tr(
-                        'Ответы создаёт ИИ. Это приложение не оказывает медицинскую помощь, не ставит диагнозы и не заменяет врача, психолога или другую квалифицированную помощь.',
-                        'AI responses are not medical advice. This app does not diagnose or treat health conditions and is not a replacement for a doctor or qualified mental health professional.',
-                      ),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context.tr(
-                        'Если тебе угрожает непосредственная опасность, обратись в местную экстренную службу или к доступному кризисному ресурсу.',
-                        'If you are in immediate danger, contact your local emergency service or an available crisis resource.',
-                      ),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: saving ? null : continueToApp,
-                      child: saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(context.tr('Продолжить', 'Continue')),
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+              StudioHeader(
+                eyebrow: context.tr('ПЕРЕД НАЧАЛОМ', 'BEFORE WE BEGIN'),
+                title: context.tr(
+                  'Твоё пространство для себя',
+                  'Your mental wellness companion',
+                ),
+                description: context.tr(
+                  'Перед первым разговором — три важных вещи.',
+                  'Before your first conversation, three things to know.',
                 ),
               ),
-            ),
+              for (final item in [
+                (
+                  '01',
+                  context.tr('Пространство для размышлений', 'Room to reflect'),
+                  context.tr(
+                    'Здесь можно делиться чувствами, вести дневник и разбираться в своих мыслях.',
+                    'Share your feelings, keep a journal and make sense of your thoughts.',
+                  ),
+                ),
+                (
+                  '02',
+                  context.tr(
+                    'Ответы создаёт ИИ',
+                    'Responses are generated by AI',
+                  ),
+                  context.tr(
+                    'Приложение не оказывает медицинскую помощь, не ставит диагнозы и не заменяет врача, психолога или другую квалифицированную помощь.',
+                    'This app does not provide medical care, diagnose conditions or replace a doctor or qualified mental health professional.',
+                  ),
+                ),
+                (
+                  '03',
+                  context.tr('В экстренной ситуации', 'In an emergency'),
+                  context.tr(
+                    'Если тебе угрожает непосредственная опасность, обратись в местную экстренную службу или к доступному кризисному ресурсу.',
+                    'If you are in immediate danger, contact your local emergency service or an available crisis resource.',
+                  ),
+                ),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 32,
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          item.$1,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.$2,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              item.$3,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 16),
+                            const Divider(height: 1),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          action: FilledButton(
+            onPressed: saving ? null : continueToApp,
+            child: saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(context.tr('Продолжить', 'Continue')),
           ),
         ),
       ),
