@@ -38,3 +38,7 @@ Thumbs.db
 
 # Local database diagnostics (schema metadata only)
 .db-audit/
+
+# Private backups produced by local PostgreSQL provisioning
+.env.before-local-db.*
+.env.local-db.tmp.*
