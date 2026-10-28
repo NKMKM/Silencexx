@@ -22,16 +22,16 @@ export function reconcileHistory(rows: ConversationRow[]): ConversationRow[] {
 }
 export async function readConversation(chatId: number, userId: number): Promise<ConversationRow[]> {
   const result = await query(`
-    SELECT id::text, 'messages' AS source, chat_id, role, type, text, audio_url, status, created_at
+    SELECT id::text, 'messages' AS source, chat_id, role, type, text, audio_url, status, created_at, to_jsonb(messages)->>'voice_emotion' AS voice_emotion
     FROM messages WHERE chat_id=$1 AND user_id=$2
     UNION ALL
     SELECT id::text, 'user_chat' AS source, chat_id,
       CASE WHEN to_jsonb(legacy)->>'is_ai_response'='true' THEN 'assistant' ELSE 'user' END AS role,
-      'text' AS type, message AS text, NULL AS audio_url, 'ready' AS status, senddate AS created_at
+      'text' AS type, message AS text, NULL AS audio_url, 'ready' AS status, senddate AS created_at, NULL::text AS voice_emotion
     FROM user_chat legacy WHERE chat_id=$1 AND user_id=$2
     UNION ALL
     SELECT id::text, 'ai_response' AS source, chat_id, 'assistant' AS role,
-      'text' AS type, message AS text, NULL AS audio_url, 'ready' AS status, senddate AS created_at
+      'text' AS type, message AS text, NULL AS audio_url, 'ready' AS status, senddate AS created_at, NULL::text AS voice_emotion
     FROM ai_response WHERE chat_id=$1 AND user_id=$2
     ORDER BY created_at ASC`, [chatId,userId]);
   return reconcileHistory(result.rows);

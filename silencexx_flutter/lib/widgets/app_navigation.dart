@@ -13,7 +13,9 @@ class AppNavigation extends StatefulWidget {
     this.vertical = false,
     this.initiallyExpanded = true,
     this.onCustomize,
+    this.destinationKeys,
   });
+  final List<GlobalKey>? destinationKeys;
   final int selected;
   final ValueChanged<int> onSelected;
   final List<String> labels;
@@ -41,6 +43,7 @@ class _AppNavigationState extends State<AppNavigation> {
         ? t.colorScheme.onSurface
         : t.colorScheme.onSurfaceVariant;
     return Tooltip(
+      key: widget.destinationKeys?[i],
       message: widget.labels[i],
       child: Semantics(
         selected: active,

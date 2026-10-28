@@ -16,6 +16,7 @@ import 'inbox_screen.dart';
 import 'settings_screen.dart';
 import 'panic_screen.dart';
 import 'today_screen.dart';
+import '../widgets/product_tour.dart';
 
 /// A daily home, a conversation library, and focused detail workspaces.
 class HomeScreen extends StatefulWidget {
@@ -27,6 +28,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final chatKey = GlobalKey<ChatScreenState>();
   final journalKey = GlobalKey<JournalScreenState>();
+  final todayScroll = ScrollController();
+  final startTourKey = GlobalKey();
+  final settingsTourKey = GlobalKey();
+  final voiceTourKey = GlobalKey();
+  final composerTourKey = GlobalKey();
+  final navTourKeys = {
+    for (final id in ['today', 'chat', 'journal', 'tasks', 'inbox'])
+      id: GlobalKey(),
+  };
   ChatWorkspace? _workspace;
   ChatWorkspace get workspace => _workspace!;
   String selected = 'today';
@@ -201,6 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    todayScroll.dispose();
     workspace.dispose();
     super.dispose();
   }
@@ -222,6 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
         key: ValueKey(rail ? 'primary-rail' : 'primary-bottom'),
         vertical: rail,
         initiallyExpanded: expanded && selected != 'chat',
+        destinationKeys: [for (final id in navigationOrder) navTourKeys[id]!],
         selected: navigationOrder.indexOf(
           selected == 'settings' ? 'today' : selected,
         ),
@@ -236,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
         icons: [for (final id in navigationOrder) destinationIcon(id)],
       ),
     );
-    return CallbackShortcuts(
+    final content = CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyK, meta: true): search,
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): search,
@@ -312,6 +324,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           SafeArea(
                             child: TodayScreen(
                               workspace: workspace,
+                              scrollController: todayScroll,
+                              startTourKey: startTourKey,
+                              settingsTourKey: settingsTourKey,
                               onNavigate: select,
                               onNewChat: newChat,
                               onOpenChat: openChat,
@@ -337,6 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               ChatScreen(
                                 key: chatKey,
+                                voiceTourKey: voiceTourKey,
+                                composerTourKey: composerTourKey,
                                 session: workspace.active,
                                 onExit: () {
                                   if (canSwitch()) {
@@ -380,6 +397,105 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+    final app = context.app;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ExcludeFocus(excluding: app.needsProductTour, child: content),
+        if (app.needsProductTour)
+          ProductTour(
+            key: ValueKey('tour.${app.user?['id']}'),
+            steps: [
+              CoachStep(
+                target: startTourKey,
+                title: context.tr(
+                  'Здесь можно быть собой',
+                  'A space to be yourself',
+                ),
+                description: context.tr(
+                  'Начни разговор с одной мысли. «Сегодня» собирает короткие пути к тому, что сейчас нужно.',
+                  'Start with one thought. Today brings together the things you might need.',
+                ),
+                prepare: () {
+                  select('today');
+                  if (todayScroll.hasClients) todayScroll.jumpTo(0);
+                },
+              ),
+              CoachStep(
+                target: voiceTourKey,
+                title: context.tr(
+                  'Познакомься с облачком',
+                  'Meet your cloud companion',
+                ),
+                description: context.tr(
+                  'Эта кнопка открывает голосовой разговор. Облачко слушает, моргает и мягко реагирует на смысл твоих слов. Микрофон включается только по твоему нажатию.',
+                  'Open voice conversation here. Your cloud listens, blinks and gently reacts to your words. The microphone only starts when you tap record.',
+                ),
+                prepare: () {
+                  if (!canSwitch()) return;
+                  select('chat');
+                  setState(() => conversationOpen = true);
+                },
+              ),
+              CoachStep(
+                target: composerTourKey,
+                title: context.tr('Можно и словами', 'Writing works too'),
+                description: context.tr(
+                  'Пиши в своём темпе. Здесь же — запись голоса и вложения. Черновик остаётся с тобой при смене раздела.',
+                  'Write at your own pace. Voice recording and attachments are here too. Your draft stays when switching sections.',
+                ),
+                prepare: () {},
+              ),
+              CoachStep(
+                target: navTourKeys['chat']!,
+                title: context.tr(
+                  'Разговоры остаются рядом',
+                  'Your conversations stay close',
+                ),
+                description: context.tr(
+                  'Вернись к любому диалогу, найди его по названию или убери в архив.',
+                  'Return to a conversation, search its title or move it to the archive.',
+                ),
+                prepare: () => select('chat'),
+              ),
+              CoachStep(
+                target: navTourKeys['journal']!,
+                title: context.tr(
+                  'Оставь мысль для себя',
+                  'Keep a thought for yourself',
+                ),
+                description: context.tr(
+                  'В дневнике можно сохранить запись дня и перечитать предыдущие. Сохранённые записи доступны в коллекции.',
+                  'Keep a daily entry and revisit earlier reflections in your journal collection.',
+                ),
+                prepare: () => select('journal'),
+              ),
+              CoachStep(
+                target: navTourKeys['tasks']!,
+                title: context.tr('Один небольшой шаг', 'One small step'),
+                description: context.tr(
+                  'Практики предлагают посильное действие на день. А на «Сегодня» есть дыхательная пауза, когда хочется замедлиться.',
+                  'Practice offers one manageable daily action. Today also has a breathing pause when you want to slow down.',
+                ),
+                prepare: () => select('tasks'),
+              ),
+              CoachStep(
+                target: navTourKeys['inbox']!,
+                title: context.tr('Немного добрых слов', 'A little kindness'),
+                description: context.tr(
+                  'В сообщениях можно получать и отправлять анонимные пожелания. Обучение можно повторить в настройках.',
+                  'Receive and send anonymous wishes in Messages. You can replay this tour in Settings.',
+                ),
+                prepare: () => select('inbox'),
+              ),
+            ],
+            onFinished: () async {
+              await app.finishProductTour();
+              if (mounted) select('today');
+            },
+          ),
+      ],
     );
   }
 }

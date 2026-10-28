@@ -1,5 +1,8 @@
 import '../widgets/studio.dart';
 import 'dart:convert';
+import 'dart:async';
+import '../widgets/cloud_companion.dart';
+import '../widgets/voice_companion_stage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +27,8 @@ class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
     this.chatId,
+    this.voiceTourKey,
+    this.composerTourKey,
     this.temporary = false,
     this.onExit,
     this.session,
@@ -37,6 +42,7 @@ class ChatScreen extends StatefulWidget {
   final int? chatId;
   final bool temporary;
   final ConversationSession? session;
+  final GlobalKey? voiceTourKey, composerTourKey;
   final VoidCallback? onExit,
       onMenu,
       onNewChat,
@@ -48,7 +54,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => ChatScreenState();
 }
 
-class ChatScreenState extends State<ChatScreen> {
+class ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final input = TextEditingController();
   final inputFocus = FocusNode();
   final scroll = ScrollController();
@@ -57,8 +63,14 @@ class ChatScreenState extends State<ChatScreen> {
   ConversationSession? _session;
   ConversationSession get session => _session!;
   bool recording = false, voiceWorking = false, voiceReplies = false;
+  bool voiceMode = false, speaking = false, voiceFailed = false;
+  double voiceLevel = 0;
+  StreamSubscription<Amplitude>? amplitudeSubscription;
   bool focused = false, followBottom = true, attachmentMenu = false;
   bool get recordingInProgress => recording || voiceWorking;
+  bool get foreground =>
+      WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
   bool get desktop =>
       kIsWeb ||
       [
@@ -69,6 +81,18 @@ class ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    speech.setStartHandler(() {
+      if (mounted) setState(() => speaking = true);
+    });
+    void stopped() {
+      if (mounted) setState(() => speaking = false);
+    }
+
+    speech.setCompletionHandler(stopped);
+    speech.setCancelHandler(stopped);
+    speech.setPauseHandler(stopped);
+    speech.setErrorHandler((_) => stopped());
     input.addListener(draftChanged);
     inputFocus.addListener(() {
       if (mounted) setState(() => focused = inputFocus.hasFocus);
@@ -117,6 +141,10 @@ class ChatScreenState extends State<ChatScreen> {
   void didUpdateWidget(ChatScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.session != null && widget.session != _session) {
+      speech.stop();
+      voiceMode = false;
+      speaking = false;
+      voiceFailed = false;
       _session?.removeListener(sessionChanged);
       attach(widget.session!);
       attachmentMenu = false;
@@ -222,10 +250,14 @@ class ChatScreenState extends State<ChatScreen> {
     }
     setState(() {
       voiceWorking = true;
+      voiceFailed = false;
+      voiceMode = true;
+      inputFocus.unfocus();
       attachmentMenu = false;
     });
     try {
       if (!recording) {
+        await speech.stop();
         await target.checkLimit('Voice');
         final permissionGranted = await recorder.hasPermission();
         if (!mounted) return;
@@ -238,6 +270,7 @@ class ChatScreenState extends State<ChatScreen> {
           );
         }
         await target.ensureCreated();
+        if (!mounted || !foreground) return;
         final path = kIsWeb
             ? ''
             : '${(await getTemporaryDirectory()).path}/cloudmind_${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -247,8 +280,26 @@ class ChatScreenState extends State<ChatScreen> {
           ),
           path: path,
         );
-        if (mounted) setState(() => recording = true);
+        if (!mounted || !foreground) {
+          await recorder.cancel();
+          return;
+        }
+        amplitudeSubscription = recorder
+            .onAmplitudeChanged(const Duration(milliseconds: 100))
+            .listen((value) {
+              if (mounted && recording) {
+                setState(
+                  () => voiceLevel = ((value.current + 55) / 55).clamp(0, 1),
+                );
+              }
+            }, onError: (_) {});
+        setState(() {
+          recording = true;
+          voiceLevel = 0;
+        });
       } else {
+        await amplitudeSubscription?.cancel();
+        amplitudeSubscription = null;
         final path = await recorder.stop();
         if (mounted) setState(() => recording = false);
         if (path == null) throw const ApiException('No recording was created');
@@ -261,7 +312,7 @@ class ChatScreenState extends State<ChatScreen> {
           bytes: await XFile(path).readAsBytes(),
           filename: kIsWeb ? 'voice.webm' : 'voice.m4a',
           mime: kIsWeb ? 'audio/webm' : 'audio/mp4',
-          fields: {'chatId': '${target.id}'},
+          fields: {'chatId': '${target.id}', 'language': target.app.language},
         );
         await target.load(refresh: true);
         target.pollVoice(
@@ -278,7 +329,10 @@ class ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
-      if (mounted) showError(context, e);
+      if (mounted) {
+        setState(() => voiceFailed = true);
+        showError(context, e);
+      }
     } finally {
       if (mounted) setState(() => voiceWorking = false);
     }
@@ -286,6 +340,8 @@ class ChatScreenState extends State<ChatScreen> {
 
   Future<void> cancelRecording() async {
     try {
+      await amplitudeSubscription?.cancel();
+      amplitudeSubscription = null;
       await recorder.cancel();
       if (mounted) setState(() => recording = false);
     } catch (e) {
@@ -295,6 +351,7 @@ class ChatScreenState extends State<ChatScreen> {
 
   Future<void> speak(String text) async {
     final app = context.app;
+    final target = session;
     final limits =
         (await app.api.call('/subscriptions/limits'))['limits'] as Json? ?? {};
     if (limits['hasTTS'] != true) {
@@ -304,6 +361,9 @@ class ChatScreenState extends State<ChatScreen> {
           'Text to speech is not included in your plan.',
         ),
       );
+    }
+    if (!mounted || session != target || !foreground) {
+      return;
     }
     await speech.setLanguage(app.language == 'ru' ? 'ru-RU' : 'en-US');
     await speech.speak(text);
@@ -478,6 +538,8 @@ class ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    amplitudeSubscription?.cancel();
     _session?.removeListener(sessionChanged);
     if (widget.session == null) _session?.dispose();
     input.removeListener(draftChanged);
@@ -488,6 +550,123 @@ class ChatScreenState extends State<ChatScreen> {
     speech.stop();
     super.dispose();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      speech.stop();
+      if (recording) cancelRecording();
+    }
+  }
+
+  void closeVoiceMode() {
+    speech.stop();
+    setState(() {
+      voiceMode = false;
+      speaking = false;
+    });
+  }
+
+  CloudActivity get cloudActivity => recording
+      ? CloudActivity.listening
+      : voiceWorking || session.busy || session.loading
+      ? CloudActivity.thinking
+      : speaking
+      ? CloudActivity.speaking
+      : voiceFailed ||
+            session.loadError != null ||
+            session.phase == ReplyPhase.failed
+      ? CloudActivity.error
+      : CloudActivity.idle;
+
+  Widget voiceStage() {
+    final voiceIndex = session.messages.lastIndexWhere(
+      (message) => message['role'] == 'user' && message['type'] == 'voice',
+    );
+    final lastVoice = voiceIndex < 0 ? null : session.messages[voiceIndex];
+    Json? reply;
+    if (voiceIndex >= 0) {
+      for (final message in session.messages.skip(voiceIndex + 1)) {
+        if (message['role'] == 'user') break;
+        if (message['role'] == 'assistant') {
+          reply = message;
+          break;
+        }
+      }
+    }
+    return VoiceCompanionStage(
+      emotion: cloudEmotionFrom(lastVoice?['voice_emotion']),
+      activity: cloudActivity,
+      level: voiceLevel,
+      transcript: recording || voiceWorking
+          ? null
+          : lastVoice?['text'] as String?,
+      reply: recording || voiceWorking || session.busy
+          ? null
+          : reply?['text'] as String?,
+      onShowChat: closeVoiceMode,
+    );
+  }
+
+  Widget voiceControls() => SafeArea(
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (recording)
+                IconButton(
+                  tooltip: context.tr('Отменить запись', 'Cancel recording'),
+                  onPressed: voiceWorking ? null : cancelRecording,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              SizedBox(
+                width: 76,
+                height: 76,
+                child: IconButton.filled(
+                  tooltip: recording
+                      ? context.tr('Отправить запись', 'Send recording')
+                      : context.tr('Записать голос', 'Record voice'),
+                  iconSize: 30,
+                  onPressed: voiceWorking || session.busy || session.loading
+                      ? null
+                      : voice,
+                  icon: Icon(
+                    recording ? Icons.arrow_upward_rounded : Icons.mic_rounded,
+                  ),
+                ),
+              ),
+              if (speaking)
+                IconButton(
+                  tooltip: context.tr(
+                    'Остановить озвучивание',
+                    'Stop speaking',
+                  ),
+                  onPressed: () => speech.stop(),
+                  icon: const Icon(Icons.stop_rounded),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(context.tr('Озвучивать ответ', 'Speak replies')),
+              Switch.adaptive(
+                value: voiceReplies,
+                onChanged: (value) => setState(() => voiceReplies = value),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 
   Future<void> showChatActions() async {
     inputFocus.unfocus();
@@ -666,6 +845,30 @@ class ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     ),
+                    IconButton(
+                      key: widget.voiceTourKey,
+                      tooltip: voiceMode
+                          ? context.tr('Переписка', 'Text conversation')
+                          : context.tr(
+                              'Голосовой разговор',
+                              'Voice conversation',
+                            ),
+                      onPressed: recordingInProgress
+                          ? null
+                          : () {
+                              if (voiceMode) {
+                                closeVoiceMode();
+                              } else {
+                                inputFocus.unfocus();
+                                setState(() => voiceMode = true);
+                              }
+                            },
+                      icon: Icon(
+                        voiceMode
+                            ? Icons.chat_bubble_outline_rounded
+                            : Icons.headphones_rounded,
+                      ),
+                    ),
                     if (widget.onNewChat != null)
                       IconButton(
                         tooltip: context.tr('Новый чат', 'New chat'),
@@ -683,168 +886,186 @@ class ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: AnimatedSwitcher(
-                            duration: reduced
-                                ? Duration.zero
-                                : AppMotion.screen,
-                            transitionBuilder: (child, animation) =>
-                                FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween(
-                                      begin: const Offset(.035, 0),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                ),
-                            child: KeyedSubtree(
-                              key: ObjectKey(session),
-                              child: session.loading && session.messages.isEmpty
-                                  ? const AppLoadingState()
-                                  : session.loadError != null &&
-                                        session.messages.isEmpty
-                                  ? Center(
-                                      child: SingleChildScrollView(
-                                        padding: const EdgeInsets.all(24),
-                                        child: AppEmptyState(
-                                          icon: Icons.cloud_off_outlined,
-                                          title: context.tr(
-                                            'Не удалось открыть разговор',
-                                            'Could not open conversation',
-                                          ),
-                                          description: session.loadError!,
-                                          action: FilledButton(
-                                            onPressed: () =>
-                                                session.load(refresh: true),
-                                            child: Text(
-                                              context.tr('Повторить', 'Retry'),
-                                            ),
-                                          ),
+                child: voiceMode
+                    ? voiceStage()
+                    : Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 860),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: AnimatedSwitcher(
+                                  duration: reduced
+                                      ? Duration.zero
+                                      : AppMotion.screen,
+                                  transitionBuilder: (child, animation) =>
+                                      FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: Tween(
+                                            begin: const Offset(.035, 0),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
                                         ),
                                       ),
-                                    )
-                                  : session.messages.isEmpty
-                                  ? _emptyChat()
-                                  : NotificationListener<ScrollNotification>(
-                                      onNotification: _dismissOnChatDrag,
-                                      child: ListView.builder(
-                                        controller: scroll,
-                                        physics:
-                                            const AlwaysScrollableScrollPhysics(),
-                                        keyboardDismissBehavior:
-                                            ScrollViewKeyboardDismissBehavior
-                                                .onDrag,
-                                        padding: const EdgeInsets.fromLTRB(
-                                          24,
-                                          24,
-                                          24,
-                                          32,
-                                        ),
-                                        itemCount:
-                                            session.messages.length +
-                                            (session.phase ==
-                                                        ReplyPhase.thinking ||
-                                                    session.phase ==
-                                                        ReplyPhase.transcribing
-                                                ? 1
-                                                : 0),
-                                        itemBuilder: (context, index) {
-                                          if (index ==
-                                              session.messages.length) {
-                                            return Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 24,
+                                  child: KeyedSubtree(
+                                    key: ObjectKey(session),
+                                    child:
+                                        session.loading &&
+                                            session.messages.isEmpty
+                                        ? const AppLoadingState()
+                                        : session.loadError != null &&
+                                              session.messages.isEmpty
+                                        ? Center(
+                                            child: SingleChildScrollView(
+                                              padding: const EdgeInsets.all(24),
+                                              child: AppEmptyState(
+                                                icon: Icons.cloud_off_outlined,
+                                                title: context.tr(
+                                                  'Не удалось открыть разговор',
+                                                  'Could not open conversation',
+                                                ),
+                                                description: session.loadError!,
+                                                action: FilledButton(
+                                                  onPressed: () => session.load(
+                                                    refresh: true,
                                                   ),
-                                              child: AiActivity(
-                                                label:
-                                                    session.phase ==
-                                                        ReplyPhase.transcribing
-                                                    ? context.tr(
-                                                        'Распознаю и готовлю ответ',
-                                                        'Transcribing and preparing a reply',
-                                                      )
-                                                    : context.tr(
-                                                        'Думаю',
-                                                        'Thinking',
-                                                      ),
-                                              ),
-                                            );
-                                          }
-                                          final message =
-                                              session.messages[index];
-                                          return ConversationMessage(
-                                            key: ValueKey(
-                                              '${session.id}-${message['role']}-${message['id'] ?? index}',
-                                            ),
-                                            message: message,
-                                            chatId: session.id,
-                                            enabled:
-                                                !session.busy &&
-                                                !recordingInProgress,
-                                            onReply: () => replyTo(message),
-                                            onEdit: () => edit(message),
-                                            onRegenerate: () => send(
-                                              override: context.tr(
-                                                'Предложи другой вариант ответа на мой последний запрос.',
-                                                'Offer another answer to my last request.',
-                                              ),
-                                            ),
-                                            onSpeak: () async {
-                                              try {
-                                                await speak(
-                                                  '${message['text']}',
-                                                );
-                                              } catch (e) {
-                                                if (context.mounted) {
-                                                  showError(context, e);
-                                                }
-                                              }
-                                            },
-                                            audio: message['audio_url'] == null
-                                                ? null
-                                                : AudioBubble(
-                                                    url: context.app.api.mediaUrl(
-                                                      '${message['audio_url']}',
+                                                  child: Text(
+                                                    context.tr(
+                                                      'Повторить',
+                                                      'Retry',
                                                     ),
                                                   ),
-                                          );
-                                        },
-                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : session.messages.isEmpty
+                                        ? _emptyChat()
+                                        : NotificationListener<
+                                            ScrollNotification
+                                          >(
+                                            onNotification: _dismissOnChatDrag,
+                                            child: ListView.builder(
+                                              controller: scroll,
+                                              physics:
+                                                  const AlwaysScrollableScrollPhysics(),
+                                              keyboardDismissBehavior:
+                                                  ScrollViewKeyboardDismissBehavior
+                                                      .onDrag,
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    24,
+                                                    24,
+                                                    24,
+                                                    32,
+                                                  ),
+                                              itemCount:
+                                                  session.messages.length +
+                                                  (session.phase ==
+                                                              ReplyPhase
+                                                                  .thinking ||
+                                                          session.phase ==
+                                                              ReplyPhase
+                                                                  .transcribing
+                                                      ? 1
+                                                      : 0),
+                                              itemBuilder: (context, index) {
+                                                if (index ==
+                                                    session.messages.length) {
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical: 24,
+                                                        ),
+                                                    child: AiActivity(
+                                                      label:
+                                                          session.phase ==
+                                                              ReplyPhase
+                                                                  .transcribing
+                                                          ? context.tr(
+                                                              'Распознаю и готовлю ответ',
+                                                              'Transcribing and preparing a reply',
+                                                            )
+                                                          : context.tr(
+                                                              'Думаю',
+                                                              'Thinking',
+                                                            ),
+                                                    ),
+                                                  );
+                                                }
+                                                final message =
+                                                    session.messages[index];
+                                                return ConversationMessage(
+                                                  key: ValueKey(
+                                                    '${session.id}-${message['role']}-${message['id'] ?? index}',
+                                                  ),
+                                                  message: message,
+                                                  chatId: session.id,
+                                                  enabled:
+                                                      !session.busy &&
+                                                      !recordingInProgress,
+                                                  onReply: () =>
+                                                      replyTo(message),
+                                                  onEdit: () => edit(message),
+                                                  onRegenerate: () => send(
+                                                    override: context.tr(
+                                                      'Предложи другой вариант ответа на мой последний запрос.',
+                                                      'Offer another answer to my last request.',
+                                                    ),
+                                                  ),
+                                                  onSpeak: () async {
+                                                    try {
+                                                      await speak(
+                                                        '${message['text']}',
+                                                      );
+                                                    } catch (e) {
+                                                      if (context.mounted) {
+                                                        showError(context, e);
+                                                      }
+                                                    }
+                                                  },
+                                                  audio:
+                                                      message['audio_url'] ==
+                                                          null
+                                                      ? null
+                                                      : AudioBubble(
+                                                          url: context.app.api
+                                                              .mediaUrl(
+                                                                '${message['audio_url']}',
+                                                              ),
+                                                        ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ),
+                              if (!followBottom && session.messages.isNotEmpty)
+                                Positioned(
+                                  bottom: 8,
+                                  right: 12,
+                                  child: IconButton.filledTonal(
+                                    tooltip: context.tr(
+                                      'К последнему сообщению',
+                                      'Jump to latest',
                                     ),
-                            ),
+                                    onPressed: () {
+                                      followBottom = true;
+                                      bottom();
+                                    },
+                                    icon: const Icon(
+                                      Icons.arrow_downward_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                        if (!followBottom && session.messages.isNotEmpty)
-                          Positioned(
-                            bottom: 8,
-                            right: 12,
-                            child: IconButton.filledTonal(
-                              tooltip: context.tr(
-                                'К последнему сообщению',
-                                'Jump to latest',
-                              ),
-                              onPressed: () {
-                                followBottom = true;
-                                bottom();
-                              },
-                              icon: const Icon(
-                                Icons.arrow_downward_rounded,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
               ),
               if (session.error != null ||
                   session.loadError != null && session.messages.isNotEmpty)
@@ -889,7 +1110,13 @@ class ChatScreenState extends State<ChatScreen> {
                     ],
                   ),
                 ),
-              _composer(moods),
+              if (voiceMode)
+                voiceControls()
+              else
+                KeyedSubtree(
+                  key: widget.composerTourKey,
+                  child: _composer(moods),
+                ),
             ],
           ),
         ),
@@ -1107,22 +1334,16 @@ class ChatScreenState extends State<ChatScreen> {
           ),
         ),
       );
-      if (constraints.maxHeight < 560 ||
-          MediaQuery.textScalerOf(context).scale(14) >= 19) {
-        return NotificationListener<ScrollNotification>(
-          onNotification: _dismissOnChatDrag,
-          child: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 8),
+      return NotificationListener<ScrollNotification>(
+        onNotification: _dismissOnChatDrag,
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Center(child: content),
           ),
-        );
-      }
-      return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onVerticalDragStart: (_) => inputFocus.unfocus(),
-        child: Center(child: content),
+        ),
       );
     },
   );

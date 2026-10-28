@@ -5,9 +5,9 @@
       "AppState",
       "AppScope"
     ],
-    "status": "reviewed_nonvisual_retained",
-    "decision": "Не является renderer: InheritedNotifier и состояние языка/авторизации сохранены; UI реализован в потребителях.",
-    "sha256_reviewed": "6eb436abb206c4ba102cb320995bd689cf3cb8d52e9d365eb88274a5fe995f74"
+    "status": "implemented_reviewed",
+    "decision": "Обучение и его возобновление по аккаунту; сохранение pending-флагов, завершение, повтор и очистка при удалении аккаунта.",
+    "sha256_reviewed": "df217ce53a163736a21ce16bd2fabd45072bca14eab518e19ac470b8ab70605b"
   },
   "lib/core/home_widget_service.dart": {
     "sha256_before": "54a2897ecc5b5ed7f27c4af01eceed7924cea2bf4a277540cbf635241e4093b9",
@@ -83,8 +83,8 @@
       "_AudioBubbleState"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "889abf2d7f28297b8e9c4dd4000424e6f7f359b53bde1cf436ff19ce0739c1b2",
-    "decision": "Однорядный composer, контекстные tools/mood sheets, запись с явными cancel/send, audio loading; пустой чат с выбором настроения и сценариями. API/send/session logic сохранена. Общий обработчик ScrollStart/Overscroll закрывает клавиатуру также на границе пустого чата; черновик сохраняется (отдельный regression test).",
+    "sha256_reviewed": "ebd16bf50264c3e197451de27485510c4eb2b7126c7d3c81b4b8b4c1be52497f",
+    "decision": "Отдельная голосовая сцена с облачком, амплитудой записи, TTS-событиями, защитой foreground, отменой и возвратом к сохранённому текстовому черновику; голосовая реплика не смешивается с последующим текстовым ответом. Пустой чат использует естественную высоту со скроллом при нехватке места, без фиксированного порога, с dismiss клавиатуры на drag.",
     "classes_after": [
       "ChatScreen",
       "ChatScreenState",
@@ -115,8 +115,8 @@
       "_HomeScreenState"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "b09067506e3d3e661544a6a77e6e04dc027a98a74ec806493c240b9ce8622355",
-    "decision": "Структурное исправление: Today как вход, библиотека как основной раздел, чат как отдельный фокусный экран, drawer удалён, системный возврат дневника.",
+    "sha256_reviewed": "696bfc5acdba736db68614c5ea75f8c1725660c68b2f8cbe583b5d232058e12f",
+    "decision": "Экскурсия по реальным ключам контролов с сохранением текущего разговора/черновика; сброс прокрутки Today при начале обучения.",
     "classes_after": [
       "HomeScreen",
       "_HomeScreenState"
@@ -194,8 +194,8 @@
       "_SecurityFold"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "be5d81c1edc1fe837cf20b897325b7e0b499b18bca5cc19d32389f9044254352",
-    "decision": "Перестроен центр управления: identity, 2x2 shortcuts, preferences. Все вложенные страницы переведены на новые section/disclosure/row. Privacy danger zone, locale preview, schedule scene, password visibility.",
+    "sha256_reviewed": "7e4e3a4f5bd53cabd49302cf14bee27ce393b58e30a7adb6682021aedc42f4e6",
+    "decision": "Добавлен повтор экскурсии для текущего аккаунта.",
     "classes_after": [
       "SettingsScreen",
       "_SettingsScreenState",
@@ -239,11 +239,12 @@
     "sha256_before": "698861b7d04e5f95a80660046f6960957a7f4e1c08b753facef653c8c600782f",
     "classes": [
       "TasksScreen",
-      "_TasksScreenState"
+      "_TasksScreenState",
+      "_PracticeJourney"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "38ceb87f84a74f9d0d8c027fcfedad92a50e4a9dbcbb526047916169a0cef8a7",
-    "decision": "Заново собрана practice scene с естественной высотой, этапами и отдельной pause area; закреплённый CTA с ожиданием и защитой от повторов.",
+    "sha256_reviewed": "b309cf1a30747edf7dd84842a6de0104dfc0f478a4c4f1c8dff6e369c8419c84",
+    "decision": "Безопасное пустое состояние и повтор загрузки при task=null, чтобы переход обучения не приводил к ошибке приведения.",
     "classes_after": [
       "TasksScreen",
       "_TasksScreenState",
@@ -275,8 +276,8 @@
       "_RetainedPageStackState"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "f91a74c076ca9f9e90c2e082531de1a149a982fffa49b31f3911767768d79655",
-    "decision": "Полностью заменён navigator: moving dock selection и responsive rail. RetainedPageStack сохранён ради черновиков и оптимизированного выключения скрытых ticker.",
+    "sha256_reviewed": "a1677015454ab2a9d4d893c86eee7ad6d67b492ed2163ddfad88cb2805897c84",
+    "decision": "Необязательные ключи реальных пунктов для coach marks; порядок и адаптивная навигация сохранены.",
     "classes_after": [
       "AppNavigation",
       "_AppNavigationState",
@@ -336,9 +337,6 @@
     "classes": [
       "AppDialog",
       "PageBody",
-      "SectionCard",
-      "_SectionCardState",
-      "AppSectionHeader",
       "AppEmptyState",
       "AppLoadingState",
       "AppSkeleton",
@@ -348,14 +346,11 @@
       "PressScale",
       "_PressScaleState",
       "ActionButton",
-      "_ActionButtonState",
-      "PageIntro",
-      "FormGroup",
-      "ActionPage"
+      "_ActionButtonState"
     ],
     "status": "implemented_reviewed",
-    "sha256_reviewed": "92bc3f28bf3c5538aeea2724f797cb2b6cf7aef879ec60badd7e208c0864af7f",
-    "decision": "Новая структура modal/empty/loading/error/refresh; сохранение данных при reload, PressScale и ActionButton normal/busy/destructive. Удалены устаревшие неиспользуемые wrappers.",
+    "sha256_reviewed": "4e2423d5fca904f1718ba6170aa3533e6d3c6902653a85a603151e5055855ed6",
+    "decision": "Необязательный ScrollController в PageBody для позиционирования цели экскурсии; прежние вызовы совместимы.",
     "classes_after": [
       "AppDialog",
       "PageBody",
@@ -569,7 +564,41 @@
   },
   "lib/screens/today_screen.dart": {
     "status": "implemented_reviewed",
-    "sha256_reviewed": "7e28d71b4ef32d66dd15e4eacdb90eaa99ba78807776155db6ea3260388b09a5",
-    "decision": "Новый action-led ежедневный вход: старт/продолжение диалога, три последовательных действия, настройки в заголовке; desktop split и mobile stack; реальные данные workspace."
+    "sha256_reviewed": "7eb6d93cc27f6d6d58b597805daa01c0a96d4f8b1809d3964b9fddce41efe1d4",
+    "decision": "Точки начала экскурсии и необязательный контроллер прокрутки; исходные действия сохранены.",
+    "classes": [
+      "TodayScreen",
+      "_DailyPath"
+    ]
+  },
+  "lib/widgets/cloud_companion.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "b3b35769eb2c370e058efb94c0a220c4f056223078938a1291a4743cf2332cc5",
+    "decision": "Тёмное стеклянное облачко с тремя мягкими верхними выступами и широкими округлыми боками. Плавные взгляды в обе стороны с остановками, моргание, покачивание и дыхание; во время слушания взгляд стабилизируется. Отключение motion и lifecycle сохранены. Проверены реальные рендеры и анимационные кадры.",
+    "classes": [
+      "CloudCompanion",
+      "_CloudCompanionState",
+      "_CloudPainter",
+      "_CloudVolume"
+    ]
+  },
+  "lib/widgets/voice_companion_stage.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "3451d90eeb13558560afc05565c1c9c969d34b8d6e368bad82649be7e57b8418",
+    "decision": "Голосовой режим: персонаж, статус, транскрипт, связанный ответ и возврат к полной переписке; ограниченный текст с доступом к истории.",
+    "classes": [
+      "VoiceCompanionStage"
+    ]
+  },
+  "lib/widgets/product_tour.dart": {
+    "status": "implemented_reviewed",
+    "sha256_reviewed": "093d992812f1781799109eef656f98b02256eb8b00d30b20cd270cf6b27e98b0",
+    "decision": "Реальные измеренные targets, прокрутка к целям, scrim, указатели и анимированные карточки; доступные skip/back/next/finish, wrap при увеличенном тексте, защита от устаревших callbacks.",
+    "classes": [
+      "CoachStep",
+      "ProductTour",
+      "_ProductTourState",
+      "_Spotlight"
+    ]
   }
 }

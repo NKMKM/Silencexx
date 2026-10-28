@@ -10,11 +10,16 @@ class TodayScreen extends StatelessWidget {
   const TodayScreen({
     super.key,
     required this.workspace,
+    this.scrollController,
+    this.startTourKey,
+    this.settingsTourKey,
     required this.onNavigate,
     required this.onNewChat,
     required this.onOpenChat,
     required this.onSupport,
   });
+  final ScrollController? scrollController;
+  final GlobalKey? startTourKey, settingsTourKey;
   final ChatWorkspace workspace;
   final ValueChanged<String> onNavigate;
   final VoidCallback onNewChat, onSupport;
@@ -75,6 +80,7 @@ class TodayScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ActionButton(
+                key: startTourKey,
                 label: context.tr('Начать разговор', 'Start a conversation'),
                 icon: Icons.north_east_rounded,
                 action: () async => onNewChat(),
@@ -127,12 +133,14 @@ class TodayScreen extends StatelessWidget {
           ],
         );
         return PageBody(
+          controller: scrollController,
           children: [
             StudioHeader(
               eyebrow:
                   '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}',
               title: greeting,
               action: IconButton(
+                key: settingsTourKey,
                 tooltip: context.tr('Настройки', 'Settings'),
                 onPressed: () => onNavigate('settings'),
                 icon: const Icon(Icons.tune_rounded),

@@ -116,6 +116,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 24),
         Text(context.tr('Приложение', 'App'), style: t.textTheme.titleMedium),
+        StudioRow(
+          leading: const StudioGlyph(Icons.school_outlined, size: 34),
+          title: Text(context.tr('Повторить обучение', 'Replay app tour')),
+          trailing: const Icon(Icons.arrow_forward_rounded),
+          onTap: app.restartProductTour,
+        ),
         const SizedBox(height: 8),
         StudioRow(
           leading: const StudioGlyph(Icons.language_rounded, size: 34),

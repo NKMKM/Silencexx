@@ -34,7 +34,29 @@ class _TasksScreenState extends State<TasksScreen> {
   Widget build(BuildContext context) => AsyncPanel(
     load: () => context.app.api.call('/daily-task'),
     builder: (context, data, reload) {
-      final task = updatedTask ?? data['task'] as Json;
+      final task = updatedTask ?? data['task'] as Json?;
+      if (task == null) {
+        return Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: AppEmptyState(
+              icon: Icons.spa_outlined,
+              title: context.tr(
+                'Практика пока не готова',
+                'Your practice is not ready yet',
+              ),
+              description: context.tr(
+                'Можно вернуться чуть позже.',
+                'You can return a little later.',
+              ),
+              action: TextButton(
+                onPressed: reload,
+                child: Text(context.tr('Повторить', 'Try again')),
+              ),
+            ),
+          ),
+        );
+      }
       final status = '${task['status']}';
       final done = status == 'completed';
       final locked = status == 'locked';

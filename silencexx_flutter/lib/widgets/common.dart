@@ -241,10 +241,16 @@ Future<bool> confirm(BuildContext context, String title) async =>
     false;
 
 class PageBody extends StatelessWidget {
-  const PageBody({super.key, required this.children, this.compact = false});
+  const PageBody({
+    super.key,
+    required this.children,
+    this.compact = false,
+    this.controller,
+  });
 
   final List<Widget> children;
   final bool compact;
+  final ScrollController? controller;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -257,6 +263,7 @@ class PageBody extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),
           child: ListView(
+            controller: controller,
             padding: EdgeInsets.fromLTRB(
               horizontal,
               compact ? 8 : 12,

@@ -38,6 +38,11 @@ class AppState extends ChangeNotifier {
   bool ready = false;
   late bool disclaimerAccepted;
   bool needsOnboarding = false;
+  bool needsProductTour = false;
+  String get onboardingKey => 'wellness_onboarding_completed.${user?['id']}';
+  String get onboardingPendingKey =>
+      'wellness_onboarding_pending.${user?['id']}';
+  String get tourPendingKey => 'product_tour_pending.v1.${user?['id']}';
   String? startupError;
   late String language;
   late ThemeMode themeMode;
@@ -53,6 +58,8 @@ class AppState extends ChangeNotifier {
       if (authenticated) {
         final response = await api.call('/auth/profile');
         user = response['user'] as Json?;
+        needsOnboarding = preferences.getBool(onboardingPendingKey) == true;
+        needsProductTour = preferences.getBool(tourPendingKey) == true;
       }
     } on ApiException catch (e) {
       if (e.status != 401) startupError = e.message;
@@ -74,9 +81,12 @@ class AppState extends ChangeNotifier {
     await storage.write(key: 'auth_token', value: token);
     api.token = token;
     user = response['user'] as Json?;
-    needsOnboarding =
-        response['isNewUser'] == true &&
-        preferences.getBool('wellness_onboarding_completed') != true;
+    if (response['isNewUser'] == true &&
+        preferences.getBool(onboardingKey) != true) {
+      await preferences.setBool(onboardingPendingKey, true);
+    }
+    needsOnboarding = preferences.getBool(onboardingPendingKey) == true;
+    needsProductTour = preferences.getBool(tourPendingKey) == true;
     startupError = null;
     notifyListeners();
   }
@@ -84,11 +94,31 @@ class AppState extends ChangeNotifier {
   Future<void> finishOnboarding({List<String> interests = const []}) async {
     await preferences.setStringList('wellness_interests', interests);
     await preferences.setBool('wellness_onboarding_completed', true);
+    await preferences.setBool(onboardingKey, true);
+    await preferences.setBool(tourPendingKey, true);
+    await preferences.remove(onboardingPendingKey);
+    needsProductTour = true;
     needsOnboarding = false;
     notifyListeners();
   }
 
+  Future<void> finishProductTour() async {
+    await preferences.remove(tourPendingKey);
+    needsProductTour = false;
+    notifyListeners();
+  }
+
+  Future<void> restartProductTour() async {
+    await preferences.setBool(tourPendingKey, true);
+    needsProductTour = true;
+    notifyListeners();
+  }
+
   Future<void> accountDeleted() async {
+    await preferences.remove(onboardingKey);
+    await preferences.remove(onboardingPendingKey);
+    await preferences.remove(tourPendingKey);
+    needsProductTour = false;
     api.token = null;
     user = null;
     needsOnboarding = false;
@@ -112,6 +142,8 @@ class AppState extends ChangeNotifier {
   }
 
   void expireSession() {
+    needsProductTour = false;
+    needsOnboarding = false;
     api.token = null;
     user = null;
     storage.delete(key: 'auth_token').catchError((_) {});
